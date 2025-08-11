@@ -1,0 +1,16 @@
+{
+  "name": "anirudh/wp-email-campaigns",
+  "description": "Transactional email campaigns with scheduling (1 email/3s), contacts, and reporting. Integrates with WP Mail SMTP; uses Action Scheduler & PhpSpreadsheet.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=7.4",
+    "woocommerce/action-scheduler": "^3.7",
+    "phpoffice/phpspreadsheet": "^2.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "WPEC\\": "includes/"
+    }
+  }
+}
