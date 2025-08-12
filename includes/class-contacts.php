@@ -10,14 +10,17 @@ if ( ! class_exists( '\WP_List_Table' ) ) {
 }
 
 class Contacts {
-    const BATCH_SIZE = 2000; // rows per AJAX chunk (tune if needed)
+    const BATCH_SIZE = 2000; // rows per AJAX chunk
 
     public function init() {
         add_action( 'wpec_render_contacts_table', [ $this, 'render_lists_screen' ] );
 
         // AJAX upload + process
-        add_action( 'wp_ajax_wpec_list_upload', [ $this, 'ajax_list_upload' ] );
-        add_action( 'wp_ajax_wpec_list_process', [ $this, 'ajax_list_process' ] );
+        add_action( 'wp_ajax_wpec_list_upload',   [ $this, 'ajax_list_upload' ] );
+        add_action( 'wp_ajax_wpec_list_process',  [ $this, 'ajax_list_process' ] );
+
+        // Non-JS fallback: admin-post upload handler
+        add_action( 'admin_post_wpec_list_upload', [ $this, 'admin_post_list_upload' ] );
 
         // List items view (detail page)
         add_action( 'admin_init', [ $this, 'maybe_render_list_items_page' ] );
@@ -28,7 +31,6 @@ class Contacts {
 
     public function render_lists_screen() {
         if ( isset($_GET['view']) && $_GET['view'] === 'list' ) {
-            // We render list items in a dedicated page path for clarity.
             $this->render_list_items();
             return;
         }
@@ -36,16 +38,26 @@ class Contacts {
         // Upload form + lists table
         echo '<div id="wpec-upload-panel" class="wpec-card">';
         echo '<h2>' . esc_html__( 'Upload New List', 'wp-email-campaigns' ) . '</h2>';
-        echo '<form id="wpec-list-upload-form" method="post" enctype="multipart/form-data">';
+
+        // IMPORTANT: non-JS fallback form posts to admin-post.php
+        $action_url = esc_url( admin_url( 'admin-post.php' ) );
+        echo '<form id="wpec-list-upload-form" method="post" action="' . $action_url . '" enctype="multipart/form-data">';
+        echo '<input type="hidden" name="action" value="wpec_list_upload" />';
         echo '<input type="hidden" name="nonce" value="' . esc_attr( wp_create_nonce('wpec_admin') ) . '"/>';
+
         echo '<p><label><strong>' . esc_html__( 'List Name', 'wp-email-campaigns' ) . '</strong><br/>';
         echo '<input type="text" name="list_name" class="regular-text" required></label></p>';
+
         echo '<p><label><strong>' . esc_html__( 'CSV or XLSX file', 'wp-email-campaigns' ) . '</strong><br/>';
         echo '<input type="file" name="file" accept=".csv,.xlsx" required></label></p>';
+
         echo '<p class="description">' . esc_html__( 'Format: Column A = Email (required), Column B = First Name (optional).', 'wp-email-campaigns' ) . '</p>';
+
         echo '<p><button type="submit" class="button button-primary" id="wpec-upload-btn">' . esc_html__( 'Upload & Import', 'wp-email-campaigns' ) . '</button> ';
         echo '<span class="wpec-loader" style="display:none;"></span></p>';
+
         echo '<div id="wpec-progress-wrap" style="display:none;"><div class="wpec-progress"><span id="wpec-progress-bar" style="width:0%"></span></div><p id="wpec-progress-text"></p></div>';
+
         echo '</form></div>';
 
         // Lists table
@@ -120,30 +132,48 @@ class Contacts {
         exit;
     }
 
-    // ───── AJAX: upload the file and create list row. If XLSX, convert to CSV once. ─────
-    public function ajax_list_upload() {
-        check_ajax_referer( 'wpec_admin', 'nonce' );
-        if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
+    // ───── Non-JS fallback: handle the initial upload and create list row ─────
+    public function admin_post_list_upload() {
+        if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '';
+        if ( ! wp_verify_nonce( $nonce, 'wpec_admin' ) ) wp_die( 'Bad nonce' );
 
         $name = sanitize_text_field( $_POST['list_name'] ?? '' );
-        if ( ! $name ) wp_send_json_error( [ 'message' => 'List name required' ] );
-        if ( empty($_FILES['file']['tmp_name']) ) wp_send_json_error( [ 'message' => 'No file' ] );
+        if ( ! $name ) wp_die( 'List name required' );
+        if ( empty($_FILES['file']['tmp_name']) ) wp_die( 'No file' );
 
-        $tmp_name = $_FILES['file']['tmp_name'];
-        $orig     = sanitize_file_name( $_FILES['file']['name'] );
+        $result = $this->handle_upload_to_csv_path( $name, $_FILES['file'] );
+        if ( is_wp_error( $result ) ) {
+            wp_die( $result->get_error_message() );
+        }
+
+        // Redirect back and auto-start import via JS (WPEC.startImport)
+        $url = add_query_arg( [
+            'post_type'         => 'email_campaign',
+            'page'              => 'wpec-contacts',
+            'wpec_start_import' => (int) $result['list_id'],
+        ], admin_url( 'edit.php' ) );
+
+        wp_safe_redirect( $url );
+        exit;
+    }
+
+    // ───── Shared: upload handling (also used by AJAX) ─────
+    private function handle_upload_to_csv_path( $list_name, $file_arr ) {
+        $tmp_name = $file_arr['tmp_name'];
+        $orig     = sanitize_file_name( $file_arr['name'] );
         $ext      = strtolower( pathinfo( $orig, PATHINFO_EXTENSION ) );
 
         $dir = Helpers::ensure_uploads_dir();
-        $dest = $dir . uniqid('wpec_', true) . '.csv'; // we convert to CSV for consistent streaming
+        $dest = $dir . uniqid('wpec_', true) . '.csv'; // normalize to CSV
 
         if ( $ext === 'csv' ) {
             if ( ! @move_uploaded_file( $tmp_name, $dest ) ) {
-                wp_send_json_error( [ 'message' => 'Failed to move file' ] );
+                return new \WP_Error( 'move_failed', 'Failed to move file' );
             }
         } else {
-            // XLSX -> CSV one-time conversion
             if ( ! class_exists( IOFactory::class ) ) {
-                wp_send_json_error( [ 'message' => 'PhpSpreadsheet not installed (composer install).' ] );
+                return new \WP_Error( 'phpspreadsheet_missing', 'PhpSpreadsheet not installed (composer install).' );
             }
             try {
                 $spreadsheet = IOFactory::load( $tmp_name );
@@ -151,14 +181,14 @@ class Contacts {
                 $writer->setSheetIndex(0);
                 $writer->save( $dest );
             } catch ( \Throwable $e ) {
-                wp_send_json_error( [ 'message' => 'XLSX convert error: ' . $e->getMessage() ] );
+                return new \WP_Error( 'xlsx_convert_error', 'XLSX convert error: ' . $e->getMessage() );
             }
         }
 
         $db    = Helpers::db();
         $lists = Helpers::table('lists');
         $db->insert( $lists, [
-            'name'           => $name,
+            'name'           => $list_name,
             'status'         => 'importing',
             'created_at'     => Helpers::now(),
             'updated_at'     => null,
@@ -172,7 +202,26 @@ class Contacts {
         ] );
         $list_id = (int) $db->insert_id;
 
-        wp_send_json_success( [ 'list_id' => $list_id ] );
+        return [
+            'list_id'  => $list_id,
+            'csv_path' => $dest,
+        ];
+    }
+
+    // ───── AJAX: upload (JS path) ─────
+    public function ajax_list_upload() {
+        check_ajax_referer( 'wpec_admin', 'nonce' );
+        if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
+
+        $name = sanitize_text_field( $_POST['list_name'] ?? '' );
+        if ( ! $name ) wp_send_json_error( [ 'message' => 'List name required' ] );
+        if ( empty($_FILES['file']['tmp_name']) ) wp_send_json_error( [ 'message' => 'No file' ] );
+
+        $result = $this->handle_upload_to_csv_path( $name, $_FILES['file'] );
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+        }
+        wp_send_json_success( [ 'list_id' => (int) $result['list_id'] ] );
     }
 
     // ───── AJAX: process next chunk ─────
@@ -205,7 +254,6 @@ class Contacts {
 
         $path = $list->file_path;
         if ( ! $path || ! file_exists( $path ) ) {
-            // Consider finished if file already gone
             $db->update( $lists, [ 'status' => 'failed', 'updated_at' => Helpers::now() ], [ 'id' => $list_id ] );
             wp_send_json_error( [ 'message' => 'Upload file missing' ] );
         }
@@ -278,7 +326,6 @@ class Contacts {
         ];
         if ( $eof ) {
             $data['status'] = 'ready';
-            // Remove temp file to save disk
             @unlink( $path );
             $data['file_path'] = null;
             $data['file_pointer'] = null;
