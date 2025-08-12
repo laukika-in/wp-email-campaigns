@@ -29,7 +29,7 @@
     }
   );
 
-  // ─── Confirm on publish (sending wired later) ─────────────────────────────
+  // ─── Confirm on publish (sending will be wired later) ─────────────────────
   $(function () {
     var $form = $("#post");
     if ($("body").hasClass("post-type-email_campaign")) {
@@ -51,6 +51,36 @@
     if (text) $("#wpec-progress-text").text(text);
   }
 
+  function addManualReload(viewListId) {
+    var reloadUrl = location.href
+      .replace(/([&?])wpec_start_import=\d+&?/, "$1")
+      .replace(/[&?]$/, "");
+    var $actions = $("#wpec-finish-actions");
+    if (!$actions.length) {
+      $actions = $('<p id="wpec-finish-actions" style="margin-top:10px;"></p>');
+      $("#wpec-upload-panel").append($actions);
+    }
+    var $reload = $(
+      '<a class="button button-primary" style="margin-right:8px;">Reload Lists</a>'
+    ).attr("href", reloadUrl);
+    $actions.empty().append($reload);
+
+    if (viewListId) {
+      var viewUrl = reloadUrl.split("#")[0];
+      // Build "View list" link
+      var base = new URL(viewUrl, window.location.origin);
+      base.searchParams.set("post_type", "email_campaign");
+      base.searchParams.set("page", "wpec-contacts");
+      base.searchParams.set("view", "list");
+      base.searchParams.set("list_id", String(viewListId));
+      var $view = $('<a class="button">View This List</a>').attr(
+        "href",
+        base.toString()
+      );
+      $actions.append($view);
+    }
+  }
+
   function processList(listId) {
     $.post(WPEC.ajaxUrl, {
       action: "wpec_list_process",
@@ -60,6 +90,7 @@
       .done(function (resp) {
         if (!resp || !resp.success) {
           $(".wpec-loader").hide();
+          addManualReload();
           alert((resp && resp.data && resp.data.message) || "Import error");
           return;
         }
@@ -79,11 +110,10 @@
 
         if (resp.data.done) {
           $(".wpec-loader").hide();
-          location.href = location.href.replace(
-            /([&?])wpec_start_import=\d+&?/,
-            "$1"
-          ); // clean URL
-          location.reload();
+          // DO NOT auto-reload; show manual button instead
+          addManualReload(listId);
+          // Stop auto run for fallback param
+          if (WPEC) WPEC.startImport = 0;
         } else {
           setTimeout(function () {
             processList(listId);
@@ -92,6 +122,7 @@
       })
       .fail(function () {
         $(".wpec-loader").hide();
+        addManualReload();
         alert("Import request failed.");
       });
   }
@@ -118,6 +149,7 @@
         if (!resp || !resp.success) {
           $(".wpec-loader").hide();
           $btn.prop("disabled", false);
+          addManualReload();
           alert((resp && resp.data && resp.data.message) || "Upload failed");
           return;
         }
@@ -128,11 +160,12 @@
       .fail(function () {
         $(".wpec-loader").hide();
         $btn.prop("disabled", false);
+        addManualReload();
         alert("Upload failed.");
       });
   });
 
-  // If PHP redirected with ?wpec_start_import=ID (non-JS fallback path), auto-start import
+  // If PHP redirected with ?wpec_start_import=ID (non-JS fallback path), auto-start import but NO auto-reload on finish
   $(function () {
     if (WPEC && WPEC.startImport && parseInt(WPEC.startImport, 10) > 0) {
       $(".wpec-loader").show();

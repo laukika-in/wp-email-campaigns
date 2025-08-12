@@ -10,22 +10,18 @@ if ( ! class_exists( '\WP_List_Table' ) ) {
 }
 
 class Contacts {
-    const BATCH_SIZE = 2000; // rows per AJAX chunk
+    const BATCH_SIZE = 2000;
 
     public function init() {
         add_action( 'wpec_render_contacts_table', [ $this, 'render_lists_screen' ] );
 
-        // AJAX upload + process
         add_action( 'wp_ajax_wpec_list_upload',   [ $this, 'ajax_list_upload' ] );
         add_action( 'wp_ajax_wpec_list_process',  [ $this, 'ajax_list_process' ] );
 
-        // Non-JS fallback: admin-post upload handler
         add_action( 'admin_post_wpec_list_upload', [ $this, 'admin_post_list_upload' ] );
 
-        // List items view (detail page)
         add_action( 'admin_init', [ $this, 'maybe_render_list_items_page' ] );
 
-        // Export list to CSV
         add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] );
     }
 
@@ -35,11 +31,9 @@ class Contacts {
             return;
         }
 
-        // Upload form + lists table
         echo '<div id="wpec-upload-panel" class="wpec-card">';
         echo '<h2>' . esc_html__( 'Upload New List', 'wp-email-campaigns' ) . '</h2>';
 
-        // IMPORTANT: non-JS fallback form posts to admin-post.php
         $action_url = esc_url( admin_url( 'admin-post.php' ) );
         echo '<form id="wpec-list-upload-form" method="post" action="' . $action_url . '" enctype="multipart/form-data">';
         echo '<input type="hidden" name="action" value="wpec_list_upload" />';
@@ -60,7 +54,6 @@ class Contacts {
 
         echo '</form></div>';
 
-        // Lists table
         $table = new WPEC_Lists_Table();
         $table->prepare_items();
         echo '<h2 style="margin-top:30px;">' . esc_html__( 'Lists', 'wp-email-campaigns' ) . '</h2>';
@@ -72,13 +65,11 @@ class Contacts {
         echo '</form>';
     }
 
-    // If user clicked "View" for a list
     public function maybe_render_list_items_page() {
         if ( ! Helpers::user_can_manage() ) return;
         if ( ! isset($_GET['post_type'], $_GET['page'], $_GET['view']) ) return;
         if ( $_GET['post_type'] !== 'email_campaign' || $_GET['page'] !== 'wpec-contacts' || $_GET['view'] !== 'list' ) return;
-
-        add_action( 'admin_notices', function(){ /* suppress default notices */ } );
+        add_action( 'admin_notices', function(){} );
     }
 
     private function render_list_items() {
@@ -132,7 +123,6 @@ class Contacts {
         exit;
     }
 
-    // ───── Non-JS fallback: handle the initial upload and create list row ─────
     public function admin_post_list_upload() {
         if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
         $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '';
@@ -147,7 +137,6 @@ class Contacts {
             wp_die( $result->get_error_message() );
         }
 
-        // Redirect back and auto-start import via JS (WPEC.startImport)
         $url = add_query_arg( [
             'post_type'         => 'email_campaign',
             'page'              => 'wpec-contacts',
@@ -158,14 +147,13 @@ class Contacts {
         exit;
     }
 
-    // ───── Shared: upload handling (also used by AJAX) ─────
     private function handle_upload_to_csv_path( $list_name, $file_arr ) {
         $tmp_name = $file_arr['tmp_name'];
         $orig     = sanitize_file_name( $file_arr['name'] );
         $ext      = strtolower( pathinfo( $orig, PATHINFO_EXTENSION ) );
 
         $dir = Helpers::ensure_uploads_dir();
-        $dest = $dir . uniqid('wpec_', true) . '.csv'; // normalize to CSV
+        $dest = $dir . uniqid('wpec_', true) . '.csv';
 
         if ( $ext === 'csv' ) {
             if ( ! @move_uploaded_file( $tmp_name, $dest ) ) {
@@ -208,7 +196,6 @@ class Contacts {
         ];
     }
 
-    // ───── AJAX: upload (JS path) ─────
     public function ajax_list_upload() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
@@ -224,7 +211,6 @@ class Contacts {
         wp_send_json_success( [ 'list_id' => (int) $result['list_id'] ] );
     }
 
-    // ───── AJAX: process next chunk ─────
     public function ajax_list_process() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
@@ -263,7 +249,6 @@ class Contacts {
             wp_send_json_error( [ 'message' => 'Unable to open file' ] );
         }
 
-        // resume at stored byte offset
         $pointer = (int) $list->file_pointer;
         if ( $pointer > 0 ) {
             fseek( $handle, $pointer );
@@ -281,7 +266,6 @@ class Contacts {
             list( $email, $name ) = Helpers::sanitize_email_name( $email, $name );
             if ( empty( $email ) ) { $invalid++; continue; }
 
-            // Upsert contact
             $cid = $db->get_var( $db->prepare( "SELECT id FROM $ct WHERE email=%s", $email ) );
             if ( ! $cid ) {
                 $db->insert( $ct, [
@@ -295,7 +279,6 @@ class Contacts {
                 $cid = (int) $db->insert_id;
             }
 
-            // Map into list (avoid duplicates per list)
             $exists = $db->get_var( $db->prepare( "SELECT id FROM $li WHERE list_id=%d AND contact_id=%d", $list_id, $cid ) );
             if ( $exists ) { $dupes++; continue; }
 
@@ -310,7 +293,6 @@ class Contacts {
         $eof = feof( $handle );
         fclose( $handle );
 
-        // Update running totals
         $total     = (int) $list->total + $processed;
         $imported  = (int) $list->imported + $valid;
         $invalid_t = (int) $list->invalid + $invalid;
@@ -359,6 +341,9 @@ class WPEC_Lists_Table extends \WP_List_Table {
             'actions'    => __( 'Actions', 'wp-email-campaigns' ),
         ];
     }
+    public function get_primary_column_name() {
+        return 'name';
+    }
     public function prepare_items() {
         global $wpdb;
         $lists = Helpers::table('lists');
@@ -374,9 +359,13 @@ class WPEC_Lists_Table extends \WP_List_Table {
         }
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $lists $where", $args ) );
         $offset = ( $paged - 1 ) * $per_page;
-        $rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $lists $where ORDER BY id DESC LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
+
+        $sql = "SELECT * FROM $lists $where ORDER BY id DESC LIMIT %d OFFSET %d";
+        $rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
 
         $this->items = $rows;
+        $this->_column_headers = [ $this->get_columns(), [], [] ];
+
         $this->set_pagination_args( [
             'total_items' => $total,
             'per_page'    => $per_page,
@@ -396,11 +385,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
                     'view'      => 'list',
                     'list_id'   => (int)$item['id'],
                 ], admin_url('edit.php') );
-                return sprintf(
-                    '<a class="button" href="%s">%s</a>',
-                    esc_url($view),
-                    esc_html__('View', 'wp-email-campaigns')
-                );
+                return sprintf('<a class="button" href="%s">%s</a>', esc_url($view), esc_html__('View', 'wp-email-campaigns'));
         }
         return '';
     }
@@ -409,7 +394,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
     }
 }
 
-// ───── List items (contacts in a list) table ─────
+// ───── List items table ─────
 class WPEC_List_Items_Table extends \WP_List_Table {
     protected $list_id;
     public function __construct( $list_id ) {
@@ -424,6 +409,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
             'created_at' => __( 'Created', 'wp-email-campaigns' ),
         ];
     }
+    public function get_primary_column_name() { return 'email'; }
     public function prepare_items() {
         global $wpdb;
         $li = Helpers::table('list_items');
@@ -453,6 +439,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         ), ARRAY_A );
 
         $this->items = $rows;
+        $this->_column_headers = [ $this->get_columns(), [], [] ];
         $this->set_pagination_args( [
             'total_items' => $total,
             'per_page'    => $per_page,
