@@ -18,19 +18,21 @@ class CPT {
     public function register() {
         register_post_type( self::POST_TYPE, [
             'labels' => [
-                'name' => __( 'Email Campaigns', 'wp-email-campaigns' ),
+                'name'          => __( 'Email Campaigns', 'wp-email-campaigns' ),
                 'singular_name' => __( 'Email Campaign', 'wp-email-campaigns' ),
             ],
-            'public' => false,
-            'show_ui' => true,
+            'public'       => false,
+            'show_ui'      => true,
             'show_in_menu' => true,
-            'menu_icon' => 'dashicons-email',
-            'supports' => [ 'title', 'editor', 'custom-fields' ],
+            'menu_icon'    => 'dashicons-email',
+            'supports'     => [ 'title', 'editor', 'custom-fields' ],
             'capability_type' => 'post',
         ] );
+
+        // Contacts/Lists page under Campaigns
         add_submenu_page(
             'edit.php?post_type=' . self::POST_TYPE,
-            __( 'Contacts', 'wp-email-campaigns' ),
+            __( 'Contacts & Lists', 'wp-email-campaigns' ),
             __( 'Contacts', 'wp-email-campaigns' ),
             'manage_options',
             'wpec-contacts',
@@ -39,8 +41,8 @@ class CPT {
     }
 
     public function render_contacts_page() {
-        echo '<div class="wrap"><h1>' . esc_html__( 'Contacts', 'wp-email-campaigns' ) . '</h1>';
-        do_action( 'wpec_render_contacts_table' );
+        echo '<div class="wrap"><h1>' . esc_html__( 'Contacts & Lists', 'wp-email-campaigns' ) . '</h1>';
+        do_action( 'wpec_render_contacts_table' ); // Implemented in class-contacts.php (now List manager)
         echo '</div>';
     }
 
@@ -48,6 +50,9 @@ class CPT {
         add_meta_box( 'wpec_settings', __( 'Email Settings', 'wp-email-campaigns' ), [ $this, 'mb_settings' ], self::POST_TYPE, 'normal', 'high' );
         add_meta_box( 'wpec_controls', __( 'Campaign Controls', 'wp-email-campaigns' ), [ $this, 'mb_controls' ], self::POST_TYPE, 'side', 'high' );
         add_meta_box( 'wpec_stats', __( 'Campaign Progress', 'wp-email-campaigns' ), [ $this, 'mb_stats' ], self::POST_TYPE, 'normal', 'default' );
+
+        // NEW: select uploaded lists (multi-select)
+        add_meta_box( 'wpec_lists', __( 'Recipient Lists', 'wp-email-campaigns' ), [ $this, 'mb_lists' ], self::POST_TYPE, 'side', 'default' );
     }
 
     public function mb_settings( $post ) {
@@ -58,9 +63,9 @@ class CPT {
         echo '<input type="text" name="wpec_subject" class="widefat" value="' . esc_attr( $subject ) . '"></label></p>';
         echo '<p><label><strong>' . esc_html__( 'Preheader (optional)', 'wp-email-campaigns' ) . '</strong><br/>';
         echo '<input type="text" name="wpec_preheader" class="widefat" value="' . esc_attr( $preheader ) . '"></label></p>';
-        echo '<p><label><strong>' . esc_html__( 'Upload Excel/CSV', 'wp-email-campaigns' ) . '</strong><br/>';
-        echo '<input type="file" name="wpec_upload" accept=".csv,.xlsx"></label></p>';
-        echo '<p class="description">' . esc_html__( 'Format: Column A = Email (required), Column B = First Name (optional).', 'wp-email-campaigns' ) . '</p>';
+
+        // FILE UPLOAD REMOVED from here by design.
+        echo '<p class="description">' . esc_html__( 'Compose your HTML email above. Upload contacts in Contacts → Lists.', 'wp-email-campaigns' ) . '</p>';
     }
 
     public function mb_controls( $post ) {
@@ -69,7 +74,7 @@ class CPT {
         echo '<button type="button" class="button button-secondary wpec-pause" data-id="' . esc_attr( $post->ID ) . '">' . esc_html__( 'Pause', 'wp-email-campaigns' ) . '</button> ';
         echo '<button type="button" class="button button-secondary wpec-resume" data-id="' . esc_attr( $post->ID ) . '">' . esc_html__( 'Resume', 'wp-email-campaigns' ) . '</button> ';
         echo '<button type="button" class="button button-link-delete wpec-cancel" data-id="' . esc_attr( $post->ID ) . '">' . esc_html__( 'Cancel', 'wp-email-campaigns' ) . '</button>';
-        echo '<p class="description">' . esc_html__( 'Publishing will ask for confirmation and then queue emails (1/3s).', 'wp-email-campaigns' ) . '</p>';
+        echo '<p class="description">' . esc_html__( 'Publishing will start sending when configured (next phase).', 'wp-email-campaigns' ) . '</p>';
     }
 
     public function mb_stats( $post ) {
@@ -87,11 +92,32 @@ class CPT {
         }
     }
 
+    public function mb_lists( $post ) {
+        global $wpdb;
+        $lists_table = Helpers::table('lists');
+        $lists = $wpdb->get_results( "SELECT id, name, status, imported FROM $lists_table ORDER BY id DESC" );
+        $selected = (array) get_post_meta( $post->ID, '_wpec_list_ids', true );
+        echo '<p><strong>' . esc_html__( 'Select Lists', 'wp-email-campaigns' ) . '</strong></p>';
+        echo '<select name="wpec_list_ids[]" multiple class="widefat" size="6">';
+        foreach ( (array) $lists as $l ) {
+            $label = sprintf( '%s (%s, %d)', $l->name, ucfirst($l->status), (int)$l->imported );
+            printf(
+                '<option value="%d" %s>%s</option>',
+                (int) $l->id,
+                selected( in_array( (string)$l->id, array_map('strval', $selected), true ), true, false ),
+                esc_html( $label )
+            );
+        }
+        echo '</select>';
+        echo '<p class="description">' . esc_html__( 'Upload lists under Contacts. You can select multiple lists.', 'wp-email-campaigns' ) . '</p>';
+    }
+
     public function columns( $cols ) {
-        $cols['wpec_status'] = __( 'Status', 'wp-email-campaigns' );
+        $cols['wpec_status']   = __( 'Status', 'wp-email-campaigns' );
         $cols['wpec_progress'] = __( 'Progress', 'wp-email-campaigns' );
         return $cols;
     }
+
     public function column_content( $col, $post_id ) {
         global $wpdb;
         $subs = Helpers::table('subs');
@@ -106,9 +132,9 @@ class CPT {
     }
 
     public function messages( $messages ) {
-        $messages[self::POST_TYPE][6] = __( 'Campaign updated.', 'wp-email-campaigns' );
-        $messages[self::POST_TYPE][1] = __( 'Campaign updated.', 'wp-email-campaigns' );
-        $messages[self::POST_TYPE][10]= __( 'Campaign draft updated.', 'wp-email-campaigns' );
+        $messages[self::POST_TYPE][6]  = __( 'Campaign updated.', 'wp-email-campaigns' );
+        $messages[self::POST_TYPE][1]  = __( 'Campaign updated.', 'wp-email-campaigns' );
+        $messages[self::POST_TYPE][10] = __( 'Campaign draft updated.', 'wp-email-campaigns' );
         return $messages;
     }
 
@@ -122,16 +148,10 @@ class CPT {
         update_post_meta( $post_id, '_wpec_subject', $subject );
         update_post_meta( $post_id, '_wpec_preheader', $preheader );
 
-        // Handle upload
-        if ( ! empty( $_FILES['wpec_upload']['name'] ) && ! empty( $_FILES['wpec_upload']['tmp_name'] ) ) {
-            ( new Uploader )->handle_upload_for_campaign( $post_id, $_FILES['wpec_upload'] );
-        }
+        // Store selected list IDs (used later when we wire sending)
+        $list_ids = isset($_POST['wpec_list_ids']) ? array_map('intval', (array) $_POST['wpec_list_ids']) : [];
+        update_post_meta( $post_id, '_wpec_list_ids', $list_ids );
 
-        // Mark status if publishing
-        if ( 'publish' === $post->post_status && ( ! $update || ( $update && isset($_POST['publish']) ) ) ) {
-            // Only set to queued on first publish
-            update_post_meta( $post_id, '_wpec_status', 'queued' );
-            ( new Scheduler )->schedule_campaign( $post_id );
-        }
+        // Do NOT queue sending here yet. We’ll do this in the scheduler phase.
     }
 }

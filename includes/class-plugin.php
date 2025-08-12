@@ -4,11 +4,11 @@ namespace WPEC;
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 require_once __DIR__ . '/class-cpt.php';
-require_once __DIR__ . '/class-uploader.php';
+require_once __DIR__ . '/class-uploader.php'; // remains, but not used for campaigns anymore
 require_once __DIR__ . '/class-scheduler.php';
 require_once __DIR__ . '/class-sender.php';
 require_once __DIR__ . '/class-webhooks.php';
-require_once __DIR__ . '/class-contacts.php';
+require_once __DIR__ . '/class-contacts.php'; // this now manages Lists & Contacts
 
 class Plugin {
     public function init() {
@@ -22,7 +22,6 @@ class Plugin {
     }
 
     public function admin_assets( $hook ) {
-        // Only load on our post type screens or contacts
         $screen = get_current_screen();
         if ( ! $screen ) return;
         if ( in_array( $screen->id, [ 'edit-email_campaign', 'email_campaign', 'email-campaign_page_wpec-contacts' ], true ) ) {
