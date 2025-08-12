@@ -9,7 +9,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'WPEC_VER', '1.0.0' );
+define( 'WPEC_VER', '1.0.1' );
 define( 'WPEC_FILE', __FILE__ );
 define( 'WPEC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPEC_URL', plugin_dir_url( __FILE__ ) );
