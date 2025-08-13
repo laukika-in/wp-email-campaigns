@@ -785,6 +785,52 @@ class Contacts {
             'total_pages' => max(1, (int)ceil($total / $per_page)),
         ] );
     }
+public function ajax_contacts_bulk_delete() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $ids = isset($_POST['contact_ids']) && is_array($_POST['contact_ids']) ? array_map('absint', $_POST['contact_ids']) : [];
+    if ( empty($ids) ) wp_send_json_error(['message'=>'No contacts']);
+
+    $db = Helpers::db();
+    $ct = Helpers::table('contacts');
+    $li = Helpers::table('list_items');
+    $du = Helpers::table('dupes');
+
+    $in = implode(',', array_map('intval', $ids));
+    $db->query( "DELETE FROM $li WHERE contact_id IN ($in)" );
+    $db->query( "DELETE FROM $du WHERE contact_id IN ($in)" );
+    $deleted = $db->query( "DELETE FROM $ct WHERE id IN ($in)" );
+
+    wp_send_json_success([ 'deleted' => (int)$deleted ]);
+}
+
+public function ajax_contacts_bulk_move() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $ids    = isset($_POST['contact_ids']) && is_array($_POST['contact_ids']) ? array_map('absint', $_POST['contact_ids']) : [];
+    $list_id= absint($_POST['list_id'] ?? 0);
+    if ( !$list_id || empty($ids) ) wp_send_json_error(['message'=>'Missing list or contacts']);
+
+    $db = Helpers::db();
+    $li = Helpers::table('list_items');
+
+    $added = 0;
+    foreach ( $ids as $cid ) {
+        $exists = $db->get_var( $db->prepare("SELECT id FROM $li WHERE list_id=%d AND contact_id=%d", $list_id, $cid) );
+        if ( ! $exists ) {
+            $ok = $db->insert( $li, [
+                'list_id' => $list_id,
+                'contact_id' => $cid,
+                'is_duplicate_import' => 0,
+                'created_at' => Helpers::now(),
+            ] );
+            if ( $ok ) $added++;
+        }
+    }
+    wp_send_json_success([ 'added' => $added ]);
+}
 
     // ================== AJAX: Special list bulk update ==================
     public function ajax_status_bulk_update() {
