@@ -69,3 +69,51 @@
 #wpec-dup-bulk-progress {
   margin: 10px 0;
 }
+/* Toolbar + progress already present */
+.wpec-dup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#wpec-dup-bulk-progress,
+#wpec-list-bulk-progress {
+  margin: 10px 0;
+}
+
+/* Simple modal */
+#wpec-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+}
+#wpec-modal,
+#wpec-modal-list {
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  z-index: 10001;
+  max-width: 720px;
+  width: 95%;
+}
+.wpec-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.wpec-modal-body {
+  padding: 12px 16px;
+  max-height: 70vh;
+  overflow: auto;
+}
+.wpec-modal-close {
+  font-size: 22px;
+  line-height: 1;
+}
