@@ -19,9 +19,12 @@ class Contacts {
         add_action( 'wp_ajax_wpec_list_upload',   [ $this, 'ajax_list_upload' ] );
         add_action( 'wp_ajax_wpec_list_process',  [ $this, 'ajax_list_process' ] );
 
+        // AJAX delete mapping (individual + bulk)
+        add_action( 'wp_ajax_wpec_delete_list_mapping', [ $this, 'ajax_delete_list_mapping' ] );
+
         // Fallback + actions
-        add_action( 'admin_post_wpec_list_upload',        [ $this, 'admin_post_list_upload' ] );
-        add_action( 'admin_post_wpec_delete_list_mapping',[ $this, 'admin_post_delete_list_mapping' ] );
+        add_action( 'admin_post_wpec_list_upload',         [ $this, 'admin_post_list_upload' ] );
+        add_action( 'admin_post_wpec_delete_list_mapping', [ $this, 'admin_post_delete_list_mapping' ] );
 
         // Export list
         add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] );
@@ -42,7 +45,7 @@ class Contacts {
             $this->render_duplicates( absint( $_GET['list_id'] ?? 0 ) ); // per list
             return;
         }
-        $this->render_lists_screen(); // default screen
+        $this->render_lists_screen(); // default
     }
 
     // ---------- Default Contacts screen (upload + lists + link to duplicates) ----------
@@ -133,9 +136,17 @@ class Contacts {
 
         echo '<div class="wrap"><h1>' . esc_html( $title ) . '</h1>';
 
+        // Bulk delete toolbar + progress
+        echo '<div class="wpec-dup-toolbar" style="margin:10px 0;">';
+        echo '<button id="wpec-dup-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected from current lists', 'wp-email-campaigns' ) . '</button> ';
+        echo '<span class="wpec-loader" id="wpec-dup-bulk-loader" style="display:none;"></span>';
+        echo '</div>';
+
+        echo '<div id="wpec-dup-bulk-progress" style="display:none;"><div class="wpec-progress"><span id="wpec-dup-progress-bar" style="width:0%"></span></div><p id="wpec-dup-progress-text"></p></div>';
+
         $table = new WPEC_Duplicates_Table( $list_id );
         $table->prepare_items();
-        echo '<form method="get">';
+        echo '<form id="wpec-dup-form" method="get">';
         echo '<input type="hidden" name="post_type" value="email_campaign" />';
         echo '<input type="hidden" name="page" value="wpec-contacts" />';
         echo '<input type="hidden" name="view" value="dupes' . ( $list_id ? '_list' : '' ) . '" />';
@@ -198,7 +209,7 @@ class Contacts {
         exit;
     }
 
-    // ---------- Delete mapping action ----------
+    // ---------- Delete mapping (non-AJAX fallback) ----------
     public function admin_post_delete_list_mapping() {
         if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
         $nonce = isset($_GET['_wpnonce']) ? sanitize_text_field($_GET['_wpnonce']) : '';
@@ -208,10 +219,31 @@ class Contacts {
         if ( ! $list_id || ! $contact_id ) wp_die( 'Bad params' );
 
         $li = Helpers::table('list_items');
+        $dupes = Helpers::table('dupes');
         Helpers::db()->delete( $li, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        Helpers::db()->delete( $dupes, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
 
         wp_safe_redirect( wp_get_referer() ?: admin_url('edit.php?post_type=email_campaign&page=wpec-contacts') );
         exit;
+    }
+
+    // ---------- Delete mapping (AJAX) ----------
+    public function ajax_delete_list_mapping() {
+        check_ajax_referer( 'wpec_admin', 'nonce' );
+        if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
+
+        $list_id = absint( $_POST['list_id'] ?? 0 );
+        $contact_id = absint( $_POST['contact_id'] ?? 0 );
+        if ( ! $list_id || ! $contact_id ) {
+            wp_send_json_error( [ 'message' => 'Bad params' ] );
+        }
+
+        $li = Helpers::table('list_items');
+        $dupes = Helpers::table('dupes');
+        $deleted = Helpers::db()->delete( $li, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        Helpers::db()->delete( $dupes, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+
+        wp_send_json_success( [ 'deleted' => (int) $deleted ] );
     }
 
     // ---------- Upload normalize to CSV ----------
@@ -385,7 +417,7 @@ class Contacts {
 
             if ( $contact_id ) {
                 $is_duplicate = true;
-                // Optional: update missing fields if empty in DB (light touch)
+                // Update missing fields if empty in DB (light touch)
                 $existing = $db->get_row( $db->prepare("SELECT * FROM $ct WHERE id=%d", $contact_id), ARRAY_A );
                 $updates = [];
                 foreach ( ['first_name','last_name','company_name','company_employees','company_annual_revenue','contact_number','job_title','industry','country','state','city','postal_code'] as $k ) {
@@ -628,15 +660,16 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     }
 }
 
-// ---------- Duplicates table ----------
+// ---------- Duplicates table (with checkboxes, clickable list, AJAX delete) ----------
 class WPEC_Duplicates_Table extends \WP_List_Table {
     protected $list_id;
     public function __construct( $list_id = 0 ) {
-        parent::__construct();
+        parent::__construct( [ 'plural' => 'duplicates', 'singular' => 'duplicate' ] );
         $this->list_id = (int) $list_id;
     }
     public function get_columns() {
         return [
+            'cb'            => '<input type="checkbox" />',
             'email'         => __( 'Email', 'wp-email-campaigns' ),
             'first_name'    => __( 'First name', 'wp-email-campaigns' ),
             'last_name'     => __( 'Last name', 'wp-email-campaigns' ),
@@ -647,12 +680,16 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         ];
     }
     public function get_primary_column_name() { return 'email'; }
+    protected function column_cb( $item ) {
+        // value encodes list_id and contact_id for AJAX bulk deletion
+        $value = (int)$item['list_id'] . ':' . (int)$item['contact_id'];
+        return sprintf('<input type="checkbox" name="ids[]" value="%s"/>', esc_attr($value));
+    }
     public function prepare_items() {
         global $wpdb;
         $dupes = Helpers::table('dupes');
         $lists = Helpers::table('lists');
         $li    = Helpers::table('list_items');
-        $ct    = Helpers::table('contacts');
 
         $per_page = 30;
         $paged = max(1, (int)($_GET['paged'] ?? 1));
@@ -674,7 +711,6 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
 
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $dupes d $where", $args ) );
 
-        // Fetch rows with current list and previous list
         $sql = "
             SELECT d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
                    d.list_id, l.name AS current_list,
@@ -709,22 +745,30 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
             case 'email':
             case 'first_name':
             case 'last_name':
-            case 'current_list':
-            case 'previous_list':
                 return esc_html( $item[ $col ] ?? '' );
+            case 'current_list':
+                $url = add_query_arg( [
+                    'post_type' => 'email_campaign',
+                    'page'      => 'wpec-contacts',
+                    'view'      => 'list',
+                    'list_id'   => (int) $item['list_id'],
+                ], admin_url('edit.php') );
+                return sprintf('<a href="%s">%s</a>',
+                    esc_url($url),
+                    esc_html($item['current_list'] ?? ('#'.(int)$item['list_id']))
+                );
+            case 'previous_list':
+                return esc_html( $item['previous_list'] ?? '' );
             case 'imported_at':
                 return esc_html( $item['imported_at'] ?? '' );
             case 'actions':
-                $del = add_query_arg([
-                    'action' => 'wpec_delete_list_mapping',
-                    'list_id' => (int)$item['list_id'],
-                    'contact_id' => (int)$item['contact_id'],
-                    '_wpnonce' => wp_create_nonce('wpec_delete_list_mapping'),
-                ], admin_url('admin-post.php'));
-                return sprintf('<a class="button button-small" href="%s" onclick="return confirm(\'Remove this contact from the current list?\');">%s</a>',
-                    esc_url($del),
+                $btn = sprintf(
+                    '<button type="button" class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d">%s</button>',
+                    (int)$item['list_id'],
+                    (int)$item['contact_id'],
                     esc_html__('Delete from current list', 'wp-email-campaigns')
                 );
+                return $btn;
         }
         return '';
     }

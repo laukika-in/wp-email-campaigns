@@ -59,3 +59,13 @@
   border-color: #fdba74;
   color: #9a3412;
 }
+/* existing styles for progress, card, loader, pills already in your file */
+
+.wpec-dup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#wpec-dup-bulk-progress {
+  margin: 10px 0;
+}
