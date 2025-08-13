@@ -15,9 +15,9 @@ class Helpers {
             'subs'       => $wpdb->prefix . 'email_campaigns_subscribers',
             'contacts'   => $wpdb->prefix . 'email_contacts',
             'logs'       => $wpdb->prefix . 'email_campaigns_logs',
-            // NEW:
             'lists'      => $wpdb->prefix . 'email_lists',
             'list_items' => $wpdb->prefix . 'email_list_items',
+            'dupes'      => $wpdb->prefix . 'email_import_duplicates',
         ];
         return $map[ $key ] ?? '';
     }
@@ -53,7 +53,6 @@ class Helpers {
         return current_user_can( 'manage_options' );
     }
 
-    // File helpers for large CSV imports
     public static function uploads_dir() {
         $u = wp_upload_dir();
         return trailingslashit( $u['basedir'] ) . 'wpec/';
@@ -65,5 +64,64 @@ class Helpers {
             wp_mkdir_p( $dir );
         }
         return $dir;
+    }
+
+    // ---------- Header mapping for imports ----------
+    public static function norm_header( $str ) {
+        $str = trim( strtolower( $str ) );
+        $str = preg_replace( '/[^a-z0-9]+/', '_', $str );
+        return trim( $str, '_' );
+    }
+
+    public static function header_aliases() {
+        // map normalized header -> canonical field
+        return [
+            'first_name' => 'first_name',
+            'firstname' => 'first_name',
+            'given_name' => 'first_name',
+            'last_name' => 'last_name',
+            'lastname' => 'last_name',
+            'surname' => 'last_name',
+            'email' => 'email',
+            'email_address' => 'email',
+            'company_name' => 'company_name',
+            'company' => 'company_name',
+            'company_number_of_employees' => 'company_employees',
+            'employees' => 'company_employees',
+            'company_employees' => 'company_employees',
+            'company_annual_revenue' => 'company_annual_revenue',
+            'annual_revenue' => 'company_annual_revenue',
+            'revenue' => 'company_annual_revenue',
+            'contact_number' => 'contact_number',
+            'phone' => 'contact_number',
+            'mobile' => 'contact_number',
+            'job_title' => 'job_title',
+            'title' => 'job_title',
+            'industry' => 'industry',
+            'country' => 'country',
+            'state' => 'state',
+            'region' => 'state',
+            'city' => 'city',
+            'postal_code' => 'postal_code',
+            'zip' => 'postal_code',
+            'zipcode' => 'postal_code',
+            'pin' => 'postal_code',
+        ];
+    }
+
+    public static function parse_header_map( $header_row ) {
+        $aliases = self::header_aliases();
+        $map = [];
+        foreach ( $header_row as $idx => $col ) {
+            $norm = self::norm_header( $col );
+            if ( isset( $aliases[ $norm ] ) ) {
+                $map[ $aliases[ $norm ] ] = $idx;
+            }
+        }
+        return $map; // e.g. ['email'=>0,'first_name'=>1,'last_name'=>2,...]
+    }
+
+    public static function required_fields_present( $map ) {
+        return isset( $map['email'], $map['first_name'], $map['last_name'] );
     }
 }

@@ -1,5 +1,5 @@
 (function ($) {
-  // ─── Campaign Pause/Resume/Cancel ─────────────────────────────────────────
+  // ─── Campaign Pause/Resume/Cancel (unchanged) ─────────────────────────────
   $(document).on(
     "click",
     ".wpec-pause, .wpec-resume, .wpec-cancel",
@@ -29,7 +29,7 @@
     }
   );
 
-  // ─── Confirm on publish (sending will be wired later) ─────────────────────
+  // ─── Confirm on publish (sending comes later) ─────────────────────────────
   $(function () {
     var $form = $("#post");
     if ($("body").hasClass("post-type-email_campaign")) {
@@ -51,34 +51,47 @@
     if (text) $("#wpec-progress-text").text(text);
   }
 
-  function addManualReload(viewListId) {
+  function showResultPanel(stats, listId) {
+    var $panel = $("#wpec-import-result");
+    var dupesUrlAll = new URL(location.href);
+    dupesUrlAll.searchParams.set("view", "dupes");
+    dupesUrlAll.searchParams.set("list_id", ""); // remove
+    var dupesUrlList = new URL(location.href);
+    dupesUrlList.searchParams.set("view", "dupes_list");
+    dupesUrlList.searchParams.set("list_id", String(listId));
+
+    var html = "";
+    html += '<h3 style="margin-top:0;">Import Summary</h3>';
+    html += '<ul class="wpec-stats">';
+    html +=
+      "<li><strong>Total uploaded:</strong> " + (stats.imported || 0) + "</li>";
+    html +=
+      "<li><strong>Duplicates (global):</strong> " +
+      (stats.duplicates || 0) +
+      "</li>";
+    html +=
+      "<li><strong>Not uploaded:</strong> " + (stats.invalid || 0) + "</li>";
+    html += "<li><strong>Total seen:</strong> " + (stats.total || 0) + "</li>";
+    html += "</ul>";
+    html += "<p>";
+    html +=
+      '<a class="button" href="' +
+      dupesUrlList.toString() +
+      '">View duplicates for this list</a> ';
+    html +=
+      '<a class="button" href="' +
+      dupesUrlAll.toString() +
+      '">View duplicates (all lists)</a> ';
     var reloadUrl = location.href
       .replace(/([&?])wpec_start_import=\d+&?/, "$1")
       .replace(/[&?]$/, "");
-    var $actions = $("#wpec-finish-actions");
-    if (!$actions.length) {
-      $actions = $('<p id="wpec-finish-actions" style="margin-top:10px;"></p>');
-      $("#wpec-upload-panel").append($actions);
-    }
-    var $reload = $(
-      '<a class="button button-primary" style="margin-right:8px;">Reload Lists</a>'
-    ).attr("href", reloadUrl);
-    $actions.empty().append($reload);
+    html +=
+      '<a class="button button-primary" href="' +
+      reloadUrl +
+      '">Reload Lists</a>';
+    html += "</p>";
 
-    if (viewListId) {
-      var viewUrl = reloadUrl.split("#")[0];
-      // Build "View list" link
-      var base = new URL(viewUrl, window.location.origin);
-      base.searchParams.set("post_type", "email_campaign");
-      base.searchParams.set("page", "wpec-contacts");
-      base.searchParams.set("view", "list");
-      base.searchParams.set("list_id", String(viewListId));
-      var $view = $('<a class="button">View This List</a>').attr(
-        "href",
-        base.toString()
-      );
-      $actions.append($view);
-    }
+    $panel.html(html).show();
   }
 
   function processList(listId) {
@@ -90,7 +103,6 @@
       .done(function (resp) {
         if (!resp || !resp.success) {
           $(".wpec-loader").hide();
-          addManualReload();
           alert((resp && resp.data && resp.data.message) || "Import error");
           return;
         }
@@ -100,20 +112,18 @@
           pct,
           "Imported: " +
             (s.imported || 0) +
-            " | Invalid: " +
-            (s.invalid || 0) +
             " | Duplicates: " +
             (s.duplicates || 0) +
+            " | Not uploaded: " +
+            (s.invalid || 0) +
             " | Total seen: " +
             (s.total || 0)
         );
 
         if (resp.data.done) {
           $(".wpec-loader").hide();
-          // DO NOT auto-reload; show manual button instead
-          addManualReload(listId);
-          // Stop auto run for fallback param
-          if (WPEC) WPEC.startImport = 0;
+          if (WPEC) WPEC.startImport = 0; // stop fallback
+          showResultPanel(s, resp.data.list_id);
         } else {
           setTimeout(function () {
             processList(listId);
@@ -122,12 +132,11 @@
       })
       .fail(function () {
         $(".wpec-loader").hide();
-        addManualReload();
         alert("Import request failed.");
       });
   }
 
-  // Intercept form submit for AJAX path (when JS is loaded)
+  // Intercept form submit for AJAX path
   $(document).on("submit", "#wpec-list-upload-form", function (e) {
     e.preventDefault();
     var $btn = $("#wpec-upload-btn");
@@ -149,7 +158,6 @@
         if (!resp || !resp.success) {
           $(".wpec-loader").hide();
           $btn.prop("disabled", false);
-          addManualReload();
           alert((resp && resp.data && resp.data.message) || "Upload failed");
           return;
         }
@@ -160,12 +168,11 @@
       .fail(function () {
         $(".wpec-loader").hide();
         $btn.prop("disabled", false);
-        addManualReload();
         alert("Upload failed.");
       });
   });
 
-  // If PHP redirected with ?wpec_start_import=ID (non-JS fallback path), auto-start import but NO auto-reload on finish
+  // Non-JS fallback redirect param -> auto-continue (no auto-reload at finish)
   $(function () {
     if (WPEC && WPEC.startImport && parseInt(WPEC.startImport, 10) > 0) {
       $(".wpec-loader").show();

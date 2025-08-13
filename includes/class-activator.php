@@ -12,13 +12,27 @@ class Activator {
         $contacts  = Helpers::table('contacts');
         $subs      = Helpers::table('subs');
         $logs      = Helpers::table('logs');
-        $lists     = Helpers::table('lists');      // NEW
-        $listItems = Helpers::table('list_items'); // NEW
+        $lists     = Helpers::table('lists');
+        $listItems = Helpers::table('list_items');
 
+        // Contacts table — now with richer schema
         $sql_contacts = "CREATE TABLE $contacts (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             email VARCHAR(191) NOT NULL,
+            -- legacy 'name' kept for compatibility; we will populate it as 'first_name last_name'
             name VARCHAR(191) NULL,
+            first_name VARCHAR(191) NULL,
+            last_name VARCHAR(191) NULL,
+            company_name VARCHAR(191) NULL,
+            company_employees INT NULL,
+            company_annual_revenue BIGINT NULL,
+            contact_number VARCHAR(64) NULL,
+            job_title VARCHAR(191) NULL,
+            industry VARCHAR(191) NULL,
+            country VARCHAR(191) NULL,
+            state VARCHAR(191) NULL,
+            city VARCHAR(191) NULL,
+            postal_code VARCHAR(32) NULL,
             status ENUM('active','unsubscribed','bounced') NOT NULL DEFAULT 'active',
             created_at DATETIME NOT NULL,
             updated_at DATETIME NULL,
@@ -29,6 +43,7 @@ class Activator {
             KEY last_campaign_id (last_campaign_id)
         ) $charset;";
 
+        // Subscribers table (unchanged)
         $sql_subs = "CREATE TABLE $subs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             campaign_id BIGINT UNSIGNED NOT NULL,
@@ -48,6 +63,7 @@ class Activator {
             KEY status (status)
         ) $charset;";
 
+        // Logs table (unchanged)
         $sql_logs = "CREATE TABLE $logs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             campaign_id BIGINT UNSIGNED NOT NULL,
@@ -64,7 +80,7 @@ class Activator {
             KEY event (event)
         ) $charset;";
 
-        // NEW: lists master table
+        // Lists master table — add header_map for header-driven import
         $sql_lists = "CREATE TABLE $lists (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             name VARCHAR(191) NOT NULL,
@@ -72,8 +88,9 @@ class Activator {
             created_at DATETIME NOT NULL,
             updated_at DATETIME NULL,
             source_filename VARCHAR(191) NULL,
-            file_path TEXT NULL,        -- temp file path while importing
-            file_pointer BIGINT NULL,   -- current byte offset for resumable reads
+            file_path TEXT NULL,
+            file_pointer BIGINT NULL,
+            header_map LONGTEXT NULL, -- JSON of normalized header -> column index
             total INT UNSIGNED NOT NULL DEFAULT 0,
             imported INT UNSIGNED NOT NULL DEFAULT 0,
             invalid INT UNSIGNED NOT NULL DEFAULT 0,
@@ -83,15 +100,18 @@ class Activator {
             KEY created_at (created_at)
         ) $charset;";
 
-        // NEW: list items (mapping list -> contact)
+        // List items mapping — add duplicate flag + created_at
         $sql_list_items = "CREATE TABLE $listItems (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             list_id BIGINT UNSIGNED NOT NULL,
             contact_id BIGINT UNSIGNED NOT NULL,
+            is_duplicate_import TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
             PRIMARY KEY (id),
             UNIQUE KEY list_contact (list_id, contact_id),
             KEY list_id (list_id),
-            KEY contact_id (contact_id)
+            KEY contact_id (contact_id),
+            KEY is_duplicate_import (is_duplicate_import)
         ) $charset;";
 
         dbDelta( $sql_contacts );
@@ -99,6 +119,24 @@ class Activator {
         dbDelta( $sql_logs );
         dbDelta( $sql_lists );
         dbDelta( $sql_list_items );
+
+        // NEW: duplicates ledger (per import duplicate rows)
+        $dup_table = $wpdb->prefix . 'email_import_duplicates';
+        $sql_dupes = "CREATE TABLE $dup_table (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            list_id BIGINT UNSIGNED NOT NULL,
+            contact_id BIGINT UNSIGNED NOT NULL,
+            email VARCHAR(191) NOT NULL,
+            first_name VARCHAR(191) NULL,
+            last_name VARCHAR(191) NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY list_id (list_id),
+            KEY contact_id (contact_id),
+            KEY email (email),
+            KEY created_at (created_at)
+        ) $charset;";
+        dbDelta( $sql_dupes );
 
         // Ensure uploads dir exists
         Helpers::ensure_uploads_dir();
