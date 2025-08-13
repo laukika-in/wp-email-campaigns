@@ -43,32 +43,43 @@ class Contacts {
         add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] );
     }
 
-    /** Rename old submenu title to "Lists" and add a new "Contacts" submenu */
-    public function admin_menu_adjustments() {
-        // Rename existing submenu "Contacts" (slug wpec-contacts) under CPT to "Lists"
-        global $submenu;
-        $parent = 'edit.php?post_type=email_campaign';
-        if ( isset( $submenu[ $parent ] ) ) {
-            foreach ( $submenu[ $parent ] as &$item ) {
-                // $item = [ page_title, capability, slug, menu_title, ... ]
-                if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
-                    $item[0] = __( 'Lists', 'wp-email-campaigns' );
-                    $item[3] = __( 'Lists', 'wp-email-campaigns' );
-                }
+ public function admin_menu_adjustments() {
+    // Determine a capability to register menus with
+    // Try Helpers::manage_cap() or Helpers::cap(), otherwise fall back to 'manage_options'
+    $cap = 'manage_options';
+    if ( class_exists(__NAMESPACE__ . '\\Helpers') ) {
+        if ( method_exists( Helpers::class, 'manage_cap' ) ) {
+            $cap = Helpers::manage_cap();
+        } elseif ( method_exists( Helpers::class, 'cap' ) ) {
+            $cap = Helpers::cap();
+        }
+    }
+
+    // Rename existing submenu "Contacts" (slug wpec-contacts) under CPT to "Lists"
+    global $submenu;
+    $parent = 'edit.php?post_type=email_campaign';
+    if ( isset( $submenu[ $parent ] ) ) {
+        foreach ( $submenu[ $parent ] as &$item ) {
+            // $item = [ page_title, capability, slug, menu_title, ... ]
+            if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
+                $item[0] = __( 'Lists', 'wp-email-campaigns' );
+                $item[3] = __( 'Lists', 'wp-email-campaigns' );
             }
         }
-
-        // Add a new "Contacts" directory page
-        add_submenu_page(
-            $parent,
-            __( 'Contacts', 'wp-email-campaigns' ),
-            __( 'Contacts', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
-            'wpec-all-contacts',
-            [ $this, 'render_all_contacts' ],
-            21
-        );
     }
+
+    // Add a new "Contacts" directory page
+    add_submenu_page(
+        $parent,
+        __( 'Contacts', 'wp-email-campaigns' ),
+        __( 'Contacts', 'wp-email-campaigns' ),
+        $cap,
+        'wpec-all-contacts',
+        [ $this, 'render_all_contacts' ],
+        21
+    );
+}
+
 
     // ========== ROUTER FOR LISTS UI ==========
     public function render_router() {
