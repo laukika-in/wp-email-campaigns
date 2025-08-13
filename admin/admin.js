@@ -1,4 +1,31 @@
 (function ($) {
+  // ── Select2 loader (local first; fallback CDN) ────────────────────────────
+  function ensureSelect2(cb) {
+    if ($.fn.select2) {
+      cb && cb();
+      return;
+    }
+    // load CSS
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = WPEC.select2LocalCss || WPEC.select2CdnCss;
+    css.onerror = function () {
+      css.href = WPEC.select2CdnCss;
+    };
+    document.head.appendChild(css);
+    // load JS
+    var s = document.createElement("script");
+    s.src = WPEC.select2LocalJs || WPEC.select2CdnJs;
+    s.onload = function () {
+      cb && cb();
+    };
+    s.onerror = function () {
+      this.src = WPEC.select2CdnJs;
+      this.onerror = null;
+    };
+    document.head.appendChild(s);
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   function anyChecked($scope) {
     return $scope.find('input[name="ids[]"]:checked').length > 0;
@@ -8,15 +35,21 @@
     var $lst = $("#wpec-list-form");
     $("#wpec-dup-bulk-delete").prop("disabled", !anyChecked($dup));
     $("#wpec-list-bulk-delete").prop("disabled", !anyChecked($lst));
+    // All contacts bulkbar
+    var $tbl = $("#wpec-contacts-table");
+    var checked = $tbl.find("tbody input.row-cb:checked").length > 0;
+    $("#wpec-bulkbar #wpec-bulk-delete").prop("disabled", !checked);
+    var listSel = $("#wpec-bulk-move-list").val();
+    $("#wpec-bulkbar #wpec-bulk-move").prop("disabled", !(checked && listSel));
   }
   $(document).on(
     "change click",
-    '.wp-list-table input[type="checkbox"]',
+    '.wp-list-table input[type="checkbox"], #wpec-contacts-table input[type="checkbox"], #wpec-bulk-move-list',
     setBulkState
   );
   $(document).ready(setBulkState);
 
-  // ── Publish confirm (campaign editor) ─────────────────────────────────────
+  // ── Campaign publish confirm ──────────────────────────────────────────────
   $(function () {
     var $form = $("#post");
     if ($("body").hasClass("post-type-email_campaign")) {
@@ -31,7 +64,7 @@
     }
   });
 
-  // ── Upload/import progress (on Import page) ───────────────────────────────
+  // ── Upload/import progress (Import page) ──────────────────────────────────
   function setProgress(pct, text) {
     $("#wpec-progress-wrap").show();
     $("#wpec-progress-bar").css("width", pct + "%");
@@ -45,14 +78,8 @@
         "?post_type=email_campaign&page=wpec-duplicates",
       location.origin
     );
-    var dupesUrlList = new URL(
-      location.origin +
-        location.pathname +
-        "?post_type=email_campaign&page=wpec-duplicates",
-      location.origin
-    );
+    var dupesUrlList = new URL(dupesUrlAll.toString());
     dupesUrlList.searchParams.set("focus_list", String(listId));
-    var reloadUrl = location.href;
     var html = "";
     html += '<h3 style="margin-top:0;">Import Summary</h3>';
     html += '<ul class="wpec-stats">';
@@ -76,10 +103,14 @@
       dupesUrlAll.toString() +
       '">View duplicates (all lists)</a> ';
     html +=
-      '<a class="button button-primary" href="' + reloadUrl + '">Reload</a>';
+      '<button class="button button-primary" id="wpec-import-reload">Reload</button>';
     html += "</p>";
     $panel.html(html).show();
   }
+  $(document).on("click", "#wpec-import-reload", function () {
+    location.reload();
+  });
+
   function processList(listId) {
     $.post(WPEC.ajaxUrl, {
       action: "wpec_list_process",
@@ -158,14 +189,7 @@
     }
   });
 
-  // Existing list filter + toggle
-  $("#wpec-existing-search").on("input", function () {
-    var q = $(this).val().toLowerCase();
-    $("#wpec-existing-list option").each(function () {
-      var t = $(this).text().toLowerCase();
-      $(this).toggle(t.indexOf(q) !== -1 || $(this).val() === "");
-    });
-  });
+  // Existing list mode toggle
   $(document).on("change", 'input[name="list_mode"]', function () {
     var mode = $('input[name="list_mode"]:checked').val();
     $("#wpec-list-target-new").toggle(mode === "new");
@@ -243,6 +267,9 @@
           $loader.hide();
           $btn.prop("disabled", false);
           $text.text("Deleted " + done + " of " + total + ".");
+          setTimeout(function () {
+            $(wrapSel).hide();
+          }, 500);
           setBulkState();
           return;
         }
@@ -296,24 +323,24 @@
       $("#wpec-modal, #wpec-modal-list, #wpec-modal-overlay").hide();
     }
   );
-  $("#wpec-open-add-contact").on("click", function (e) {
+  $(document).on("click", "#wpec-open-add-contact", function (e) {
     e.preventDefault();
     $("#wpec-modal-overlay").show();
     $("#wpec-modal").show();
   });
-  $("#wpec-open-create-list").on("click", function (e) {
+  $(document).on("click", "#wpec-open-create-list", function (e) {
     e.preventDefault();
     $("#wpec-modal-overlay").show();
     $("#wpec-modal-list").show();
   });
-  $("#wpec-add-contact-newlist-toggle").on("change", function () {
+  $(document).on("change", "#wpec-add-contact-newlist-toggle", function () {
     var on = $(this).is(":checked");
     $("#wpec-add-contact-newlist").toggle(on);
     if (on) {
       $("#wpec-add-contact-list").val("");
     }
   });
-  $("#wpec-create-list-form").on("submit", function (e) {
+  $(document).on("submit", "#wpec-create-list-form", function (e) {
     e.preventDefault();
     var $form = $(this),
       $loader = $("#wpec-create-list-loader");
@@ -322,9 +349,13 @@
       .done(function (resp) {
         if (resp && resp.success) {
           var id = resp.data.list_id,
-            name = resp.data.name + " (#" + id + ")";
-          $("#wpec-existing-list, #wpec-add-contact-list").each(function () {
-            $(this).append($("<option>", { value: id, text: name }));
+            name = resp.data.name + " (" + id + ")";
+          $(
+            "#wpec-existing-list, #wpec-add-contact-list, #wpec-bulk-move-list"
+          ).each(function () {
+            $(this).append(
+              $("<option>", { value: id, text: resp.data.name + " (0)" })
+            );
           });
           alert("List created");
           $("#wpec-modal, #wpec-modal-list, #wpec-modal-overlay").hide();
@@ -339,7 +370,7 @@
         $loader.hide();
       });
   });
-  $("#wpec-add-contact-form").on("submit", function (e) {
+  $(document).on("submit", "#wpec-add-contact-form", function (e) {
     e.preventDefault();
     var $form = $(this),
       $loader = $("#wpec-add-contact-loader");
@@ -433,12 +464,13 @@
       });
   });
 
-  // ── CONTACTS DIRECTORY (AJAX filters + pagination + export) ──────────────
+  // ── CONTACTS DIRECTORY (AJAX filters + pagination + export + bulk ops) ───
   function onContactsPage() {
     return (
       new URL(location.href).searchParams.get("page") === "wpec-all-contacts"
     );
   }
+
   function collectCols() {
     var cols = [];
     $(".wpec-col-toggle:checked").each(function () {
@@ -446,29 +478,66 @@
     });
     return cols;
   }
-  function collectMulti(sel) {
+  function collectMultiSel(sel) {
     var out = [];
-    $(sel + " option:selected").each(function () {
-      out.push($(this).val());
-    });
+    $(sel)
+      .find("option:selected")
+      .each(function () {
+        out.push($(this).val());
+      });
     return out;
   }
   function currentFilters() {
     return {
       search: $("#wpec-f-search").val() || "",
-      company_name: collectMulti("#wpec-f-company"),
-      city: collectMulti("#wpec-f-city"),
-      state: collectMulti("#wpec-f-state"),
-      country: collectMulti("#wpec-f-country"),
-      job_title: collectMulti("#wpec-f-job"),
-      postal_code: collectMulti("#wpec-f-postcode"),
-      list_ids: collectMulti("#wpec-f-list"),
+      company_name: collectMultiSel("#wpec-f-company"),
+      city: collectMultiSel("#wpec-f-city"),
+      state: collectMultiSel("#wpec-f-state"),
+      country: collectMultiSel("#wpec-f-country"),
+      job_title: collectMultiSel("#wpec-f-job"),
+      postal_code: collectMultiSel("#wpec-f-postcode"),
+      list_ids: collectMultiSel("#wpec-f-list"),
       emp_min: $("#wpec-f-emp-min").val(),
       emp_max: $("#wpec-f-emp-max").val(),
       rev_min: $("#wpec-f-rev-min").val(),
       rev_max: $("#wpec-f-rev-max").val(),
     };
   }
+
+  function renderPager(pageNo, totalPages, total) {
+    var $nums = $("#wpec-page-numbers").empty();
+    var maxShown = 7;
+    function add(n, text, active, disabled) {
+      var $a = $('<a href="#" class="wpec-page-link">')
+        .text(text || n)
+        .data("page", n);
+      if (active) $a.addClass("is-active");
+      if (disabled) $a.addClass("is-disabled");
+      $nums.append($a);
+    }
+    var start = Math.max(1, pageNo - 3);
+    var end = Math.min(totalPages, start + maxShown - 1);
+    if (end - start < maxShown - 1) start = Math.max(1, end - maxShown + 1);
+    if (start > 1) {
+      add(1);
+      if (start > 2) $nums.append('<span class="dots">…</span>');
+    }
+    for (var i = start; i <= end; i++) {
+      add(i, null, i === pageNo);
+    }
+    if (end < totalPages) {
+      if (end < totalPages - 1) $nums.append('<span class="dots">…</span>');
+      add(totalPages);
+    }
+    $("#wpec-page-prev")
+      .prop("disabled", pageNo <= 1)
+      .data("page", pageNo - 1);
+    $("#wpec-page-next")
+      .prop("disabled", pageNo >= totalPages)
+      .data("page", pageNo + 1);
+    $("#wpec-page-info").text(" — " + total + " contacts");
+  }
+
   function contactsQuery(page) {
     var per = parseInt($("#wpec-page-size").val(), 10) || 50;
     var filters = currentFilters();
@@ -483,49 +552,51 @@
       filters
     );
     $("#wpec-contacts-table tbody").html(
-      '<tr><td colspan="4">Loading…</td></tr>'
+      '<tr><td colspan="999">Loading…</td></tr>'
     );
     return $.post(WPEC.ajaxUrl, data).done(function (resp) {
       if (!resp || !resp.success) {
         $("#wpec-contacts-table tbody").html(
-          '<tr><td colspan="4">Failed to load.</td></tr>'
+          '<tr><td colspan="999">Failed to load.</td></tr>'
         );
         return;
       }
       var rows = resp.data.rows || [];
-      var $thead = $("#wpec-contacts-table thead tr");
-      var baseHead =
-        "<th>ID</th><th>Full name</th><th>Email</th><th>List(s)</th>";
       var cols = collectCols();
-      if (cols.length) {
-        cols.forEach(function (c) {
-          baseHead += "<th>" + headerLabel(c) + "</th>";
-        });
-      }
-      $thead.html(baseHead);
 
+      // Build thead
+      var $thead = $("#wpec-contacts-table thead tr");
+      var head =
+        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Email</th><th>List(s)</th>';
+      cols.forEach(function (c) {
+        head += "<th>" + headerLabel(c) + "</th>";
+      });
+      $thead.html(head);
+
+      // Build rows
       if (!rows.length) {
         $("#wpec-contacts-table tbody").html(
-          '<tr><td colspan="' +
-            (4 + cols.length) +
-            '">No contacts found.</td></tr>'
+          '<tr><td colspan="999">No contacts found.</td></tr>'
         );
       } else {
         var html = "";
         rows.forEach(function (r) {
-          html += "<tr>";
-          html += "<td>" + (r.id || "") + "</td>";
-          var name = r.full_name ? r.full_name : "";
           var detailUrl = new URL(location.origin + location.pathname);
           detailUrl.searchParams.set("post_type", "email_campaign");
           detailUrl.searchParams.set("page", "wpec-contacts");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
+          html += "<tr>";
+          html +=
+            '<td><input type="checkbox" class="row-cb" data-id="' +
+            r.id +
+            '"></td>';
+          html += "<td>" + (r.id || "") + "</td>";
           html +=
             '<td><a href="' +
             detailUrl.toString() +
             '">' +
-            escapeHtml(name) +
+            escapeHtml(r.full_name || "") +
             "</a></td>";
           html += "<td>" + escapeHtml(r.email || "") + "</td>";
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
@@ -537,18 +608,17 @@
         });
         $("#wpec-contacts-table tbody").html(html);
       }
-      var pageNo = resp.data.page || 1,
-        totalPages = resp.data.total_pages || 1,
-        total = resp.data.total || 0;
-      $("#wpec-page-prev").prop("disabled", pageNo <= 1);
-      $("#wpec-page-next").prop("disabled", pageNo >= totalPages);
-      $("#wpec-page-info").text(
-        "Page " + pageNo + " of " + totalPages + " — " + total + " contacts"
+
+      // Pager
+      renderPager(
+        resp.data.page || 1,
+        resp.data.total_pages || 1,
+        resp.data.total || 0
       );
-      $("#wpec-page-prev").data("page", pageNo - 1);
-      $("#wpec-page-next").data("page", pageNo + 1);
+      setBulkState();
     });
   }
+
   function headerLabel(key) {
     switch (key) {
       case "company_name":
@@ -591,129 +661,202 @@
     });
   }
 
-  // Multi-select filter search (option filtering)
-  $(document).on("input", ".wpec-ms-search", function () {
-    var q = $(this).val().toLowerCase();
-    var target = $(this).data("target");
-    $(target + " option").each(function () {
-      var t = ($(this).text() || "").toLowerCase();
-      $(this).toggle(t.indexOf(q) !== -1 || $(this).is(":selected"));
-    });
+  // Pager clicks
+  $(document).on("click", "#wpec-page-prev, #wpec-page-next", function () {
+    var p = $(this).data("page");
+    if (p) contactsQuery(p);
+  });
+  $(document).on("click", ".wpec-page-link", function (e) {
+    e.preventDefault();
+    var p = $(this).data("page");
+    if (!$(this).hasClass("is-disabled")) contactsQuery(p);
+  });
+  $(document).on("change", "#wpec-page-size", function () {
+    contactsQuery(1);
   });
 
-  // Pager & interactions
-  $("#wpec-page-prev").on("click", function () {
-    contactsQuery($(this).data("page"));
-  });
-  $("#wpec-page-next").on("click", function () {
-    contactsQuery($(this).data("page"));
-  });
-  $("#wpec-page-size").on("change", function () {
-    contactsQuery(1);
-  });
-  $("#wpec-f-apply").on("click", function (e) {
+  // Filters
+  $(document).on("click", "#wpec-f-apply", function (e) {
     e.preventDefault();
     contactsQuery(1);
   });
-  $("#wpec-f-reset").on("click", function (e) {
+  $(document).on("click", "#wpec-f-reset", function (e) {
     e.preventDefault();
     $("#wpec-f-search").val("");
-    $(".wpec-ms-search").val("").trigger("input");
-    $(
-      "#wpec-f-company, #wpec-f-city, #wpec-f-state, #wpec-f-country, #wpec-f-job, #wpec-f-postcode, #wpec-f-list"
-    ).val([]);
+    $(".wpec-s2").val(null).trigger("change");
     $("#wpec-f-emp-min, #wpec-f-emp-max, #wpec-f-rev-min, #wpec-f-rev-max").val(
       ""
     );
     $(".wpec-col-toggle").prop("checked", false);
     contactsQuery(1);
   });
-  $(".wpec-col-toggle").on("change", function () {
+  $(document).on("change", ".wpec-col-toggle", function () {
     contactsQuery(1);
   });
 
-  // Prefill from facet links
-  function prefillFromUrl() {
-    var s = new URL(location.href).searchParams;
-    function setIf(id, key) {
-      if (s.get(key)) {
-        var val = s.get(key);
-        $(id + " option").each(function () {
-          if ($(this).val() === val) {
-            $(this).prop("selected", true);
-          }
-        });
-      }
-    }
-    setIf("#wpec-f-company", "company_name");
-    setIf("#wpec-f-city", "city");
-    setIf("#wpec-f-state", "state");
-    setIf("#wpec-f-country", "country");
-    setIf("#wpec-f-job", "job_title");
-    setIf("#wpec-f-postcode", "postal_code");
-  }
+  // Master checkbox
+  $(document).on("change", "#wpec-master-cb", function () {
+    var on = $(this).is(":checked");
+    $("#wpec-contacts-table tbody input.row-cb").prop("checked", on);
+    setBulkState();
+  });
+  $(document).on(
+    "change",
+    "#wpec-contacts-table tbody input.row-cb",
+    setBulkState
+  );
 
-  // Export filtered CSV
+  // Bulk delete (All Contacts)
+  $("#wpec-bulk-delete").on("click", function (e) {
+    e.preventDefault();
+    var ids = [];
+    $("#wpec-contacts-table tbody input.row-cb:checked").each(function () {
+      ids.push(parseInt($(this).data("id"), 10));
+    });
+    if (!ids.length) return;
+    if (!confirm("Delete selected contacts? This removes them from all lists."))
+      return;
+    $("#wpec-bulk-loader").show();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_contacts_bulk_delete",
+      nonce: WPEC.nonce,
+      contact_ids: ids,
+    })
+      .done(function (resp) {
+        if (resp && resp.success) {
+          // Remove rows
+          $("#wpec-contacts-table tbody input.row-cb:checked")
+            .closest("tr")
+            .remove();
+          setBulkState();
+        } else {
+          alert((resp && resp.data && resp.data.message) || "Delete failed.");
+        }
+      })
+      .always(function () {
+        $("#wpec-bulk-loader").hide();
+      });
+  });
+
+  // Bulk move to list
+  $("#wpec-bulk-move").on("click", function (e) {
+    e.preventDefault();
+    var ids = [];
+    $("#wpec-contacts-table tbody input.row-cb:checked").each(function () {
+      ids.push(parseInt($(this).data("id"), 10));
+    });
+    var listId = parseInt($("#wpec-bulk-move-list").val(), 10) || 0;
+    if (!ids.length || !listId) return;
+    $("#wpec-bulk-loader").show();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_contacts_bulk_move",
+      nonce: WPEC.nonce,
+      contact_ids: ids,
+      list_id: listId,
+    })
+      .done(function (resp) {
+        if (resp && resp.success) {
+          alert("Added " + (resp.data.added || 0) + " to the selected list.");
+        } else {
+          alert((resp && resp.data && resp.data.message) || "Move failed.");
+        }
+      })
+      .always(function () {
+        $("#wpec-bulk-loader").hide();
+      });
+  });
+
+  // Export (filtered) via AJAX -> CSV stream
   $("#wpec-export-contacts").on("click", function (e) {
     e.preventDefault();
     var f = currentFilters();
-    var $form = $("#wpec-export-form").empty();
-    $form
+    var form = $(
+      '<form method="POST" action="' + WPEC.ajaxUrl + '" target="_blank">'
+    );
+    form
       .append(
-        '<input type="hidden" name="action" value="wpec_export_contacts">'
+        '<input type="hidden" name="action" value="wpec_contacts_export">'
       )
-      .append(
-        '<input type="hidden" name="_wpnonce" value="' +
-          WPEC.nonce.replace("wpec_admin", "wpec_export_contacts") +
-          '">'
-      ); // fallback; actual nonce set server-side in form
-    function appendArray(key, arr) {
+      .append('<input type="hidden" name="nonce" value="' + WPEC.nonce + '">');
+    function appendArr(key, arr) {
       (arr || []).forEach(function (v) {
-        $form.append(
-          '<input type="hidden" name="' +
-            key +
-            '[]" value="' +
-            $("<div>").text(v).html() +
-            '">'
+        form.append(
+          $("<input>", { type: "hidden", name: key + "[]", value: v })
         );
       });
     }
     if (f.search)
-      $form.append(
-        '<input type="hidden" name="search" value="' +
-          $("<div>").text(f.search).html() +
-          '">'
+      form.append(
+        $("<input>", { type: "hidden", name: "search", value: f.search })
       );
-    appendArray("company_name", f.company_name);
-    appendArray("city", f.city);
-    appendArray("state", f.state);
-    appendArray("country", f.country);
-    appendArray("job_title", f.job_title);
-    appendArray("postal_code", f.postal_code);
-    appendArray("list_ids", f.list_ids);
+    appendArr("company_name", f.company_name);
+    appendArr("city", f.city);
+    appendArr("state", f.state);
+    appendArr("country", f.country);
+    appendArr("job_title", f.job_title);
+    appendArr("postal_code", f.postal_code);
+    appendArr("list_ids", f.list_ids);
     if (f.emp_min)
-      $form.append(
-        '<input type="hidden" name="emp_min" value="' + f.emp_min + '">'
+      form.append(
+        $("<input>", { type: "hidden", name: "emp_min", value: f.emp_min })
       );
     if (f.emp_max)
-      $form.append(
-        '<input type="hidden" name="emp_max" value="' + f.emp_max + '">'
+      form.append(
+        $("<input>", { type: "hidden", name: "emp_max", value: f.emp_max })
       );
     if (f.rev_min)
-      $form.append(
-        '<input type="hidden" name="rev_min" value="' + f.rev_min + '">'
+      form.append(
+        $("<input>", { type: "hidden", name: "rev_min", value: f.rev_min })
       );
     if (f.rev_max)
-      $form.append(
-        '<input type="hidden" name="rev_max" value="' + f.rev_max + '">'
+      form.append(
+        $("<input>", { type: "hidden", name: "rev_max", value: f.rev_max })
       );
-    $form.submit();
+    $(document.body).append(form);
+    form[0].submit();
+    setTimeout(function () {
+      form.remove();
+    }, 1000);
   });
+
+  // Init on Contacts page: Select2 + initial load
+  function initSelect2() {
+    $(".wpec-s2").each(function () {
+      $(this).select2({
+        width: "resolve",
+        allowClear: true,
+        placeholder: $(this).data("placeholder") || "",
+      });
+    });
+    $("#wpec-bulk-move-list").select2({
+      width: "resolve",
+      placeholder: "Move to list…",
+    });
+  }
 
   $(function () {
     if (onContactsPage()) {
-      prefillFromUrl();
-      contactsQuery(1);
+      ensureSelect2(function () {
+        initSelect2();
+        contactsQuery(1);
+      });
+    } else {
+      // Import page Select2 for existing list + add-contact list
+      if (
+        $("#wpec-existing-list").length ||
+        $("#wpec-add-contact-list").length
+      ) {
+        ensureSelect2(function () {
+          $("#wpec-existing-list").select2({
+            width: "resolve",
+            placeholder: "Select a list…",
+          });
+          $("#wpec-add-contact-list").select2({
+            width: "resolve",
+            placeholder: "— None —",
+          });
+        });
+      }
     }
   });
 })(jQuery);
