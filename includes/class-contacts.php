@@ -70,8 +70,6 @@ class Contacts {
         // Core plugin assets
         wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], WPEC_VERSION );
         wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VERSION, true );
-wp_enqueue_style( 'select2-local', WPEC_URL . 'admin/vendor/select2.min.css', [], '4.1.0' );
-wp_enqueue_script( 'select2-local', WPEC_URL . 'admin/vendor/select2.min.js', [ 'jquery' ], '4.1.0', true );
 
         // Select2 from CDN (lightweight way to guarantee searchable dropdowns)
         wp_enqueue_style( 'select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', [], '4.1.0' );
@@ -81,7 +79,6 @@ wp_enqueue_script( 'select2-local', WPEC_URL . 'admin/vendor/select2.min.js', [ 
         wp_localize_script( 'wpec-admin', 'WPEC_CFG', [
             'ajax'   => admin_url( 'admin-ajax.php' ),
             'nonce'  => wp_create_nonce( 'wpec_admin' ),
-            
         ] );
     }
 
