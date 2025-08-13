@@ -81,14 +81,7 @@ wp_enqueue_script( 'select2-local', WPEC_URL . 'admin/vendor/select2.min.js', [ 
         wp_localize_script( 'wpec-admin', 'WPEC_CFG', [
             'ajax'   => admin_url( 'admin-ajax.php' ),
             'nonce'  => wp_create_nonce( 'wpec_admin' ),
-             'startImport'     => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
-
-    // Prefer local Select2; admin.js will fall back to CDN only if needed
-    'select2LocalCss' => WPEC_URL . 'admin/vendor/select2.min.css',
-    'select2LocalJs'  => WPEC_URL . 'admin/vendor/select2.min.js',
-    'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-    'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
-
+            
         ] );
     }
 
