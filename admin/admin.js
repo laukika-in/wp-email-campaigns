@@ -1,20 +1,5 @@
 (function ($) {
-  // ─── Publish confirm (unchanged) ──────────────────────────────────────────
-  $(function () {
-    var $form = $("#post");
-    if ($("body").hasClass("post-type-email_campaign")) {
-      $form.on("submit", function () {
-        if ($("#publish").length) {
-          var ok = confirm(
-            "Publish campaign? (Sending is configured in next phase.)"
-          );
-          if (!ok) return false;
-        }
-      });
-    }
-  });
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  // ─── Helpers (shared) ─────────────────────────────────────────────────────
   function anyChecked($scope) {
     return $scope.find('input[name="ids[]"]:checked').length > 0;
   }
@@ -31,7 +16,22 @@
   );
   $(document).ready(setBulkState);
 
-  // ─── Upload/import progress (unchanged core) ──────────────────────────────
+  // ─── Publish confirm (campaigns) ──────────────────────────────────────────
+  $(function () {
+    var $form = $("#post");
+    if ($("body").hasClass("post-type-email_campaign")) {
+      $form.on("submit", function () {
+        if ($("#publish").length) {
+          var ok = confirm(
+            "Publish campaign? (Sending is configured in next phase.)"
+          );
+          if (!ok) return false;
+        }
+      });
+    }
+  });
+
+  // ─── Upload/import progress (Lists page) ──────────────────────────────────
   function setProgress(pct, text) {
     $("#wpec-progress-wrap").show();
     $("#wpec-progress-bar").css("width", pct + "%");
@@ -48,7 +48,6 @@
     var reloadUrl = location.href
       .replace(/([&?])wpec_start_import=\d+&?/, "$1")
       .replace(/[&?]$/, "");
-
     var html = "";
     html += '<h3 style="margin-top:0;">Import Summary</h3>';
     html += '<ul class="wpec-stats">';
@@ -156,7 +155,7 @@
     }
   });
 
-  // Existing list filter + toggle
+  // ─── Existing list filter + toggle (Lists page) ───────────────────────────
   $("#wpec-existing-search").on("input", function () {
     var q = $(this).val().toLowerCase();
     $("#wpec-existing-list option").each(function () {
@@ -177,7 +176,7 @@
     }
   });
 
-  // ─── Duplicates: individual delete ────────────────────────────────────────
+  // ─── Duplicates: individual delete & bulk delete (existing) ───────────────
   $(document).on("click", ".wpec-del-dup", function (e) {
     e.preventDefault();
     var $btn = $(this),
@@ -209,127 +208,84 @@
       });
   });
 
-  // ─── Bulk delete (duplicates) ─────────────────────────────────────────────
-  $("#wpec-dup-bulk-delete").on("click", function (e) {
-    e.preventDefault();
-    var $btn = $(this),
-      $loader = $("#wpec-dup-bulk-loader"),
-      $wrap = $("#wpec-dup-bulk-progress"),
-      $bar = $("#wpec-dup-progress-bar"),
-      $text = $("#wpec-dup-progress-text");
-    var $checks = $('#wpec-dup-form input[name="ids[]"]:checked');
-    if (!$checks.length) return;
-    if (!confirm("Delete selected contacts from their current lists?")) return;
-    var tasks = [];
-    $checks.each(function () {
-      var p = String($(this).val()).split(":");
-      tasks.push({
-        listId: parseInt(p[0], 10),
-        contactId: parseInt(p[1], 10),
-        $row: $(this).closest("tr"),
-      });
-    });
-    var total = tasks.length,
-      done = 0;
-    $btn.prop("disabled", true);
-    $loader.show();
-    $wrap.show();
-    $bar.css("width", "0%");
-    $text.text("Deleting 0 of " + total + "...");
-    (function next() {
-      if (!tasks.length) {
-        $loader.hide();
-        $btn.prop("disabled", false);
-        $text.text("Deleted " + done + " of " + total + ".");
-        setBulkState();
-        return;
-      }
-      var t = tasks.shift();
-      $.post(WPEC.ajaxUrl, {
-        action: "wpec_delete_list_mapping",
-        nonce: WPEC.nonce,
-        list_id: t.listId,
-        contact_id: t.contactId,
-      })
-        .done(function (resp) {
-          if (resp && resp.success) {
-            done++;
-            if (t.$row)
-              t.$row.fadeOut(80, function () {
-                $(this).remove();
-              });
-          }
-        })
-        .always(function () {
-          var pct = Math.round((done / total) * 100);
-          $bar.css("width", pct + "%");
-          $text.text("Deleting " + done + " of " + total + "...");
-          setTimeout(next, 60);
+  function bulkDelete(buttonSel, formSel, barSel, textSel, wrapSel, loaderSel) {
+    $(buttonSel).on("click", function (e) {
+      e.preventDefault();
+      var $btn = $(this),
+        $loader = $(loaderSel),
+        $wrap = $(wrapSel),
+        $bar = $(barSel),
+        $text = $(textSel);
+      var $checks = $(formSel + ' input[name="ids[]"]:checked');
+      if (!$checks.length) return;
+      if (!confirm("Delete selected contacts?")) return;
+      var tasks = [];
+      $checks.each(function () {
+        var p = String($(this).val()).split(":");
+        tasks.push({
+          listId: parseInt(p[0], 10),
+          contactId: parseInt(p[1], 10),
+          $row: $(this).closest("tr"),
         });
-    })();
-  });
-
-  // ─── Bulk delete (per-list) ───────────────────────────────────────────────
-  $("#wpec-list-bulk-delete").on("click", function (e) {
-    e.preventDefault();
-    var $btn = $(this),
-      $loader = $("#wpec-list-bulk-loader"),
-      $wrap = $("#wpec-list-bulk-progress"),
-      $bar = $("#wpec-list-progress-bar"),
-      $text = $("#wpec-list-progress-text");
-    var $checks = $('#wpec-list-form input[name="ids[]"]:checked');
-    if (!$checks.length) return;
-    if (!confirm("Delete selected contacts from this list?")) return;
-    var tasks = [];
-    $checks.each(function () {
-      var p = String($(this).val()).split(":");
-      tasks.push({
-        listId: parseInt(p[0], 10),
-        contactId: parseInt(p[1], 10),
-        $row: $(this).closest("tr"),
       });
-    });
-    var total = tasks.length,
-      done = 0;
-    $btn.prop("disabled", true);
-    $loader.show();
-    $wrap.show();
-    $bar.css("width", "0%");
-    $text.text("Deleting 0 of " + total + "...");
-    (function next() {
-      if (!tasks.length) {
-        $loader.hide();
-        $btn.prop("disabled", false);
-        $text.text("Deleted " + done + " of " + total + ".");
-        setBulkState();
-        return;
-      }
-      var t = tasks.shift();
-      $.post(WPEC.ajaxUrl, {
-        action: "wpec_delete_list_mapping",
-        nonce: WPEC.nonce,
-        list_id: t.listId,
-        contact_id: t.contactId,
-      })
-        .done(function (resp) {
-          if (resp && resp.success) {
-            done++;
-            if (t.$row)
-              t.$row.fadeOut(80, function () {
-                $(this).remove();
-              });
-          }
+      var total = tasks.length,
+        done = 0;
+      $btn.prop("disabled", true);
+      $loader.show();
+      $wrap.show();
+      $bar.css("width", "0%");
+      $text.text("Deleting 0 of " + total + "...");
+      (function next() {
+        if (!tasks.length) {
+          $loader.hide();
+          $btn.prop("disabled", false);
+          $text.text("Deleted " + done + " of " + total + ".");
+          setBulkState();
+          return;
+        }
+        var t = tasks.shift();
+        $.post(WPEC.ajaxUrl, {
+          action: "wpec_delete_list_mapping",
+          nonce: WPEC.nonce,
+          list_id: t.listId,
+          contact_id: t.contactId,
         })
-        .always(function () {
-          var pct = Math.round((done / total) * 100);
-          $bar.css("width", pct + "%");
-          $text.text("Deleting " + done + " of " + total + "...");
-          setTimeout(next, 60);
-        });
-    })();
-  });
+          .done(function (resp) {
+            if (resp && resp.success) {
+              done++;
+              if (t.$row)
+                t.$row.fadeOut(80, function () {
+                  $(this).remove();
+                });
+            }
+          })
+          .always(function () {
+            var pct = Math.round((done / total) * 100);
+            $bar.css("width", pct + "%");
+            $text.text("Deleting " + done + " of " + total + "...");
+            setTimeout(next, 60);
+          });
+      })();
+    });
+  }
+  bulkDelete(
+    "#wpec-dup-bulk-delete",
+    "#wpec-dup-form",
+    "#wpec-dup-progress-bar",
+    "#wpec-dup-progress-text",
+    "#wpec-dup-bulk-progress",
+    "#wpec-dup-bulk-loader"
+  );
+  bulkDelete(
+    "#wpec-list-bulk-delete",
+    "#wpec-list-form",
+    "#wpec-list-progress-bar",
+    "#wpec-list-progress-text",
+    "#wpec-list-bulk-progress",
+    "#wpec-list-bulk-loader"
+  );
 
-  // ─── Add-contact modal toggles ────────────────────────────────────────────
+  // ─── Modals (Add contact / Create list) ───────────────────────────────────
   $(document).on(
     "click",
     ".wpec-modal-close, #wpec-modal-overlay",
@@ -354,8 +310,6 @@
       $("#wpec-add-contact-list").val("");
     }
   });
-
-  // ─── Create list (AJAX) ───────────────────────────────────────────────────
   $("#wpec-create-list-form").on("submit", function (e) {
     e.preventDefault();
     var $form = $(this),
@@ -382,8 +336,6 @@
         $loader.hide();
       });
   });
-
-  // ─── Add contact (AJAX) ───────────────────────────────────────────────────
   $("#wpec-add-contact-form").on("submit", function (e) {
     e.preventDefault();
     var $form = $(this),
@@ -408,7 +360,7 @@
       });
   });
 
-  // ─── Lists table: inline "View counts" expansion ──────────────────────────
+  // ─── Lists page: inline "View counts" expansion (existing) ────────────────
   $(document).on("click", ".wpec-toggle-counts", function () {
     var $btn = $(this),
       listId = parseInt($btn.data("listId"), 10);
@@ -420,18 +372,13 @@
       $next.toggle();
       return;
     }
-
     var html =
       '<tr class="wpec-expand-row" data-list-id="' +
       listId +
       '"><td colspan="' +
       colCount +
-      '">';
-    html +=
-      '<div class="wpec-expand-box"><div class="wpec-expand-loading">Loading counts…</div></div>';
-    html += "</td></tr>";
+      '"><div class="wpec-expand-box"><div class="wpec-expand-loading">Loading counts…</div></div></td></tr>';
     $row.after(html);
-
     $.post(WPEC.ajaxUrl, {
       action: "wpec_list_metrics",
       nonce: WPEC.nonce,
@@ -481,5 +428,226 @@
           .find(".wpec-expand-box")
           .html('<div class="error">Request failed.</div>');
       });
+  });
+
+  // ─── CONTACTS DIRECTORY (AJAX filters + pagination) ───────────────────────
+  function onContactsPage() {
+    return (
+      new URL(location.href).searchParams.get("page") === "wpec-all-contacts"
+    );
+  }
+  function collectCols() {
+    var cols = [];
+    $(".wpec-col-toggle:checked").each(function () {
+      cols.push($(this).val());
+    });
+    return cols;
+  }
+  function collectMulti(sel) {
+    var out = [];
+    $(sel + " option:selected").each(function () {
+      out.push($(this).val());
+    });
+    return out;
+  }
+  function contactsQuery(page) {
+    var per = parseInt($("#wpec-page-size").val(), 10) || 50;
+    var data = {
+      action: "wpec_contacts_query",
+      nonce: WPEC.nonce,
+      page: page || 1,
+      per_page: per,
+      search: $("#wpec-f-search").val() || "",
+      company_name: collectMulti("#wpec-f-company"),
+      city: collectMulti("#wpec-f-city"),
+      state: collectMulti("#wpec-f-state"),
+      country: collectMulti("#wpec-f-country"),
+      job_title: collectMulti("#wpec-f-job"),
+      postal_code: collectMulti("#wpec-f-postcode"),
+      list_ids: collectMulti("#wpec-f-list"),
+      emp_min: $("#wpec-f-emp-min").val(),
+      emp_max: $("#wpec-f-emp-max").val(),
+      rev_min: $("#wpec-f-rev-min").val(),
+      rev_max: $("#wpec-f-rev-max").val(),
+      cols: collectCols(),
+    };
+    $("#wpec-contacts-table tbody").html(
+      '<tr><td colspan="4">Loading…</td></tr>'
+    );
+    return $.post(WPEC.ajaxUrl, data).done(function (resp) {
+      if (!resp || !resp.success) {
+        $("#wpec-contacts-table tbody").html(
+          '<tr><td colspan="4">Failed to load.</td></tr>'
+        );
+        return;
+      }
+      var rows = resp.data.rows || [];
+      var $thead = $("#wpec-contacts-table thead tr");
+      // Build header based on selected columns
+      var baseHead =
+        "<th>ID</th><th>Full name</th><th>Email</th><th>List(s)</th>";
+      var cols = collectCols();
+      if (cols.length) {
+        cols.forEach(function (c) {
+          baseHead += "<th>" + headerLabel(c) + "</th>";
+        });
+      }
+      $thead.html(baseHead);
+
+      if (!rows.length) {
+        $("#wpec-contacts-table tbody").html(
+          '<tr><td colspan="' +
+            (4 + cols.length) +
+            '">No contacts found.</td></tr>'
+        );
+      } else {
+        var html = "";
+        rows.forEach(function (r) {
+          html += "<tr>";
+          html += "<td>" + (r.id || "") + "</td>";
+          var name = r.full_name ? r.full_name : "";
+          var detailUrl = new URL(location.origin + location.pathname);
+          detailUrl.searchParams.set("post_type", "email_campaign");
+          detailUrl.searchParams.set("page", "wpec-contacts");
+          detailUrl.searchParams.set("view", "contact");
+          detailUrl.searchParams.set("contact_id", String(r.id));
+          html +=
+            '<td><a href="' +
+            detailUrl.toString() +
+            '">' +
+            escapeHtml(name) +
+            "</a></td>";
+          html += "<td>" + escapeHtml(r.email || "") + "</td>";
+          html += "<td>" + escapeHtml(r.lists || "") + "</td>";
+          cols.forEach(function (c) {
+            html +=
+              "<td>" + escapeHtml(r[c] == null ? "" : String(r[c])) + "</td>";
+          });
+          html += "</tr>";
+        });
+        $("#wpec-contacts-table tbody").html(html);
+      }
+      // Pager
+      var page = resp.data.page || 1,
+        totalPages = resp.data.total_pages || 1,
+        total = resp.data.total || 0;
+      $("#wpec-page-prev").prop("disabled", page <= 1);
+      $("#wpec-page-next").prop("disabled", page >= totalPages);
+      $("#wpec-page-info").text(
+        "Page " + page + " of " + totalPages + " — " + total + " contacts"
+      );
+      $("#wpec-page-prev").data("page", page - 1);
+      $("#wpec-page-next").data("page", page + 1);
+    });
+  }
+  function headerLabel(key) {
+    switch (key) {
+      case "company_name":
+        return "Company name";
+      case "company_employees":
+        return "Employees";
+      case "company_annual_revenue":
+        return "Annual revenue";
+      case "contact_number":
+        return "Contact number";
+      case "job_title":
+        return "Job title";
+      case "industry":
+        return "Industry";
+      case "country":
+        return "Country";
+      case "state":
+        return "State";
+      case "city":
+        return "City";
+      case "postal_code":
+        return "Postal code";
+      case "status":
+        return "Status";
+      case "created_at":
+        return "Created";
+      default:
+        return key;
+    }
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      }[m];
+    });
+  }
+
+  // Multi-select filter search (client-side option filtering)
+  $(document).on("input", ".wpec-ms-search", function () {
+    var q = $(this).val().toLowerCase();
+    var target = $(this).data("target");
+    $(target + " option").each(function () {
+      var t = ($(this).text() || "").toLowerCase();
+      $(this).toggle(t.indexOf(q) !== -1 || $(this).is(":selected"));
+    });
+  });
+
+  // Pager & interactions
+  $("#wpec-page-prev").on("click", function () {
+    contactsQuery($(this).data("page"));
+  });
+  $("#wpec-page-next").on("click", function () {
+    contactsQuery($(this).data("page"));
+  });
+  $("#wpec-page-size").on("change", function () {
+    contactsQuery(1);
+  });
+  $("#wpec-f-apply").on("click", function (e) {
+    e.preventDefault();
+    contactsQuery(1);
+  });
+  $("#wpec-f-reset").on("click", function (e) {
+    e.preventDefault();
+    $("#wpec-f-search").val("");
+    $(".wpec-ms-search").val("").trigger("input");
+    $(
+      "#wpec-f-company, #wpec-f-city, #wpec-f-state, #wpec-f-country, #wpec-f-job, #wpec-f-postcode, #wpec-f-list"
+    ).val([]);
+    $("#wpec-f-emp-min, #wpec-f-emp-max, #wpec-f-rev-min, #wpec-f-rev-max").val(
+      ""
+    );
+    $(".wpec-col-toggle").prop("checked", false);
+    contactsQuery(1);
+  });
+  $(".wpec-col-toggle").on("change", function () {
+    contactsQuery(1);
+  });
+
+  // If user navigated here with a facet param in URL, preselect and load
+  function prefillFromUrl() {
+    var s = new URL(location.href).searchParams;
+    function setIf(id, key) {
+      if (s.get(key)) {
+        var val = s.get(key); // try to select if exists
+        $(id + " option").each(function () {
+          if ($(this).val() === val) {
+            $(this).prop("selected", true);
+          }
+        });
+      }
+    }
+    setIf("#wpec-f-company", "company_name");
+    setIf("#wpec-f-city", "city");
+    setIf("#wpec-f-state", "state");
+    setIf("#wpec-f-country", "country");
+    setIf("#wpec-f-job", "job_title");
+    setIf("#wpec-f-postcode", "postal_code");
+  }
+
+  $(function () {
+    if (onContactsPage()) {
+      prefillFromUrl();
+      contactsQuery(1);
+    }
   });
 })(jQuery);

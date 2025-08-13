@@ -12,21 +12,28 @@ class Contacts {
     const BATCH_SIZE = 2000;
 
     public function init() {
+        // existing render hook for Lists (router)
         add_action( 'wpec_render_contacts_table', [ $this, 'render_router' ] );
 
-        // AJAX import/process
+        // Add/rename submenu items
+        add_action( 'admin_menu', [ $this, 'admin_menu_adjustments' ], 999 );
+
+        // AJAX: import/process
         add_action( 'wp_ajax_wpec_list_upload',   [ $this, 'ajax_list_upload' ] );
         add_action( 'wp_ajax_wpec_list_process',  [ $this, 'ajax_list_process' ] );
 
-        // AJAX create
+        // AJAX: create
         add_action( 'wp_ajax_wpec_contact_create', [ $this, 'ajax_contact_create' ] );
         add_action( 'wp_ajax_wpec_list_create',    [ $this, 'ajax_list_create' ] );
 
-        // AJAX delete mapping
+        // AJAX: delete mapping
         add_action( 'wp_ajax_wpec_delete_list_mapping', [ $this, 'ajax_delete_list_mapping' ] );
 
-        // AJAX metrics
+        // AJAX: list metrics dropdown (Lists page)
         add_action( 'wp_ajax_wpec_list_metrics', [ $this, 'ajax_list_metrics' ] );
+
+        // NEW: AJAX for Contacts directory (filters + pagination)
+        add_action( 'wp_ajax_wpec_contacts_query', [ $this, 'ajax_contacts_query' ] );
 
         // Fallback actions
         add_action( 'admin_post_wpec_list_upload',         [ $this, 'admin_post_list_upload' ] );
@@ -36,6 +43,34 @@ class Contacts {
         add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] );
     }
 
+    /** Rename old submenu title to "Lists" and add a new "Contacts" submenu */
+    public function admin_menu_adjustments() {
+        // Rename existing submenu "Contacts" (slug wpec-contacts) under CPT to "Lists"
+        global $submenu;
+        $parent = 'edit.php?post_type=email_campaign';
+        if ( isset( $submenu[ $parent ] ) ) {
+            foreach ( $submenu[ $parent ] as &$item ) {
+                // $item = [ page_title, capability, slug, menu_title, ... ]
+                if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
+                    $item[0] = __( 'Lists', 'wp-email-campaigns' );
+                    $item[3] = __( 'Lists', 'wp-email-campaigns' );
+                }
+            }
+        }
+
+        // Add a new "Contacts" directory page
+        add_submenu_page(
+            $parent,
+            __( 'Contacts', 'wp-email-campaigns' ),
+            __( 'Contacts', 'wp-email-campaigns' ),
+            Helpers::manage_cap(),
+            'wpec-all-contacts',
+            [ $this, 'render_all_contacts' ],
+            21
+        );
+    }
+
+    // ========== ROUTER FOR LISTS UI ==========
     public function render_router() {
         $view = isset($_GET['view']) ? sanitize_key($_GET['view']) : '';
         if ( $view === 'list' ) { $this->render_list_items(); return; }
@@ -45,7 +80,7 @@ class Contacts {
         $this->render_lists_screen();
     }
 
-    // ---------- Default Contacts screen ----------
+    // ========== LISTS PAGE (existing) ==========
     public function render_lists_screen() {
         $db = Helpers::db();
         $lists_table = Helpers::table('lists');
@@ -117,64 +152,114 @@ class Contacts {
         $this->render_create_list_modal();
     }
 
-    private function render_add_contact_modal( $lists ) {
-        echo '<div id="wpec-modal-overlay" style="display:none"></div>';
-        echo '<div id="wpec-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="wpec-modal-title">';
-        echo '<div class="wpec-modal-header"><h2 id="wpec-modal-title">'.esc_html__('Add Contact','wp-email-campaigns').'</h2><button type="button" class="button-link wpec-modal-close">&times;</button></div>';
-        echo '<div class="wpec-modal-body">';
-        echo '<form id="wpec-add-contact-form">';
-        wp_nonce_field('wpec_admin','nonce');
+    // ====== NEW: CONTACTS DIRECTORY (all contacts irrespective of list) ======
+    public function render_all_contacts() {
+        if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
 
-        $field = function($key,$label,$type='text',$req=false){ printf(
-            '<p><label><strong>%s%s</strong><br/><input type="%s" name="%s" class="regular-text" %s></label></p>',
-            esc_html($label), $req ? ' *' : '', esc_attr($type), esc_attr($key), $req ? 'required' : ''
-        );};
-        $field('first_name','First name','text',true);
-        $field('last_name','Last name','text',true);
-        $field('email','Email','email',true);
-        $field('company_name','Company name');
-        $field('company_employees','Company number of employees','number');
-        $field('company_annual_revenue','Company annual revenue','number');
-        $field('contact_number','Contact number');
-        $field('job_title','Job title');
-        $field('industry','Industry');
-        $field('country','Country');
-        $field('state','State');
-        $field('city','City');
-        $field('postal_code','Postal code');
+        $db = Helpers::db();
+        $ct = Helpers::table('contacts');
+        $lists_table = Helpers::table('lists');
 
-        // Existing list select
-        echo '<p><label><strong>'.esc_html__('Add to list (optional)','wp-email-campaigns').'</strong><br/>';
-        echo '<select name="list_id" id="wpec-add-contact-list" style="min-width:320px;max-width:100%"><option value="">'.esc_html__('— None —','wp-email-campaigns').'</option>';
-        foreach ( (array)$lists as $row ) {
-            printf('<option value="%d">%s</option>', (int)$row['id'], esc_html($row['name'].' (#'.$row['id'].')'));
+        // Distinct values (limited) for filter dropdowns
+        $distinct = function($col, $limit = 500) use ($db, $ct) {
+            $col = preg_replace('/[^a-z_]/', '', $col);
+            return $db->get_col( "SELECT DISTINCT $col FROM $ct WHERE $col IS NOT NULL AND $col <> '' ORDER BY $col ASC LIMIT " . (int)$limit );
+        };
+        $companies = $distinct('company_name');
+        $cities    = $distinct('city');
+        $states    = $distinct('state');
+        $countries = $distinct('country');
+        $jobs      = $distinct('job_title');
+        $postcodes = $distinct('postal_code');
+        $lists     = $db->get_results( "SELECT id,name FROM $lists_table ORDER BY name ASC LIMIT 1000", ARRAY_A );
+
+        echo '<div class="wrap">';
+        echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
+
+        // Controls: columns toggle + filters
+        echo '<div id="wpec-contacts-controls" class="wpec-card">';
+
+        // Column chooser
+        echo '<details class="wpec-columns-toggle"><summary>'.esc_html__('Show more columns','wp-email-campaigns').'</summary>';
+        echo '<div class="wpec-columns-grid">';
+        $cols = [
+            'company_name'=>'Company name','company_employees'=>'Employees','company_annual_revenue'=>'Annual revenue',
+            'contact_number'=>'Contact number','job_title'=>'Job title','industry'=>'Industry',
+            'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code','status'=>'Status','created_at'=>'Created'
+        ];
+        foreach ( $cols as $key=>$label ) {
+            printf('<label><input type="checkbox" class="wpec-col-toggle" value="%s"> %s</label>', esc_attr($key), esc_html($label));
         }
-        echo '</select></label></p>';
+        echo '</div></details>';
 
-        // Inline create new list option
-        echo '<fieldset style="margin:8px 0 0">';
-        echo '<label><input type="checkbox" id="wpec-add-contact-newlist-toggle"> '.esc_html__('Create new list','wp-email-campaigns').'</label>';
-        echo '</fieldset>';
-        echo '<div id="wpec-add-contact-newlist" style="display:none;margin-top:6px">';
-        echo '<p><label><strong>'.esc_html__('New list name','wp-email-campaigns').'</strong><br/>';
-        echo '<input type="text" name="new_list_name" class="regular-text"></label></p>';
+        // Filters
+        echo '<div class="wpec-filters">';
+        echo '<div class="wpec-filter-row">';
+        echo '<label>'.esc_html__('Search','wp-email-campaigns').'<br><input type="search" id="wpec-f-search" class="regular-text" placeholder="Name or email"></label>';
+        echo '<label>'.esc_html__('Company name','wp-email-campaigns').'<br>'.$this->render_multi_select('wpec-f-company', $companies).'</label>';
+        echo '<label>'.esc_html__('City','wp-email-campaigns').'<br>'.$this->render_multi_select('wpec-f-city', $cities).'</label>';
+        echo '<label>'.esc_html__('State','wp-email-campaigns').'<br>'.$this->render_multi_select('wpec-f-state', $states).'</label>';
+        echo '<label>'.esc_html__('Country','wp-email-campaigns').'<br>'.$this->render_multi_select('wpec-f-country', $countries).'</label>';
         echo '</div>';
 
-        echo '<p><button type="submit" class="button button-primary">'.esc_html__('Save Contact','wp-email-campaigns').'</button> <span class="wpec-loader" style="display:none" id="wpec-add-contact-loader"></span></p>';
-        echo '</form></div></div>';
+        echo '<div class="wpec-filter-row">';
+        echo '<label>'.esc_html__('Job title','wp-email-campaigns').'<br>'.$this->render_multi_select('wpec-f-job', $jobs).'</label>';
+        echo '<label>'.esc_html__('Postal code','wp-email-campaigns').'<br>'.$this->render_multi_select('wpec-f-postcode', $postcodes).'</label>';
+        echo '<label>'.esc_html__('List name','wp-email-campaigns').'<br><select id="wpec-f-list" multiple size="5" style="min-width:220px;max-width:100%;">';
+        foreach ( $lists as $l ) {
+            printf('<option value="%d">%s</option>', (int)$l['id'], esc_html($l['name'].' (#'.$l['id'].')'));
+        }
+        echo '</select></label>';
+
+        echo '<label>'.esc_html__('Employees','wp-email-campaigns').'<br>';
+        echo '<div class="wpec-number-range">';
+        echo '<input type="number" id="wpec-f-emp-min" placeholder="≥ min" min="0"> ';
+        echo '<input type="number" id="wpec-f-emp-max" placeholder="≤ max" min="0">';
+        echo '</div></label>';
+
+        echo '<label>'.esc_html__('Annual revenue','wp-email-campaigns').'<br>';
+        echo '<div class="wpec-number-range">';
+        echo '<input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0"> ';
+        echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
+        echo '</div></label>';
+        echo '</div>'; // row
+
+        echo '<div class="wpec-filter-actions">';
+        echo '<button class="button button-primary" id="wpec-f-apply">'.esc_html__('Apply filters','wp-email-campaigns').'</button> ';
+        echo '<button class="button" id="wpec-f-reset">'.esc_html__('Reset','wp-email-campaigns').'</button>';
+        echo '</div>';
+
+        echo '</div>'; // filters
+        echo '</div>'; // card
+
+        // Table + pagination
+        echo '<div id="wpec-contacts-table-wrap" class="wpec-card">';
+        echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-contacts-table">';
+        echo '<thead><tr><th>'.esc_html__('ID','wp-email-campaigns').'</th><th>'.esc_html__('Full name','wp-email-campaigns').'</th><th>'.esc_html__('Email','wp-email-campaigns').'</th><th>'.esc_html__('List(s)','wp-email-campaigns').'</th></tr></thead>';
+        echo '<tbody></tbody>';
+        echo '</table></div>';
+        echo '<div class="wpec-pager">';
+        echo '<button class="button" id="wpec-page-prev" disabled>&laquo; ' . esc_html__('Prev','wp-email-campaigns') . '</button>';
+        echo '<span id="wpec-page-info"></span>';
+        echo '<button class="button" id="wpec-page-next" disabled>' . esc_html__('Next','wp-email-campaigns') . ' &raquo;</button>';
+        echo '<select id="wpec-page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select>';
+        echo '</div>';
+        echo '</div>'; // table wrap
+
+        echo '</div>'; // wrap
     }
 
-    private function render_create_list_modal() {
-        echo '<div id="wpec-modal-list" style="display:none" role="dialog" aria-modal="true" aria-labelledby="wpec-modal-list-title">';
-        echo '<div class="wpec-modal-header"><h2 id="wpec-modal-list-title">'.esc_html__('Create List','wp-email-campaigns').'</h2><button type="button" class="button-link wpec-modal-close">&times;</button></div>';
-        echo '<div class="wpec-modal-body"><form id="wpec-create-list-form">';
-        wp_nonce_field('wpec_admin','nonce');
-        echo '<p><label><strong>'.esc_html__('List name','wp-email-campaigns').'</strong><br/>';
-        echo '<input type="text" name="list_name" class="regular-text" required></label></p>';
-        echo '<p><button type="submit" class="button button-primary">'.esc_html__('Create','wp-email-campaigns').'</button> <span class="wpec-loader" style="display:none" id="wpec-create-list-loader"></span></p>';
-        echo '</form></div></div>';
+    private function render_multi_select( $id, $values ) {
+        $html  = '<input type="search" class="wpec-ms-search" data-target="#'.$id.'" placeholder="'.esc_attr__('Type to filter…','wp-email-campaigns').'" />';
+        $html .= '<select id="'.$id.'" multiple size="5" style="min-width:220px;max-width:100%;">';
+        foreach ( (array)$values as $val ) {
+            $html .= '<option value="'.esc_attr($val).'">'.esc_html($val).'</option>';
+        }
+        $html .= '</select>';
+        return $html;
     }
 
+    // ========== PER-LIST CONTACTS ==========
     private function render_list_items() {
         if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
         $list_id = isset($_GET['list_id']) ? absint($_GET['list_id']) : 0;
@@ -213,6 +298,7 @@ class Contacts {
         echo '</form></div>';
     }
 
+    // ========== CONTACT DETAIL (with clickable facets) ==========
     private function render_contact_detail( $contact_id ) {
         if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
         if ( ! $contact_id ) { echo '<div class="notice notice-error"><p>Invalid contact.</p></div>'; return; }
@@ -225,32 +311,53 @@ class Contacts {
         $row = $db->get_row( $db->prepare("SELECT * FROM $ct WHERE id=%d", $contact_id), ARRAY_A );
         if ( ! $row ) { echo '<div class="notice notice-error"><p>Contact not found.</p></div>'; return; }
 
+        $contacts_url = function($param, $value){
+            $url = add_query_arg( [
+                'post_type' => 'email_campaign',
+                'page'      => 'wpec-all-contacts',
+            ], admin_url('edit.php') );
+            // pass as URL params for JS to pick up
+            $url = add_query_arg( [ $param => $value ], $url );
+            return $url;
+        };
+
+        $facet = function($label, $value, $param) use ($contacts_url) {
+            if ($value === '' || is_null($value)) {
+                printf('<tr><th style="width:220px">%s</th><td><em>-</em></td></tr>', esc_html($label));
+            } else {
+                $link = $contacts_url($param, $value);
+                printf('<tr><th style="width:220px">%s</th><td><a href="%s">%s</a></td></tr>',
+                    esc_html($label), esc_url($link), esc_html($value));
+            }
+        };
+
         echo '<div class="wrap"><h1>'.esc_html__('Contact Detail','wp-email-campaigns').'</h1>';
         echo '<table class="widefat striped" style="max-width:900px">';
-        $show = function($label,$value){
-            printf('<tr><th style="width:220px">%s</th><td>%s</td></tr>',
-                esc_html($label),
-                $value!=='' && $value!==null ? esc_html($value) : '<em>-</em>'
-            );
-        };
-        $show('First name', $row['first_name']);
-        $show('Last name', $row['last_name']);
-        $show('Email', $row['email']);
-        $show('Company name', $row['company_name']);
-        $show('Company number of employees', $row['company_employees']);
-        $show('Company annual revenue', $row['company_annual_revenue']);
-        $show('Contact number', $row['contact_number']);
-        $show('Job title', $row['job_title']);
-        $show('Industry', $row['industry']);
-        $show('Country', $row['country']);
-        $show('State', $row['state']);
-        $show('City', $row['city']);
-        $show('Postal code', $row['postal_code']);
-        $show('Status', ucfirst($row['status']));
-        $show('Created', $row['created_at']);
-        $show('Updated', $row['updated_at']);
+        $facet('First name', $row['first_name'], 'first_name'); // not used in filters, but keep as plain
+        $facet('Last name',  $row['last_name'],  'last_name');  // same
+        printf('<tr><th style="width:220px">%s</th><td>%s</td></tr>', esc_html__('Email','wp-email-campaigns'), esc_html($row['email']));
+
+        // Clickable facets:
+        $facet('Company name', $row['company_name'], 'company_name');
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Company number of employees','wp-email-campaigns'), esc_html($row['company_employees'] ?? ''));
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Company annual revenue','wp-email-campaigns'), esc_html($row['company_annual_revenue'] ?? ''));
+
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Contact number','wp-email-campaigns'), esc_html($row['contact_number'] ?? ''));
+
+        $facet('Job title', $row['job_title'], 'job_title');
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Industry','wp-email-campaigns'), esc_html($row['industry'] ?? ''));
+
+        $facet('Country', $row['country'], 'country');
+        $facet('State',   $row['state'],   'state');
+        $facet('City',    $row['city'],    'city');
+        $facet('Postal code', $row['postal_code'], 'postal_code');
+
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Status','wp-email-campaigns'), esc_html(ucfirst($row['status'])));
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Created','wp-email-campaigns'), esc_html($row['created_at']));
+        printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Updated','wp-email-campaigns'), esc_html($row['updated_at']));
         echo '</table>';
 
+        // Lists membership
         $memberships = $db->get_results( $db->prepare(
             "SELECT l.id, l.name, li.created_at
              FROM $li li INNER JOIN $lists l ON l.id=li.list_id
@@ -269,9 +376,7 @@ class Contacts {
                     'list_id'   => (int)$m['id'],
                 ], admin_url('edit.php') );
                 printf('<tr><td><a href="%s">%s</a></td><td>%s</td></tr>',
-                    esc_url($url),
-                    esc_html($m['name'].' (#'.$m['id'].')'),
-                    esc_html($m['created_at'])
+                    esc_url($url), esc_html($m['name'].' (#'.$m['id'].')'), esc_html($m['created_at'])
                 );
             }
             echo '</tbody></table>';
@@ -745,6 +850,125 @@ class Contacts {
             'progress' => $progress,
             'stats'    => [ 'imported'=>$imported, 'invalid'=>$invalid_t, 'duplicates'=>$dupes_t, 'total'=>$total ],
             'list_id'  => $list_id,
+        ] );
+    }
+// ========== NEW: AJAX Contacts directory query ==========
+    public function ajax_contacts_query() {
+        check_ajax_referer( 'wpec_admin', 'nonce' );
+        if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+        global $wpdb;
+        $ct  = Helpers::table('contacts');
+        $li  = Helpers::table('list_items');
+        $ls  = Helpers::table('lists');
+
+        $page     = max(1, (int)($_POST['page'] ?? 1));
+        $per_page = min(200, max(1, (int)($_POST['per_page'] ?? 50)));
+
+        $search   = sanitize_text_field($_POST['search'] ?? '');
+
+        $multi = function($key){
+            $vals = $_POST[$key] ?? [];
+            if (!is_array($vals)) $vals = [$vals];
+            $vals = array_filter(array_map('sanitize_text_field', $vals), function($v){ return $v !== ''; });
+            return array_values(array_unique($vals));
+        };
+
+        $company  = $multi('company_name');
+        $city     = $multi('city');
+        $state    = $multi('state');
+        $country  = $multi('country');
+        $job      = $multi('job_title');
+        $postcode = $multi('postal_code');
+        $list_ids = array_map('absint', $multi('list_ids'));
+
+        $emp_min  = isset($_POST['emp_min']) && $_POST['emp_min'] !== '' ? (int)$_POST['emp_min'] : null;
+        $emp_max  = isset($_POST['emp_max']) && $_POST['emp_max'] !== '' ? (int)$_POST['emp_max'] : null;
+        $rev_min  = isset($_POST['rev_min']) && $_POST['rev_min'] !== '' ? (int)$_POST['rev_min'] : null;
+        $rev_max  = isset($_POST['rev_max']) && $_POST['rev_max'] !== '' ? (int)$_POST['rev_max'] : null;
+
+        // columns requested beyond defaults
+        $allowed_cols = [
+            'company_name','company_employees','company_annual_revenue','contact_number',
+            'job_title','industry','country','state','city','postal_code','status','created_at'
+        ];
+        $cols = $multi('cols');
+        $cols = array_values(array_intersect($cols, $allowed_cols));
+
+        $where = ['1=1'];
+        $args  = [];
+
+        if ( $search ) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where[] = "(c.email LIKE %s OR c.first_name LIKE %s OR c.last_name LIKE %s)";
+            $args[] = $like; $args[] = $like; $args[] = $like;
+        }
+
+        $in_clause = function($label, $vals, $col) use (&$where, &$args) {
+            if (!empty($vals)) {
+                $placeholders = implode(',', array_fill(0, count($vals), '%s'));
+                $where[] = "($col IN ($placeholders))";
+                foreach ($vals as $v) { $args[] = $v; }
+            }
+        };
+
+        $in_clause('company', $company,  'c.company_name');
+        $in_clause('city',    $city,     'c.city');
+        $in_clause('state',   $state,    'c.state');
+        $in_clause('country', $country,  'c.country');
+        $in_clause('job',     $job,      'c.job_title');
+        $in_clause('pc',      $postcode, 'c.postal_code');
+
+        if ( $emp_min !== null ) { $where[] = "c.company_employees >= %d"; $args[] = $emp_min; }
+        if ( $emp_max !== null ) { $where[] = "c.company_employees <= %d"; $args[] = $emp_max; }
+        if ( $rev_min !== null ) { $where[] = "c.company_annual_revenue >= %d"; $args[] = $rev_min; }
+        if ( $rev_max !== null ) { $where[] = "c.company_annual_revenue <= %d"; $args[] = $rev_max; }
+
+        $join_list = '';
+        if ( !empty($list_ids) ) {
+            // restrict to contacts that are in ANY of selected lists
+            $place = implode(',', array_fill(0, count($list_ids), '%d'));
+            $join_list = "INNER JOIN $li li0 ON li0.contact_id = c.id AND li0.list_id IN ($place)";
+            foreach ($list_ids as $lid) { $args[] = $lid; }
+        }
+
+        // Build select
+        $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email";
+        foreach ( $cols as $cname ) {
+            $select_cols .= ", c." . $cname;
+        }
+        // Lists aggregation (most recent names)
+        $select_cols .= ", (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
+                            FROM $li li INNER JOIN $ls l ON l.id=li.list_id
+                            WHERE li.contact_id=c.id) AS lists";
+
+        $where_sql = implode(' AND ', $where);
+
+        // Count total distinct contacts
+        $count_sql = "SELECT COUNT(DISTINCT c.id)
+                      FROM $ct c
+                      $join_list
+                      WHERE $where_sql";
+        $total = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $args ) );
+
+        // Data query
+        $offset = ($page - 1) * $per_page;
+        $data_sql = "SELECT $select_cols
+                     FROM $ct c
+                     $join_list
+                     WHERE $where_sql
+                     GROUP BY c.id
+                     ORDER BY c.id DESC
+                     LIMIT %d OFFSET %d";
+        $args_data = array_merge( $args, [ $per_page, $offset ] );
+        $rows = $wpdb->get_results( $wpdb->prepare( $data_sql, $args_data ), ARRAY_A );
+
+        wp_send_json_success( [
+            'rows' => $rows,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $per_page,
+            'total_pages' => max(1, (int)ceil($total / $per_page)),
         ] );
     }
 }
