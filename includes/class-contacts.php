@@ -14,48 +14,38 @@ class Contacts {
     public function init() {
         add_action( 'wpec_render_contacts_table', [ $this, 'render_router' ] );
 
-        // AJAX import, processing
+        // AJAX import/process
         add_action( 'wp_ajax_wpec_list_upload',   [ $this, 'ajax_list_upload' ] );
         add_action( 'wp_ajax_wpec_list_process',  [ $this, 'ajax_list_process' ] );
 
-        // AJAX creation
+        // AJAX create
         add_action( 'wp_ajax_wpec_contact_create', [ $this, 'ajax_contact_create' ] );
         add_action( 'wp_ajax_wpec_list_create',    [ $this, 'ajax_list_create' ] );
 
-        // AJAX delete mapping (individual + bulk)
+        // AJAX delete mapping
         add_action( 'wp_ajax_wpec_delete_list_mapping', [ $this, 'ajax_delete_list_mapping' ] );
+
+        // AJAX metrics
+        add_action( 'wp_ajax_wpec_list_metrics', [ $this, 'ajax_list_metrics' ] );
 
         // Fallback actions
         add_action( 'admin_post_wpec_list_upload',         [ $this, 'admin_post_list_upload' ] );
         add_action( 'admin_post_wpec_delete_list_mapping', [ $this, 'admin_post_delete_list_mapping' ] );
 
-        // Export list
+        // Export
         add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] );
     }
 
-    // ---------- Router ----------
     public function render_router() {
         $view = isset($_GET['view']) ? sanitize_key($_GET['view']) : '';
-        if ( $view === 'list' ) {
-            $this->render_list_items();
-            return;
-        }
-        if ( $view === 'dupes' ) {
-            $this->render_duplicates();
-            return;
-        }
-        if ( $view === 'dupes_list' ) {
-            $this->render_duplicates( absint( $_GET['list_id'] ?? 0 ) );
-            return;
-        }
-        if ( $view === 'contact' ) {
-            $this->render_contact_detail( absint( $_GET['contact_id'] ?? 0 ) );
-            return;
-        }
+        if ( $view === 'list' ) { $this->render_list_items(); return; }
+        if ( $view === 'dupes' ) { $this->render_duplicates(); return; }
+        if ( $view === 'dupes_list' ) { $this->render_duplicates( absint( $_GET['list_id'] ?? 0 ) ); return; }
+        if ( $view === 'contact' ) { $this->render_contact_detail( absint( $_GET['contact_id'] ?? 0 ) ); return; }
         $this->render_lists_screen();
     }
 
-    // ---------- Default Contacts screen (upload + actions + lists) ----------
+    // ---------- Default Contacts screen ----------
     public function render_lists_screen() {
         $db = Helpers::db();
         $lists_table = Helpers::table('lists');
@@ -64,7 +54,6 @@ class Contacts {
         echo '<div id="wpec-upload-panel" class="wpec-card">';
         echo '<h2>' . esc_html__( 'Upload Contacts', 'wp-email-campaigns' ) . '</h2>';
 
-        // Action buttons
         echo '<p style="margin-bottom:12px">';
         echo '<button id="wpec-open-add-contact" class="button">'.esc_html__('Add Contact','wp-email-campaigns').'</button> ';
         echo '<button id="wpec-open-create-list" class="button">'.esc_html__('Create List','wp-email-campaigns').'</button>';
@@ -75,7 +64,6 @@ class Contacts {
         echo '<input type="hidden" name="action" value="wpec_list_upload" />';
         echo '<input type="hidden" name="nonce" value="' . esc_attr( wp_create_nonce('wpec_admin') ) . '"/>';
 
-        // Choose target: new or existing
         echo '<fieldset style="margin:10px 0 6px 0">';
         echo '<label><input type="radio" name="list_mode" value="new" checked> '.esc_html__('Create new list','wp-email-campaigns').'</label> ';
         echo '<label style="margin-left:12px;"><input type="radio" name="list_mode" value="existing"> '.esc_html__('Add to existing list','wp-email-campaigns').'</label>';
@@ -110,13 +98,11 @@ class Contacts {
 
         echo '</form></div>';
 
-        // Duplicates link
         $dupes_url = add_query_arg([
             'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'dupes'
         ], admin_url('edit.php'));
         echo '<p><a class="button" href="'.esc_url($dupes_url).'">'.esc_html__('View Duplicates (All Lists)','wp-email-campaigns').'</a></p>';
 
-        // Lists table
         $table = new WPEC_Lists_Table();
         $table->prepare_items();
         echo '<h2 style="margin-top:20px;">' . esc_html__( 'Lists', 'wp-email-campaigns' ) . '</h2>';
@@ -127,7 +113,6 @@ class Contacts {
         $table->display();
         echo '</form>';
 
-        // --- Modals markup ---
         $this->render_add_contact_modal( $lists );
         $this->render_create_list_modal();
     }
@@ -139,13 +124,10 @@ class Contacts {
         echo '<div class="wpec-modal-body">';
         echo '<form id="wpec-add-contact-form">';
         wp_nonce_field('wpec_admin','nonce');
+
         $field = function($key,$label,$type='text',$req=false){ printf(
             '<p><label><strong>%s%s</strong><br/><input type="%s" name="%s" class="regular-text" %s></label></p>',
-            esc_html($label),
-            $req ? ' *' : '',
-            esc_attr($type),
-            esc_attr($key),
-            $req ? 'required' : ''
+            esc_html($label), $req ? ' *' : '', esc_attr($type), esc_attr($key), $req ? 'required' : ''
         );};
         $field('first_name','First name','text',true);
         $field('last_name','Last name','text',true);
@@ -161,6 +143,7 @@ class Contacts {
         $field('city','City');
         $field('postal_code','Postal code');
 
+        // Existing list select
         echo '<p><label><strong>'.esc_html__('Add to list (optional)','wp-email-campaigns').'</strong><br/>';
         echo '<select name="list_id" id="wpec-add-contact-list" style="min-width:320px;max-width:100%"><option value="">'.esc_html__('— None —','wp-email-campaigns').'</option>';
         foreach ( (array)$lists as $row ) {
@@ -168,9 +151,17 @@ class Contacts {
         }
         echo '</select></label></p>';
 
-        echo '<p><button type="submit" class="button button-primary">'.esc_html__('Save Contact','wp-email-campaigns').'</button> <span class="wpec-loader" style="display:none" id="wpec-add-contact-loader"></span></p>';
-        echo '</form></div>';
+        // Inline create new list option
+        echo '<fieldset style="margin:8px 0 0">';
+        echo '<label><input type="checkbox" id="wpec-add-contact-newlist-toggle"> '.esc_html__('Create new list','wp-email-campaigns').'</label>';
+        echo '</fieldset>';
+        echo '<div id="wpec-add-contact-newlist" style="display:none;margin-top:6px">';
+        echo '<p><label><strong>'.esc_html__('New list name','wp-email-campaigns').'</strong><br/>';
+        echo '<input type="text" name="new_list_name" class="regular-text"></label></p>';
         echo '</div>';
+
+        echo '<p><button type="submit" class="button button-primary">'.esc_html__('Save Contact','wp-email-campaigns').'</button> <span class="wpec-loader" style="display:none" id="wpec-add-contact-loader"></span></p>';
+        echo '</form></div></div>';
     }
 
     private function render_create_list_modal() {
@@ -184,7 +175,6 @@ class Contacts {
         echo '</form></div></div>';
     }
 
-    // ---------- Per-list contacts ----------
     private function render_list_items() {
         if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
         $list_id = isset($_GET['list_id']) ? absint($_GET['list_id']) : 0;
@@ -205,7 +195,6 @@ class Contacts {
         echo '<p><a class="button" href="' . esc_url( $export_url ) . '">' . esc_html__( 'Export this list to CSV', 'wp-email-campaigns' ) . '</a> ';
         echo '<a class="button" href="' . esc_url( $dupes_url ) . '">' . esc_html__( 'View Duplicates for this List', 'wp-email-campaigns' ) . '</a></p>';
 
-        // Bulk toolbar for per-list delete
         echo '<div class="wpec-dup-toolbar" style="margin:10px 0;">';
         echo '<button id="wpec-list-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected from this list', 'wp-email-campaigns' ) . '</button> ';
         echo '<span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none;"></span>';
@@ -224,7 +213,6 @@ class Contacts {
         echo '</form></div>';
     }
 
-    // ---------- Contact detail ----------
     private function render_contact_detail( $contact_id ) {
         if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
         if ( ! $contact_id ) { echo '<div class="notice notice-error"><p>Invalid contact.</p></div>'; return; }
@@ -263,7 +251,6 @@ class Contacts {
         $show('Updated', $row['updated_at']);
         echo '</table>';
 
-        // Lists membership
         $memberships = $db->get_results( $db->prepare(
             "SELECT l.id, l.name, li.created_at
              FROM $li li INNER JOIN $lists l ON l.id=li.list_id
@@ -292,7 +279,6 @@ class Contacts {
         echo '</div>';
     }
 
-    // ---------- Duplicates ----------
     private function render_duplicates( $list_id = 0 ) {
         if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
 
@@ -319,7 +305,6 @@ class Contacts {
         echo '</form></div>';
     }
 
-    // ---------- Export ----------
     public function export_list() {
         if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
         check_admin_referer( 'wpec_export_list' );
@@ -344,7 +329,6 @@ class Contacts {
         fclose($out); exit;
     }
 
-    // ---------- Fallback non-JS upload ----------
     public function admin_post_list_upload() {
         if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
         $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '';
@@ -367,7 +351,6 @@ class Contacts {
         wp_safe_redirect( $url ); exit;
     }
 
-    // ---------- Delete mapping (fallback) ----------
     public function admin_post_delete_list_mapping() {
         if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
         $nonce = isset($_GET['_wpnonce']) ? sanitize_text_field($_GET['_wpnonce']) : '';
@@ -376,13 +359,19 @@ class Contacts {
         $contact_id = absint( $_GET['contact_id'] ?? 0 );
         if ( ! $list_id || ! $contact_id ) wp_die( 'Bad params' );
 
-        $li = Helpers::table('list_items'); $dupes = Helpers::table('dupes');
-        Helpers::db()->delete( $li, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
-        Helpers::db()->delete( $dupes, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        $db = Helpers::db();
+        $li = Helpers::table('list_items');
+        $dupes = Helpers::table('dupes');
+        $deleted = $db->delete( $li, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        $db->delete( $dupes, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        if ( $deleted ) {
+            $lists = Helpers::table('lists');
+            $db->query( $db->prepare( "UPDATE $lists SET deleted = COALESCE(deleted,0)+1 WHERE id=%d", $list_id ) );
+        }
+
         wp_safe_redirect( wp_get_referer() ?: admin_url('edit.php?post_type=email_campaign&page=wpec-contacts') ); exit;
     }
 
-    // ---------- Delete mapping (AJAX) ----------
     public function ajax_delete_list_mapping() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
@@ -391,23 +380,63 @@ class Contacts {
         $contact_id = absint( $_POST['contact_id'] ?? 0 );
         if ( ! $list_id || ! $contact_id ) wp_send_json_error( [ 'message' => 'Bad params' ] );
 
-        $li = Helpers::table('list_items'); $dupes = Helpers::table('dupes');
-        $deleted = Helpers::db()->delete( $li, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
-        Helpers::db()->delete( $dupes, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        $db = Helpers::db();
+        $li = Helpers::table('list_items');
+        $dupes = Helpers::table('dupes');
+        $deleted = $db->delete( $li, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        $db->delete( $dupes, [ 'list_id' => $list_id, 'contact_id' => $contact_id ] );
+        if ( $deleted ) {
+            $lists = Helpers::table('lists');
+            $db->query( $db->prepare( "UPDATE $lists SET deleted = COALESCE(deleted,0)+1 WHERE id=%d", $list_id ) );
+        }
         wp_send_json_success( [ 'deleted' => (int) $deleted ] );
     }
 
-    // ---------- AJAX: create contact ----------
+    // Return live metrics for a list (for dropdown)
+    public function ajax_list_metrics() {
+        check_ajax_referer( 'wpec_admin', 'nonce' );
+        if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+        $list_id = absint($_POST['list_id'] ?? 0);
+        if ( ! $list_id ) wp_send_json_error(['message'=>'Bad list id']);
+
+        $db = Helpers::db();
+        $lists = Helpers::table('lists');
+        $li    = Helpers::table('list_items');
+        $dupes = Helpers::table('dupes');
+
+        $row = $db->get_row( $db->prepare("SELECT imported, invalid, duplicates, deleted, manual_added, last_invalid FROM $lists WHERE id=%d", $list_id ), ARRAY_A );
+        if ( ! $row ) wp_send_json_error(['message'=>'List not found']);
+
+        $total = (int) $db->get_var( $db->prepare("SELECT COUNT(*) FROM $li WHERE list_id=%d", $list_id ) );
+        $duplicates_current = (int) $db->get_var( $db->prepare("SELECT COUNT(*) FROM $dupes WHERE list_id=%d", $list_id ) );
+
+        wp_send_json_success([
+            'imported'   => (int)$row['imported'],           // cumulative imported via file uploads
+            'duplicates' => $duplicates_current,             // current duplicates count
+            'not_uploaded_last' => (int)$row['last_invalid'],// invalid rows in the last import only
+            'deleted'    => (int)$row['deleted'],            // deletions via UI
+            'manual_added'=> (int)$row['manual_added'],      // manual adds via modal
+            'total'      => $total                           // current list size
+        ]);
+    }
+
+    // Manual contact create (no duplicate emails)
     public function ajax_contact_create() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
 
         $db = Helpers::db();
-        $ct = Helpers::table('contacts'); $li = Helpers::table('list_items');
+        $ct = Helpers::table('contacts'); $li = Helpers::table('list_items'); $lists = Helpers::table('lists');
 
         $req = function($k){ return sanitize_text_field($_POST[$k] ?? ''); };
         $first = $req('first_name'); $last = $req('last_name'); $email = sanitize_email($_POST['email'] ?? '');
-        if ( empty($first) || empty($last) || !is_email($email) ) wp_send_json_error(['message'=>'First name, Last name, and valid Email are required']);
+        if ( empty($first) || empty($last) || !is_email($email) ) wp_send_json_error(['message'=>'First name, Last name, and a valid Email are required']);
+
+        // Disallow duplicate emails entirely
+        $existing_id = $db->get_var( $db->prepare("SELECT id FROM $ct WHERE email=%s", $email) );
+        if ( $existing_id ) {
+            wp_send_json_error(['message'=>'This email already exists in contacts.']);
+        }
 
         $data = [
             'first_name'=>$first, 'last_name'=>$last, 'email'=>$email,
@@ -422,37 +451,39 @@ class Contacts {
             'city'=>$req('city') ?: null,
             'postal_code'=>$req('postal_code') ?: null,
         ];
-        $contact_id = $db->get_var( $db->prepare("SELECT id FROM $ct WHERE email=%s", $email) );
-        $duplicate = false;
-        if ( $contact_id ) {
-            $duplicate = true;
-            $updates = ['updated_at'=>Helpers::now(), 'name'=>trim($first.' '.$last)];
-            foreach ( $data as $k=>$v ) {
-                if ( $v !== null && $v !== '' ) $updates[$k] = $v;
-            }
-            $db->update( $ct, $updates, [ 'id'=>$contact_id ] );
-        } else {
-            $db->insert( $ct, array_merge( $data, [
-                'name'=>trim($first.' '.$last),
-                'status'=>'active', 'created_at'=>Helpers::now(), 'updated_at'=>null, 'last_campaign_id'=>null
-            ] ) );
-            $contact_id = (int) $db->insert_id;
+
+        $db->insert( $ct, array_merge( $data, [
+            'name'=>trim($first.' '.$last),
+            'status'=>'active', 'created_at'=>Helpers::now(), 'updated_at'=>null, 'last_campaign_id'=>null
+        ] ) );
+        $contact_id = (int) $db->insert_id;
+
+        // Optional: inline create list
+        $list_id = absint($_POST['list_id'] ?? 0);
+        $new_list_name = $req('new_list_name');
+        if ( ! $list_id && $new_list_name ) {
+            $db->insert( $lists, [
+                'name'=>$new_list_name, 'status'=>'ready',
+                'created_at'=>Helpers::now(), 'updated_at'=>null,
+                'source_filename'=>null,'file_path'=>null,'file_pointer'=>null,'header_map'=>null,
+                'total'=>0,'imported'=>0,'invalid'=>0,'duplicates'=>0,'deleted'=>0,'manual_added'=>0,'last_invalid'=>0
+            ] );
+            $list_id = (int)$db->insert_id;
         }
 
-        // Optional list mapping
-        $list_id = absint($_POST['list_id'] ?? 0);
         $mapped = false;
         if ( $list_id ) {
             $exists = $db->get_var( $db->prepare("SELECT id FROM $li WHERE list_id=%d AND contact_id=%d", $list_id, $contact_id) );
             if ( ! $exists ) {
-                $db->insert( $li, [ 'list_id'=>$list_id, 'contact_id'=>$contact_id, 'is_duplicate_import'=>$duplicate?1:0, 'created_at'=>Helpers::now() ] );
+                $db->insert( $li, [ 'list_id'=>$list_id, 'contact_id'=>$contact_id, 'is_duplicate_import'=>0, 'created_at'=>Helpers::now() ] );
+                // increment manual_added
+                $db->query( $db->prepare( "UPDATE $lists SET manual_added = COALESCE(manual_added,0)+1 WHERE id=%d", $list_id ) );
                 $mapped = true;
             }
         }
-        wp_send_json_success([ 'contact_id'=>$contact_id, 'duplicate'=>$duplicate?1:0, 'mapped'=>$mapped?1:0 ]);
+        wp_send_json_success([ 'contact_id'=>$contact_id, 'mapped'=>$mapped?1:0, 'list_id'=>$list_id ]);
     }
 
-    // ---------- AJAX: create list ----------
     public function ajax_list_create() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
@@ -464,13 +495,12 @@ class Contacts {
         $db->insert( $lists, [
             'name'=>$name, 'status'=>'ready', 'created_at'=>Helpers::now(), 'updated_at'=>null,
             'source_filename'=>null,'file_path'=>null,'file_pointer'=>null,'header_map'=>null,
-            'total'=>0,'imported'=>0,'invalid'=>0,'duplicates'=>0
+            'total'=>0,'imported'=>0,'invalid'=>0,'duplicates'=>0,'deleted'=>0,'manual_added'=>0,'last_invalid'=>0
         ] );
         $id = (int)$db->insert_id;
         wp_send_json_success([ 'list_id'=>$id, 'name'=>$name ]);
     }
 
-    // ---------- Upload normalize to CSV ----------
     private function handle_upload_to_csv_path( $list_name, $file_arr, $existing_list_id = 0 ) {
         $tmp_name = $file_arr['tmp_name'];
         $orig     = sanitize_file_name( $file_arr['name'] );
@@ -485,7 +515,7 @@ class Contacts {
             }
         } else {
             if ( ! class_exists( IOFactory::class ) ) {
-                return new \WP_Error( 'phpspreadsheet_missing', 'PhpSpreadsheet not installed (composer install).' );
+                return new \WP_Error( 'phpsreadsheet_missing', 'PhpSpreadsheet not installed.' );
             }
             try {
                 $spreadsheet = IOFactory::load( $tmp_name );
@@ -501,20 +531,19 @@ class Contacts {
         $lists = Helpers::table('lists');
 
         if ( $existing_list_id ) {
-            // Reuse existing list (append)
+            // Append into existing list: mark importing & reset session counters for last_invalid
             $db->update( $lists, [
-                'status'       => 'importing',
-                'updated_at'   => Helpers::now(),
-                'source_filename' => $orig,
-                'file_path'    => $dest,
-                'file_pointer' => 0,
-                'header_map'   => null,
+                'status'         => 'importing',
+                'updated_at'     => Helpers::now(),
+                'source_filename'=> $orig,
+                'file_path'      => $dest,
+                'file_pointer'   => 0,
+                'header_map'     => null,
+                'last_invalid'   => 0, // reset last import invalid count
             ], [ 'id' => (int)$existing_list_id ] );
-            $list_id = (int)$existing_list_id;
-            return [ 'list_id'  => $list_id, 'csv_path' => $dest ];
+            return [ 'list_id'  => (int)$existing_list_id, 'csv_path' => $dest ];
         }
 
-        // Create new list
         $db->insert( $lists, [
             'name'           => $list_name,
             'status'         => 'importing',
@@ -528,13 +557,15 @@ class Contacts {
             'imported'       => 0,
             'invalid'        => 0,
             'duplicates'     => 0,
+            'deleted'        => 0,
+            'manual_added'   => 0,
+            'last_invalid'   => 0,
         ] );
         $list_id = (int) $db->insert_id;
 
         return [ 'list_id'  => $list_id, 'csv_path' => $dest ];
     }
 
-    // ---------- AJAX: upload ----------
     public function ajax_list_upload() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
@@ -552,7 +583,6 @@ class Contacts {
         wp_send_json_success( [ 'list_id' => (int) $result['list_id'] ] );
     }
 
-    // ---------- AJAX: process chunk ----------
     public function ajax_list_process() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
@@ -592,7 +622,9 @@ class Contacts {
         if ( ! $handle ) { wp_send_json_error( [ 'message' => 'Unable to open file' ] ); }
 
         $header_map = $list->header_map ? json_decode( $list->header_map, true ) : null;
+        $starting_chunk = false;
         if ( empty( $header_map ) ) {
+            $starting_chunk = true;
             $header_row = fgetcsv( $handle );
             if ( ! $header_row ) { fclose($handle); wp_send_json_error( [ 'message' => 'File missing header row' ] ); }
             $map = Helpers::parse_header_map( $header_row );
@@ -603,6 +635,7 @@ class Contacts {
                 'header_map'   => wp_json_encode( $header_map ),
                 'file_pointer' => $after_header_ptr,
                 'updated_at'   => Helpers::now(),
+                'last_invalid' => 0, // reset last import invalid at the start of a new import session
             ], [ 'id' => $list_id ] );
         }
 
@@ -690,9 +723,13 @@ class Contacts {
         $invalid_t = (int) $list->invalid + $invalid_rows;
         $dupes_t   = (int) $list->duplicates + $dup_count;
 
+        // accumulate last_invalid for this import session
+        $last_invalid = (int) $list->last_invalid + $invalid_rows;
+
         $data_upd = [
             'file_pointer' => $new_pointer, 'total' => $total, 'imported' => $imported,
             'invalid' => $invalid_t, 'duplicates' => $dupes_t, 'updated_at' => Helpers::now(),
+            'last_invalid' => $last_invalid,
         ];
         if ( $eof ) {
             $data_upd['status'] = 'ready'; @unlink( $path );
@@ -712,13 +749,13 @@ class Contacts {
     }
 }
 
-// ---------- Lists table ----------
+// ---------- Lists table (adds "View counts" dropdown toggle) ----------
 class WPEC_Lists_Table extends \WP_List_Table {
     public function get_columns() {
         return [
             'name'       => __( 'Name', 'wp-email-campaigns' ),
             'status'     => __( 'Status', 'wp-email-campaigns' ),
-            'counts'     => __( 'Counts', 'wp-email-campaigns' ),
+            'metrics'    => __( 'Counts', 'wp-email-campaigns' ),
             'created_at' => __( 'Created', 'wp-email-campaigns' ),
             'actions'    => __( 'Actions', 'wp-email-campaigns' ),
         ];
@@ -736,13 +773,15 @@ class WPEC_Lists_Table extends \WP_List_Table {
         $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
         $this->set_pagination_args( [ 'total_items'=>$total, 'per_page'=>$per_page, 'total_pages'=>ceil($total/$per_page) ] );
     }
+    public function column_metrics( $item ) {
+        // No numbers here — just a toggle button
+        return sprintf('<button type="button" class="button wpec-toggle-counts" data-list-id="%d">%s</button>',
+            (int)$item['id'], esc_html__('View counts','wp-email-campaigns') );
+    }
     public function column_default( $item, $col ) {
         switch ( $col ) {
             case 'name': return esc_html($item['name']);
             case 'status': return esc_html( ucfirst($item['status']) );
-            case 'counts':
-                return esc_html( sprintf('Imported: %d | Duplicates: %d | Not uploaded: %d | Total seen: %d',
-                    $item['imported'], $item['duplicates'], $item['invalid'], $item['total'] ) );
             case 'created_at': return esc_html( $item['created_at'] );
             case 'actions':
                 $view = add_query_arg( [
@@ -761,7 +800,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
     public function no_items() { _e( 'No lists found.', 'wp-email-campaigns' ); }
 }
 
-// ---------- Per-list contacts table (with checkboxes + View detail) ----------
+// ---------- Per-list contacts table ----------
 class WPEC_List_Items_Table extends \WP_List_Table {
     protected $list_id;
     public function __construct( $list_id ) { parent::__construct(['plural'=>'list_contacts','singular'=>'list_contact']); $this->list_id = (int) $list_id; }
@@ -808,12 +847,10 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         ], admin_url('edit.php'));
         return sprintf('<a class="button button-small" href="%s">%s</a>', esc_url($url), esc_html__('View detail','wp-email-campaigns'));
     }
-    public function column_default( $item, $col ) {
-        return esc_html( $item[$col] ?? '' );
-    }
+    public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
 }
 
-// ---------- Duplicates table (checkboxes, clickable current list, View detail, AJAX delete) ----------
+// ---------- Duplicates table ----------
 class WPEC_Duplicates_Table extends \WP_List_Table {
     protected $list_id;
     public function __construct( $list_id = 0 ) { parent::__construct( [ 'plural' => 'duplicates', 'singular' => 'duplicate' ] ); $this->list_id = (int) $list_id; }

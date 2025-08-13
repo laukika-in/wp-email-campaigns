@@ -16,7 +16,6 @@ class Activator {
         $listItems = Helpers::table('list_items');
         $dupes     = Helpers::table('dupes');
 
-        // ---- Clean CREATE statements (no inline comments) ----
         $sql_contacts = "CREATE TABLE $contacts (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             email VARCHAR(191) NOT NULL,
@@ -92,6 +91,9 @@ class Activator {
             imported INT UNSIGNED NOT NULL DEFAULT 0,
             invalid INT UNSIGNED NOT NULL DEFAULT 0,
             duplicates INT UNSIGNED NOT NULL DEFAULT 0,
+            deleted INT UNSIGNED NOT NULL DEFAULT 0,
+            manual_added INT UNSIGNED NOT NULL DEFAULT 0,
+            last_invalid INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (id),
             KEY status (status),
             KEY created_at (created_at)
@@ -132,15 +134,17 @@ class Activator {
         dbDelta( $sql_list_items );
         dbDelta( $sql_dupes );
 
-        // ---- Post-dbDelta safety: add missing columns explicitly (idempotent) ----
-        self::ensure_column( $lists, 'header_map', "LONGTEXT NULL" );
-        self::ensure_column( $lists, 'file_pointer', "BIGINT NULL" );
-        self::ensure_column( $lists, 'file_path', "TEXT NULL" );
+        // Ensure missing columns (idempotent)
+        self::ensure_column( $lists, 'header_map',    "LONGTEXT NULL" );
+        self::ensure_column( $lists, 'file_pointer',  "BIGINT NULL" );
+        self::ensure_column( $lists, 'file_path',     "TEXT NULL" );
+        self::ensure_column( $lists, 'deleted',       "INT UNSIGNED NOT NULL DEFAULT 0" );
+        self::ensure_column( $lists, 'manual_added',  "INT UNSIGNED NOT NULL DEFAULT 0" );
+        self::ensure_column( $lists, 'last_invalid',  "INT UNSIGNED NOT NULL DEFAULT 0" );
 
         self::ensure_column( $listItems, 'is_duplicate_import', "TINYINT(1) NOT NULL DEFAULT 0" );
-        self::ensure_column( $listItems, 'created_at', "DATETIME NULL" );
+        self::ensure_column( $listItems, 'created_at',          "DATETIME NULL" );
 
-        // New contact fields (in case table pre-existed)
         self::ensure_column( $contacts, 'first_name', "VARCHAR(191) NULL" );
         self::ensure_column( $contacts, 'last_name', "VARCHAR(191) NULL" );
         self::ensure_column( $contacts, 'company_name', "VARCHAR(191) NULL" );
@@ -157,21 +161,16 @@ class Activator {
 
     private static function column_exists( $table, $column ) {
         global $wpdb;
-        $table_esc = esc_sql( $table );
-        $column_esc = esc_sql( $column );
-        $sql = "SHOW COLUMNS FROM `$table_esc` LIKE %s";
-        $found = $wpdb->get_var( $wpdb->prepare( $sql, $column_esc ) );
+        $sql = "SHOW COLUMNS FROM `$table` LIKE %s";
+        $found = $wpdb->get_var( $wpdb->prepare( $sql, $column ) );
         return ! is_null( $found );
     }
 
     private static function ensure_column( $table, $column, $definition ) {
         if ( ! self::column_exists( $table, $column ) ) {
             global $wpdb;
-            $table_esc = esc_sql( $table );
-            // Avoid reserved words and ensure safe identifiers
-            $col_esc = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
-            $sql = "ALTER TABLE `$table_esc` ADD COLUMN `$col_esc` $definition";
-            $wpdb->query( $sql );
+            $col = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+            $wpdb->query( "ALTER TABLE `$table` ADD COLUMN `$col` $definition" );
         }
     }
 }

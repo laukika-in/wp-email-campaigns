@@ -1,5 +1,5 @@
 (function ($) {
-  // ─── Confirm on publish (sending later) ───────────────────────────────────
+  // ─── Publish confirm (unchanged) ──────────────────────────────────────────
   $(function () {
     var $form = $("#post");
     if ($("body").hasClass("post-type-email_campaign")) {
@@ -14,7 +14,7 @@
     }
   });
 
-  // ─── Helper: enable/disable bulk buttons based on selections ──────────────
+  // ─── Helpers ──────────────────────────────────────────────────────────────
   function anyChecked($scope) {
     return $scope.find('input[name="ids[]"]:checked').length > 0;
   }
@@ -25,13 +25,13 @@
     $("#wpec-list-bulk-delete").prop("disabled", !anyChecked($lst));
   }
   $(document).on(
-    "change click input",
+    "change click",
     '.wp-list-table input[type="checkbox"]',
     setBulkState
   );
   $(document).ready(setBulkState);
 
-  // ─── Upload/import progress (contacts) ────────────────────────────────────
+  // ─── Upload/import progress (unchanged core) ──────────────────────────────
   function setProgress(pct, text) {
     $("#wpec-progress-wrap").show();
     $("#wpec-progress-bar").css("width", pct + "%");
@@ -76,7 +76,6 @@
       reloadUrl +
       '">Reload Lists</a>';
     html += "</p>";
-
     $panel.html(html).show();
   }
   function processList(listId) {
@@ -104,7 +103,6 @@
             " | Total seen: " +
             (s.total || 0)
         );
-
         if (resp.data.done) {
           $(".wpec-loader").hide();
           if (WPEC) WPEC.startImport = 0;
@@ -123,13 +121,10 @@
   $(document).on("submit", "#wpec-list-upload-form", function (e) {
     e.preventDefault();
     var $btn = $("#wpec-upload-btn");
-    var form = this;
-    var fd = new FormData(form);
-
+    var fd = new FormData(this);
     $btn.prop("disabled", true);
     $(".wpec-loader").show();
     setProgress(0, "Preparing upload...");
-
     $.ajax({
       url: WPEC.ajaxUrl + "?action=wpec_list_upload",
       type: "POST",
@@ -144,9 +139,8 @@
           alert((resp && resp.data && resp.data.message) || "Upload failed");
           return;
         }
-        var listId = resp.data.list_id;
         setProgress(1, "Starting import...");
-        processList(listId);
+        processList(resp.data.list_id);
       })
       .fail(function () {
         $(".wpec-loader").hide();
@@ -162,7 +156,7 @@
     }
   });
 
-  // ─── Filter existing list select ──────────────────────────────────────────
+  // Existing list filter + toggle
   $("#wpec-existing-search").on("input", function () {
     var q = $(this).val().toLowerCase();
     $("#wpec-existing-list option").each(function () {
@@ -170,7 +164,6 @@
       $(this).toggle(t.indexOf(q) !== -1 || $(this).val() === "");
     });
   });
-  // toggle target sections
   $(document).on("change", 'input[name="list_mode"]', function () {
     var mode = $('input[name="list_mode"]:checked').val();
     $("#wpec-list-target-new").toggle(mode === "new");
@@ -184,15 +177,14 @@
     }
   });
 
-  // ─── Duplicates: individual AJAX delete ───────────────────────────────────
+  // ─── Duplicates: individual delete ────────────────────────────────────────
   $(document).on("click", ".wpec-del-dup", function (e) {
     e.preventDefault();
-    var $btn = $(this);
-    var listId = parseInt($btn.data("listId"), 10);
-    var contactId = parseInt($btn.data("contactId"), 10);
+    var $btn = $(this),
+      listId = parseInt($btn.data("listId"), 10),
+      contactId = parseInt($btn.data("contactId"), 10);
     if (!listId || !contactId) return;
     if (!confirm("Remove this contact from the current list?")) return;
-
     $btn.prop("disabled", true);
     $.post(WPEC.ajaxUrl, {
       action: "wpec_delete_list_mapping",
@@ -217,25 +209,23 @@
       });
   });
 
-  // ─── Bulk delete (duplicates) with progress ───────────────────────────────
+  // ─── Bulk delete (duplicates) ─────────────────────────────────────────────
   $("#wpec-dup-bulk-delete").on("click", function (e) {
     e.preventDefault();
     var $btn = $(this),
-      $loader = $("#wpec-dup-bulk-loader");
-    var $wrap = $("#wpec-dup-bulk-progress"),
+      $loader = $("#wpec-dup-bulk-loader"),
+      $wrap = $("#wpec-dup-bulk-progress"),
       $bar = $("#wpec-dup-progress-bar"),
       $text = $("#wpec-dup-progress-text");
-    var $form = $("#wpec-dup-form"),
-      $checks = $form.find('input[name="ids[]"]:checked');
+    var $checks = $('#wpec-dup-form input[name="ids[]"]:checked');
     if (!$checks.length) return;
     if (!confirm("Delete selected contacts from their current lists?")) return;
-
     var tasks = [];
     $checks.each(function () {
-      var parts = String($(this).val()).split(":");
+      var p = String($(this).val()).split(":");
       tasks.push({
-        listId: parseInt(parts[0], 10),
-        contactId: parseInt(parts[1], 10),
+        listId: parseInt(p[0], 10),
+        contactId: parseInt(p[1], 10),
         $row: $(this).closest("tr"),
       });
     });
@@ -246,7 +236,7 @@
     $wrap.show();
     $bar.css("width", "0%");
     $text.text("Deleting 0 of " + total + "...");
-    function next() {
+    (function next() {
       if (!tasks.length) {
         $loader.hide();
         $btn.prop("disabled", false);
@@ -276,29 +266,26 @@
           $text.text("Deleting " + done + " of " + total + "...");
           setTimeout(next, 60);
         });
-    }
-    next();
+    })();
   });
 
-  // ─── Bulk delete (per-list) with progress ─────────────────────────────────
+  // ─── Bulk delete (per-list) ───────────────────────────────────────────────
   $("#wpec-list-bulk-delete").on("click", function (e) {
     e.preventDefault();
     var $btn = $(this),
-      $loader = $("#wpec-list-bulk-loader");
-    var $wrap = $("#wpec-list-bulk-progress"),
+      $loader = $("#wpec-list-bulk-loader"),
+      $wrap = $("#wpec-list-bulk-progress"),
       $bar = $("#wpec-list-progress-bar"),
       $text = $("#wpec-list-progress-text");
-    var $form = $("#wpec-list-form"),
-      $checks = $form.find('input[name="ids[]"]:checked');
+    var $checks = $('#wpec-list-form input[name="ids[]"]:checked');
     if (!$checks.length) return;
     if (!confirm("Delete selected contacts from this list?")) return;
-
     var tasks = [];
     $checks.each(function () {
-      var parts = String($(this).val()).split(":");
+      var p = String($(this).val()).split(":");
       tasks.push({
-        listId: parseInt(parts[0], 10),
-        contactId: parseInt(parts[1], 10),
+        listId: parseInt(p[0], 10),
+        contactId: parseInt(p[1], 10),
         $row: $(this).closest("tr"),
       });
     });
@@ -309,7 +296,7 @@
     $wrap.show();
     $bar.css("width", "0%");
     $text.text("Deleting 0 of " + total + "...");
-    function next() {
+    (function next() {
       if (!tasks.length) {
         $loader.hide();
         $btn.prop("disabled", false);
@@ -339,30 +326,33 @@
           $text.text("Deleting " + done + " of " + total + "...");
           setTimeout(next, 60);
         });
-    }
-    next();
+    })();
   });
 
-  // ─── Modals: open/close ───────────────────────────────────────────────────
-  function openModal($el) {
-    $("#wpec-modal-overlay").show();
-    $el.show();
-  }
-  function closeModals() {
-    $("#wpec-modal, #wpec-modal-list, #wpec-modal-overlay").hide();
-  }
+  // ─── Add-contact modal toggles ────────────────────────────────────────────
   $(document).on(
     "click",
     ".wpec-modal-close, #wpec-modal-overlay",
-    closeModals
+    function () {
+      $("#wpec-modal, #wpec-modal-list, #wpec-modal-overlay").hide();
+    }
   );
   $("#wpec-open-add-contact").on("click", function (e) {
     e.preventDefault();
-    openModal($("#wpec-modal"));
+    $("#wpec-modal-overlay").show();
+    $("#wpec-modal").show();
   });
   $("#wpec-open-create-list").on("click", function (e) {
     e.preventDefault();
-    openModal($("#wpec-modal-list"));
+    $("#wpec-modal-overlay").show();
+    $("#wpec-modal-list").show();
+  });
+  $("#wpec-add-contact-newlist-toggle").on("change", function () {
+    var on = $(this).is(":checked");
+    $("#wpec-add-contact-newlist").toggle(on);
+    if (on) {
+      $("#wpec-add-contact-list").val("");
+    }
   });
 
   // ─── Create list (AJAX) ───────────────────────────────────────────────────
@@ -374,14 +364,13 @@
     $.post(WPEC.ajaxUrl, $form.serialize() + "&action=wpec_list_create")
       .done(function (resp) {
         if (resp && resp.success) {
-          // Add new option to selects
           var id = resp.data.list_id,
             name = resp.data.name + " (#" + id + ")";
           $("#wpec-existing-list, #wpec-add-contact-list").each(function () {
             $(this).append($("<option>", { value: id, text: name }));
           });
           alert("List created");
-          closeModals();
+          $("#wpec-modal, #wpec-modal-list, #wpec-modal-overlay").hide();
         } else {
           alert((resp && resp.data && resp.data.message) || "Create failed");
         }
@@ -406,7 +395,7 @@
           alert(
             "Contact saved" + (resp.data.mapped ? " and added to list" : "")
           );
-          closeModals();
+          $("#wpec-modal, #wpec-modal-list, #wpec-modal-overlay").hide();
         } else {
           alert((resp && resp.data && resp.data.message) || "Save failed");
         }
@@ -416,6 +405,81 @@
       })
       .always(function () {
         $loader.hide();
+      });
+  });
+
+  // ─── Lists table: inline "View counts" expansion ──────────────────────────
+  $(document).on("click", ".wpec-toggle-counts", function () {
+    var $btn = $(this),
+      listId = parseInt($btn.data("listId"), 10);
+    var $row = $btn.closest("tr");
+    if (!$row.length) return;
+    var colCount = $row.children("td,th").length;
+    var $next = $row.next('.wpec-expand-row[data-list-id="' + listId + '"]');
+    if ($next.length) {
+      $next.toggle();
+      return;
+    }
+
+    var html =
+      '<tr class="wpec-expand-row" data-list-id="' +
+      listId +
+      '"><td colspan="' +
+      colCount +
+      '">';
+    html +=
+      '<div class="wpec-expand-box"><div class="wpec-expand-loading">Loading counts…</div></div>';
+    html += "</td></tr>";
+    $row.after(html);
+
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_list_metrics",
+      nonce: WPEC.nonce,
+      list_id: listId,
+    })
+      .done(function (resp) {
+        var $box = $row
+          .next('.wpec-expand-row[data-list-id="' + listId + '"]')
+          .find(".wpec-expand-box");
+        if (resp && resp.success) {
+          var m = resp.data || {};
+          var t = "";
+          t += '<table class="widefat striped wpec-metrics-table"><tbody>';
+          t +=
+            "<tr><th>Imported (cumulative)</th><td>" +
+            (m.imported || 0) +
+            "</td></tr>";
+          t +=
+            "<tr><th>Duplicates (current)</th><td>" +
+            (m.duplicates || 0) +
+            "</td></tr>";
+          t +=
+            "<tr><th>Not uploaded (last import)</th><td>" +
+            (m.not_uploaded_last || 0) +
+            "</td></tr>";
+          t +=
+            "<tr><th>Deleted (via UI)</th><td>" +
+            (m.deleted || 0) +
+            "</td></tr>";
+          t +=
+            "<tr><th>Added manually</th><td>" +
+            (m.manual_added || 0) +
+            "</td></tr>";
+          t +=
+            "<tr><th>Total (current in list)</th><td>" +
+            (m.total || 0) +
+            "</td></tr>";
+          t += "</tbody></table>";
+          $box.html(t);
+        } else {
+          $box.html('<div class="error">Failed to load counts.</div>');
+        }
+      })
+      .fail(function () {
+        $row
+          .next('.wpec-expand-row[data-list-id="' + listId + '"]')
+          .find(".wpec-expand-box")
+          .html('<div class="error">Request failed.</div>');
       });
   });
 })(jQuery);

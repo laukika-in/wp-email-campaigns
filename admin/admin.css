@@ -117,3 +117,19 @@
   font-size: 22px;
   line-height: 1;
 }
+/* Existing styles ... */
+
+.wpec-expand-row td {
+  background: #fbfbfb;
+  padding: 0 12px 12px;
+}
+.wpec-expand-box {
+  padding: 12px 6px 6px;
+}
+.wpec-expand-loading {
+  padding: 12px;
+  color: #555;
+}
+.wpec-metrics-table th {
+  width: 260px;
+}
