@@ -2,14 +2,15 @@
 /**
  * Plugin Name:       WP Email Campaigns
  * Description:       Transactional email campaigns via CPT with Excel/CSV import, Action Scheduler (1 email/3s), contacts, and reporting.
- * Version:           1.1.1
+ * Version:           1.1.2
  * Author:            Anirudh
  * Text Domain:       wp-email-campaigns
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'WPEC_VER', '1.1.1' );
+$plugin_data = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
+define( 'WPEC_VER', $plugin_data['Version'] );
 define( 'WPEC_FILE', __FILE__ );
 define( 'WPEC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPEC_URL', plugin_dir_url( __FILE__ ) );

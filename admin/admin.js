@@ -1,5 +1,5 @@
 (function ($) {
-  // ─── Helpers (shared) ─────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function anyChecked($scope) {
     return $scope.find('input[name="ids[]"]:checked').length > 0;
   }
@@ -16,7 +16,7 @@
   );
   $(document).ready(setBulkState);
 
-  // ─── Publish confirm (campaigns) ──────────────────────────────────────────
+  // ── Publish confirm (campaign editor) ─────────────────────────────────────
   $(function () {
     var $form = $("#post");
     if ($("body").hasClass("post-type-email_campaign")) {
@@ -31,7 +31,7 @@
     }
   });
 
-  // ─── Upload/import progress (Lists page) ──────────────────────────────────
+  // ── Upload/import progress (on Import page) ───────────────────────────────
   function setProgress(pct, text) {
     $("#wpec-progress-wrap").show();
     $("#wpec-progress-bar").css("width", pct + "%");
@@ -39,15 +39,20 @@
   }
   function showResultPanel(stats, listId) {
     var $panel = $("#wpec-import-result");
-    var dupesUrlAll = new URL(location.href);
-    dupesUrlAll.searchParams.set("view", "dupes");
-    dupesUrlAll.searchParams.delete("list_id");
-    var dupesUrlList = new URL(location.href);
-    dupesUrlList.searchParams.set("view", "dupes_list");
-    dupesUrlList.searchParams.set("list_id", String(listId));
-    var reloadUrl = location.href
-      .replace(/([&?])wpec_start_import=\d+&?/, "$1")
-      .replace(/[&?]$/, "");
+    var dupesUrlAll = new URL(
+      location.origin +
+        location.pathname +
+        "?post_type=email_campaign&page=wpec-duplicates",
+      location.origin
+    );
+    var dupesUrlList = new URL(
+      location.origin +
+        location.pathname +
+        "?post_type=email_campaign&page=wpec-duplicates",
+      location.origin
+    );
+    dupesUrlList.searchParams.set("focus_list", String(listId));
+    var reloadUrl = location.href;
     var html = "";
     html += '<h3 style="margin-top:0;">Import Summary</h3>';
     html += '<ul class="wpec-stats">';
@@ -71,9 +76,7 @@
       dupesUrlAll.toString() +
       '">View duplicates (all lists)</a> ';
     html +=
-      '<a class="button button-primary" href="' +
-      reloadUrl +
-      '">Reload Lists</a>';
+      '<a class="button button-primary" href="' + reloadUrl + '">Reload</a>';
     html += "</p>";
     $panel.html(html).show();
   }
@@ -155,7 +158,7 @@
     }
   });
 
-  // ─── Existing list filter + toggle (Lists page) ───────────────────────────
+  // Existing list filter + toggle
   $("#wpec-existing-search").on("input", function () {
     var q = $(this).val().toLowerCase();
     $("#wpec-existing-list option").each(function () {
@@ -176,7 +179,7 @@
     }
   });
 
-  // ─── Duplicates: individual delete & bulk delete (existing) ───────────────
+  // ── Duplicates: individual & bulk delete ──────────────────────────────────
   $(document).on("click", ".wpec-del-dup", function (e) {
     e.preventDefault();
     var $btn = $(this),
@@ -193,7 +196,7 @@
     })
       .done(function (resp) {
         if (resp && resp.success) {
-          $btn.closest("tr").fadeOut(150, function () {
+          $btn.closest("tr").fadeOut(120, function () {
             $(this).remove();
             setBulkState();
           });
@@ -285,7 +288,7 @@
     "#wpec-list-bulk-loader"
   );
 
-  // ─── Modals (Add contact / Create list) ───────────────────────────────────
+  // ── Modals (Add contact / Create list) ────────────────────────────────────
   $(document).on(
     "click",
     ".wpec-modal-close, #wpec-modal-overlay",
@@ -360,7 +363,7 @@
       });
   });
 
-  // ─── Lists page: inline "View counts" expansion (existing) ────────────────
+  // ── Lists page: inline "View counts" expansion ────────────────────────────
   $(document).on("click", ".wpec-toggle-counts", function () {
     var $btn = $(this),
       listId = parseInt($btn.data("listId"), 10);
@@ -430,7 +433,7 @@
       });
   });
 
-  // ─── CONTACTS DIRECTORY (AJAX filters + pagination) ───────────────────────
+  // ── CONTACTS DIRECTORY (AJAX filters + pagination + export) ──────────────
   function onContactsPage() {
     return (
       new URL(location.href).searchParams.get("page") === "wpec-all-contacts"
@@ -450,13 +453,8 @@
     });
     return out;
   }
-  function contactsQuery(page) {
-    var per = parseInt($("#wpec-page-size").val(), 10) || 50;
-    var data = {
-      action: "wpec_contacts_query",
-      nonce: WPEC.nonce,
-      page: page || 1,
-      per_page: per,
+  function currentFilters() {
+    return {
       search: $("#wpec-f-search").val() || "",
       company_name: collectMulti("#wpec-f-company"),
       city: collectMulti("#wpec-f-city"),
@@ -469,8 +467,21 @@
       emp_max: $("#wpec-f-emp-max").val(),
       rev_min: $("#wpec-f-rev-min").val(),
       rev_max: $("#wpec-f-rev-max").val(),
-      cols: collectCols(),
     };
+  }
+  function contactsQuery(page) {
+    var per = parseInt($("#wpec-page-size").val(), 10) || 50;
+    var filters = currentFilters();
+    var data = Object.assign(
+      {
+        action: "wpec_contacts_query",
+        nonce: WPEC.nonce,
+        page: page || 1,
+        per_page: per,
+        cols: collectCols(),
+      },
+      filters
+    );
     $("#wpec-contacts-table tbody").html(
       '<tr><td colspan="4">Loading…</td></tr>'
     );
@@ -483,7 +494,6 @@
       }
       var rows = resp.data.rows || [];
       var $thead = $("#wpec-contacts-table thead tr");
-      // Build header based on selected columns
       var baseHead =
         "<th>ID</th><th>Full name</th><th>Email</th><th>List(s)</th>";
       var cols = collectCols();
@@ -527,17 +537,16 @@
         });
         $("#wpec-contacts-table tbody").html(html);
       }
-      // Pager
-      var page = resp.data.page || 1,
+      var pageNo = resp.data.page || 1,
         totalPages = resp.data.total_pages || 1,
         total = resp.data.total || 0;
-      $("#wpec-page-prev").prop("disabled", page <= 1);
-      $("#wpec-page-next").prop("disabled", page >= totalPages);
+      $("#wpec-page-prev").prop("disabled", pageNo <= 1);
+      $("#wpec-page-next").prop("disabled", pageNo >= totalPages);
       $("#wpec-page-info").text(
-        "Page " + page + " of " + totalPages + " — " + total + " contacts"
+        "Page " + pageNo + " of " + totalPages + " — " + total + " contacts"
       );
-      $("#wpec-page-prev").data("page", page - 1);
-      $("#wpec-page-next").data("page", page + 1);
+      $("#wpec-page-prev").data("page", pageNo - 1);
+      $("#wpec-page-next").data("page", pageNo + 1);
     });
   }
   function headerLabel(key) {
@@ -582,7 +591,7 @@
     });
   }
 
-  // Multi-select filter search (client-side option filtering)
+  // Multi-select filter search (option filtering)
   $(document).on("input", ".wpec-ms-search", function () {
     var q = $(this).val().toLowerCase();
     var target = $(this).data("target");
@@ -623,12 +632,12 @@
     contactsQuery(1);
   });
 
-  // If user navigated here with a facet param in URL, preselect and load
+  // Prefill from facet links
   function prefillFromUrl() {
     var s = new URL(location.href).searchParams;
     function setIf(id, key) {
       if (s.get(key)) {
-        var val = s.get(key); // try to select if exists
+        var val = s.get(key);
         $(id + " option").each(function () {
           if ($(this).val() === val) {
             $(this).prop("selected", true);
@@ -643,6 +652,63 @@
     setIf("#wpec-f-job", "job_title");
     setIf("#wpec-f-postcode", "postal_code");
   }
+
+  // Export filtered CSV
+  $("#wpec-export-contacts").on("click", function (e) {
+    e.preventDefault();
+    var f = currentFilters();
+    var $form = $("#wpec-export-form").empty();
+    $form
+      .append(
+        '<input type="hidden" name="action" value="wpec_export_contacts">'
+      )
+      .append(
+        '<input type="hidden" name="_wpnonce" value="' +
+          WPEC.nonce.replace("wpec_admin", "wpec_export_contacts") +
+          '">'
+      ); // fallback; actual nonce set server-side in form
+    function appendArray(key, arr) {
+      (arr || []).forEach(function (v) {
+        $form.append(
+          '<input type="hidden" name="' +
+            key +
+            '[]" value="' +
+            $("<div>").text(v).html() +
+            '">'
+        );
+      });
+    }
+    if (f.search)
+      $form.append(
+        '<input type="hidden" name="search" value="' +
+          $("<div>").text(f.search).html() +
+          '">'
+      );
+    appendArray("company_name", f.company_name);
+    appendArray("city", f.city);
+    appendArray("state", f.state);
+    appendArray("country", f.country);
+    appendArray("job_title", f.job_title);
+    appendArray("postal_code", f.postal_code);
+    appendArray("list_ids", f.list_ids);
+    if (f.emp_min)
+      $form.append(
+        '<input type="hidden" name="emp_min" value="' + f.emp_min + '">'
+      );
+    if (f.emp_max)
+      $form.append(
+        '<input type="hidden" name="emp_max" value="' + f.emp_max + '">'
+      );
+    if (f.rev_min)
+      $form.append(
+        '<input type="hidden" name="rev_min" value="' + f.rev_min + '">'
+      );
+    if (f.rev_max)
+      $form.append(
+        '<input type="hidden" name="rev_max" value="' + f.rev_max + '">'
+      );
+    $form.submit();
+  });
 
   $(function () {
     if (onContactsPage()) {
