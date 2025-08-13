@@ -14,12 +14,12 @@ class Activator {
         $logs      = Helpers::table('logs');
         $lists     = Helpers::table('lists');
         $listItems = Helpers::table('list_items');
+        $dupes     = Helpers::table('dupes');
 
-        // Contacts table — now with richer schema
+        // ---- Clean CREATE statements (no inline comments) ----
         $sql_contacts = "CREATE TABLE $contacts (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             email VARCHAR(191) NOT NULL,
-            -- legacy 'name' kept for compatibility; we will populate it as 'first_name last_name'
             name VARCHAR(191) NULL,
             first_name VARCHAR(191) NULL,
             last_name VARCHAR(191) NULL,
@@ -43,7 +43,6 @@ class Activator {
             KEY last_campaign_id (last_campaign_id)
         ) $charset;";
 
-        // Subscribers table (unchanged)
         $sql_subs = "CREATE TABLE $subs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             campaign_id BIGINT UNSIGNED NOT NULL,
@@ -63,7 +62,6 @@ class Activator {
             KEY status (status)
         ) $charset;";
 
-        // Logs table (unchanged)
         $sql_logs = "CREATE TABLE $logs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             campaign_id BIGINT UNSIGNED NOT NULL,
@@ -80,7 +78,6 @@ class Activator {
             KEY event (event)
         ) $charset;";
 
-        // Lists master table — add header_map for header-driven import
         $sql_lists = "CREATE TABLE $lists (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             name VARCHAR(191) NOT NULL,
@@ -90,7 +87,7 @@ class Activator {
             source_filename VARCHAR(191) NULL,
             file_path TEXT NULL,
             file_pointer BIGINT NULL,
-            header_map LONGTEXT NULL, -- JSON of normalized header -> column index
+            header_map LONGTEXT NULL,
             total INT UNSIGNED NOT NULL DEFAULT 0,
             imported INT UNSIGNED NOT NULL DEFAULT 0,
             invalid INT UNSIGNED NOT NULL DEFAULT 0,
@@ -100,13 +97,12 @@ class Activator {
             KEY created_at (created_at)
         ) $charset;";
 
-        // List items mapping — add duplicate flag + created_at
         $sql_list_items = "CREATE TABLE $listItems (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             list_id BIGINT UNSIGNED NOT NULL,
             contact_id BIGINT UNSIGNED NOT NULL,
             is_duplicate_import TINYINT(1) NOT NULL DEFAULT 0,
-            created_at DATETIME NOT NULL,
+            created_at DATETIME NULL,
             PRIMARY KEY (id),
             UNIQUE KEY list_contact (list_id, contact_id),
             KEY list_id (list_id),
@@ -114,15 +110,7 @@ class Activator {
             KEY is_duplicate_import (is_duplicate_import)
         ) $charset;";
 
-        dbDelta( $sql_contacts );
-        dbDelta( $sql_subs );
-        dbDelta( $sql_logs );
-        dbDelta( $sql_lists );
-        dbDelta( $sql_list_items );
-
-        // NEW: duplicates ledger (per import duplicate rows)
-        $dup_table = $wpdb->prefix . 'email_import_duplicates';
-        $sql_dupes = "CREATE TABLE $dup_table (
+        $sql_dupes = "CREATE TABLE $dupes (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             list_id BIGINT UNSIGNED NOT NULL,
             contact_id BIGINT UNSIGNED NOT NULL,
@@ -136,9 +124,54 @@ class Activator {
             KEY email (email),
             KEY created_at (created_at)
         ) $charset;";
+
+        dbDelta( $sql_contacts );
+        dbDelta( $sql_subs );
+        dbDelta( $sql_logs );
+        dbDelta( $sql_lists );
+        dbDelta( $sql_list_items );
         dbDelta( $sql_dupes );
 
-        // Ensure uploads dir exists
-        Helpers::ensure_uploads_dir();
+        // ---- Post-dbDelta safety: add missing columns explicitly (idempotent) ----
+        self::ensure_column( $lists, 'header_map', "LONGTEXT NULL" );
+        self::ensure_column( $lists, 'file_pointer', "BIGINT NULL" );
+        self::ensure_column( $lists, 'file_path', "TEXT NULL" );
+
+        self::ensure_column( $listItems, 'is_duplicate_import', "TINYINT(1) NOT NULL DEFAULT 0" );
+        self::ensure_column( $listItems, 'created_at', "DATETIME NULL" );
+
+        // New contact fields (in case table pre-existed)
+        self::ensure_column( $contacts, 'first_name', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'last_name', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'company_name', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'company_employees', "INT NULL" );
+        self::ensure_column( $contacts, 'company_annual_revenue', "BIGINT NULL" );
+        self::ensure_column( $contacts, 'contact_number', "VARCHAR(64) NULL" );
+        self::ensure_column( $contacts, 'job_title', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'industry', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'country', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'state', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'city', "VARCHAR(191) NULL" );
+        self::ensure_column( $contacts, 'postal_code', "VARCHAR(32) NULL" );
+    }
+
+    private static function column_exists( $table, $column ) {
+        global $wpdb;
+        $table_esc = esc_sql( $table );
+        $column_esc = esc_sql( $column );
+        $sql = "SHOW COLUMNS FROM `$table_esc` LIKE %s";
+        $found = $wpdb->get_var( $wpdb->prepare( $sql, $column_esc ) );
+        return ! is_null( $found );
+    }
+
+    private static function ensure_column( $table, $column, $definition ) {
+        if ( ! self::column_exists( $table, $column ) ) {
+            global $wpdb;
+            $table_esc = esc_sql( $table );
+            // Avoid reserved words and ensure safe identifiers
+            $col_esc = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+            $sql = "ALTER TABLE `$table_esc` ADD COLUMN `$col_esc` $definition";
+            $wpdb->query( $sql );
+        }
     }
 }
