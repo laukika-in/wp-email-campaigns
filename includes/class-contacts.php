@@ -94,6 +94,10 @@ class Contacts {
         global $submenu;
         $parent = 'edit.php?post_type=email_campaign';
 
+        // Determine capability with a safe fallback
+        $cap = method_exists(Helpers::class, 'manage_cap') ? $cap : 'manage_options';
+        
+
         // Rename existing "Contacts" (router screen) to "Lists"
         if ( isset( $submenu[ $parent ] ) ) {
             foreach ( $submenu[ $parent ] as &$item ) {
@@ -109,7 +113,7 @@ class Contacts {
             $parent,
             __( 'Contacts', 'wp-email-campaigns' ),
             __( 'Contacts', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
+            $cap,
             'wpec-all-contacts',
             [ $this, 'render_all_contacts' ],
             21
@@ -121,9 +125,9 @@ class Contacts {
                 $parent,
                 __( 'Import', 'wp-email-campaigns' ),
                 __( 'Import', 'wp-email-campaigns' ),
-                Helpers::manage_cap(),
+                $cap,
                 'wpec-import',
-                [ $this, 'render_import_screen' ],
+                [ $this, 'render_import_stub' ],
                 22
             );
         }
@@ -133,7 +137,7 @@ class Contacts {
             $parent,
             __( 'Do Not Send', 'wp-email-campaigns' ),
             __( 'Do Not Send', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
+            $cap,
             'wpec-donotsend',
             function(){ $this->render_status_list( 'donotsend' ); },
             23
@@ -142,7 +146,7 @@ class Contacts {
             $parent,
             __( 'Bounced', 'wp-email-campaigns' ),
             __( 'Bounced', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
+            $cap,
             'wpec-bounced',
             function(){ $this->render_status_list( 'bounced' ); },
             24
@@ -151,7 +155,7 @@ class Contacts {
     $parent,
     __( 'Duplicates', 'wp-email-campaigns' ),
     __( 'Duplicates', 'wp-email-campaigns' ),
-    Helpers::manage_cap(),
+    $cap,
     'wpec-duplicates',
     [ $this, 'render_duplicates_page' ],
     25
@@ -354,8 +358,7 @@ class Contacts {
         $lists_table = Helpers::table('lists');
         $lists = $db->get_results( "SELECT id, name FROM $lists_table ORDER BY id DESC LIMIT 500", ARRAY_A );
 
-        echo '<!-- Upload panel moved to the Import screen -->
-<div id="wpec-upload-panel" class="wpec-card" style="display:none">';
+        echo '<div id="wpec-upload-panel" class="wpec-card">';
         echo '<h2>' . esc_html__( 'Upload Contacts', 'wp-email-campaigns' ) . '</h2>';
 
         echo '<p style="margin-bottom:12px">';
