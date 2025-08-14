@@ -501,7 +501,7 @@
   function currentFilters() {
     return {
       search: $("#wpec-f-search").val() || "",
-      status: $("#wpec-f-status").val() || "",
+      status: collectMultiSel("#wpec-f-status"),
       company_name: collectMultiSel("#wpec-f-company"),
       city: collectMultiSel("#wpec-f-city"),
       state: collectMultiSel("#wpec-f-state"),
@@ -513,7 +513,6 @@
       emp_max: $("#wpec-f-emp-max").val(),
       rev_min: $("#wpec-f-rev-min").val(),
       rev_max: $("#wpec-f-rev-max").val(),
-
     };
   }
 
