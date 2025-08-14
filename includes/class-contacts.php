@@ -913,13 +913,7 @@ public function ajax_status_add_by_email() {
 
         $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email, c.status";
         foreach ( $cols as $cname ) { $select_cols .= ", c." . $cname; }
-
-        // Human-readable list names (existing)
-        $select_cols .= ",
-            (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
-            FROM $li li INNER JOIN $ls l ON l.id=li.list_id
-            WHERE li.contact_id=c.id) AS lists";
-
+ 
         // NEW: machine-parsable id::name pairs for linkification in JS
         $select_cols .= ",
             (SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li.created_at DESC SEPARATOR '|')
