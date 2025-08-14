@@ -109,41 +109,41 @@ class Contacts {
 
     /** Ensure CSS/JS on all our admin pages; also expose Select2 sources */
     public function enqueue_admin_assets( $hook ) {
-        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        $ok = false;
-        if ( $screen ) {
-            $ok = (
-                $screen->post_type === 'email_campaign' ||
-                $screen->id === 'email_campaign_page_wpec-contacts' ||
-                $screen->id === 'email_campaign_page_wpec-all-contacts' ||
-                $screen->id === 'email_campaign_page_wpec-import' ||
-                $screen->id === 'email_campaign_page_wpec-duplicates'
-            );
-        }
-        $page = $_GET['page'] ?? '';
-        $ok = $ok || in_array( $page, ['wpec-contacts','wpec-all-contacts','wpec-import','wpec-duplicates'], true );
-        if ( ! $ok ) return;
+         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if ( ! $screen ) return;
 
-        $css_path = plugin_dir_path(__FILE__) . '../admin/admin.css';
-        $js_path  = plugin_dir_path(__FILE__) . '../admin/admin.js';
-        $css_url  = plugins_url('../admin/admin.css', __FILE__);
-        $js_url   = plugins_url('../admin/admin.js',  __FILE__);
+    $targets = [
+        'email_campaign_page_wpec-all-contacts',
+        'email_campaign_page_wpec-contacts',     // Lists page
+        'email_campaign_page_wpec-import',       // Import page
+        'email_campaign_page_wpec-duplicates',   // Duplicates page
+        'email_campaign_page_wpec-donotsend',
+        'email_campaign_page_wpec-bounced',
+    ];
+    if ( ! in_array( $screen->id, $targets, true ) ) return;
 
-        wp_enqueue_style( 'wpec-admin', $css_url, [], @filemtime($css_path) ?: '1.0' );
-        wp_enqueue_script( 'wpec-admin', $js_url, ['jquery'], @filemtime($js_path) ?: '1.0', true );
+    $ver = defined('WPEC_VERSION') ? WPEC_VERSION : ( defined('WPEC_VER') ? WPEC_VER : '1.0.0' );
 
-        // Local Select2 (optional) + CDN fallback (JS will handle loading if not present)
-        $local_s2_js  = plugins_url('../admin/vendor/select2/select2.min.js',  __FILE__);
-        $local_s2_css = plugins_url('../admin/vendor/select2/select2.min.css', __FILE__);
-        wp_localize_script( 'wpec-admin', 'WPEC', [
-            'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
-            'nonce'          => wp_create_nonce( 'wpec_admin' ),
-            'startImport'    => isset($_GET['wpec_start_import']) ? intval($_GET['wpec_start_import']) : 0,
-            'select2LocalJs' => $local_s2_js,
-            'select2LocalCss'=> $local_s2_css,
-            'select2CdnJs'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
-            'select2CdnCss'  => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-        ] );
+    // Core plugin assets
+    wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], $ver );
+    wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], $ver, true );
+
+    // Select2 from CDN (no local vendor folder required)
+    wp_enqueue_style( 'wpec-select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', [], '4.1.0' );
+    wp_enqueue_script( 'wpec-select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', [ 'jquery' ], '4.1.0', true );
+
+    // Pass config the JS expects (make local paths empty so JS won’t try /admin/vendor/select2/*)
+    wp_localize_script( 'wpec-admin', 'WPEC', [
+        'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
+        'nonce'           => wp_create_nonce( 'wpec_admin' ),
+        'startImport'     => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
+
+        // Tell JS to use CDN (leave these blank so it won’t hit /admin/vendor/select2/*)
+        'select2LocalCss' => '',
+        'select2LocalJs'  => '',
+        'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
+        'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
+    ] );
     }
 
     // ===================== ROUTER (legacy Lists page) =====================

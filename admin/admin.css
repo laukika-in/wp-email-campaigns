@@ -258,3 +258,9 @@
   padding: 0 4px;
   color: #777;
 }
+.wpec-select2 {
+  min-width: 240px;
+}
+.select2-container {
+  min-width: 240px;
+}
