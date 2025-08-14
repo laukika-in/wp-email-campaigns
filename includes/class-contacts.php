@@ -354,6 +354,7 @@ class Contacts {
         echo '<input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0"> ';
         echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
         echo '</div></label>';
+
         $render_select2 = function($id, $values) {
             echo '<select id="'.$id.'" multiple="multiple" class="wpec-s2" style="min-width:240px">';
             foreach ( (array)$values as $val ) {
@@ -867,6 +868,16 @@ public function ajax_status_add_by_email() {
         $emp_max  = isset($_POST['emp_max']) && $_POST['emp_max'] !== '' ? (int)$_POST['emp_max'] : null;
         $rev_min  = isset($_POST['rev_min']) && $_POST['rev_min'] !== '' ? (int)$_POST['rev_min'] : null;
         $rev_max  = isset($_POST['rev_max']) && $_POST['rev_max'] !== '' ? (int)$_POST['rev_max'] : null;
+        // ADD: parse status filter
+        $status = sanitize_key( $_POST['status'] ?? '' );
+        // allow legacy alias
+        if ( $status === 'donotsend' ) { $status = 'unsubscribed'; }
+
+        // whitelist to avoid bad values
+        $allowed_statuses = [ 'active', 'unsubscribed', 'bounced' ];
+        if ( $status && ! in_array( $status, $allowed_statuses, true ) ) {
+            $status = '';
+        }
 
         $allowed_cols = [
             'company_name','company_employees','company_annual_revenue','contact_number',
@@ -913,7 +924,13 @@ public function ajax_status_add_by_email() {
 
         $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email, c.status";
         foreach ( $cols as $cname ) { $select_cols .= ", c." . $cname; }
- 
+
+        // Human-readable list names (existing)
+        $select_cols .= ",
+            (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
+            FROM $li li INNER JOIN $ls l ON l.id=li.list_id
+            WHERE li.contact_id=c.id) AS lists";
+
         // NEW: machine-parsable id::name pairs for linkification in JS
         $select_cols .= ",
             (SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li.created_at DESC SEPARATOR '|')
@@ -923,6 +940,11 @@ public function ajax_status_add_by_email() {
 
 
         $where_sql = implode(' AND ', $where);
+// ADD: status WHERE clause
+if ( $status !== '' ) {
+    $where[] = "c.status = %s";
+    $args[]  = $status;
+}
 
         // Count distinct contacts
         $count_sql = "SELECT COUNT(DISTINCT c.id)
