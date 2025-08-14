@@ -268,6 +268,8 @@ class Contacts {
         $countries = $distinct('country');
         $jobs      = $distinct('job_title');
         $postcodes = $distinct('postal_code');
+        $status = $distinct('status'); 
+
 
         // Lists + counts (for filter and bulk-move)
         $lists = $db->get_results(
@@ -342,6 +344,11 @@ class Contacts {
             printf('<option value="%d">%s (%s)</option>', (int)$l['id'], esc_html($l['name']), number_format_i18n((int)$l['cnt']));
         }
         echo '</select></label>';
+        
+        echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br><select id="wpec-f-status" multiple class="wpec-s2" data-placeholder="'.esc_attr__('Select Status...','wp-email-campaigns').'">';
+        foreach ( $status as $v ) { echo '<option value="'.esc_attr($v).'">'.esc_html($v).'</option>'; } echo '</select></label>';
+ 
+        echo '</select></label>';
 
         echo '<label>'.esc_html__('Employees','wp-email-campaigns').'<br>';
         echo '<div class="wpec-number-range">';
@@ -355,24 +362,7 @@ class Contacts {
         echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
         echo '</div></label>';
 
-        $render_select2 = function($id, $values) {
-            echo '<select id="'.$id.'" multiple="multiple" class="wpec-s2" style="min-width:240px">';
-            foreach ( (array)$values as $val ) {
-                echo '<option value="'.esc_attr($val).'">'.esc_html($val).'</option>';
-            }
-            echo '</select>';
-        };
-        echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br><select id="wpec-f-status" multiple class="wpec-s2" data-placeholder="'.esc_attr__('Select Status','wp-email-campaigns').'">';
-        foreach ( $status as $v ) { echo '<option value="'.esc_attr($v).'">'.esc_html($v).'</option>'; } echo '</select></label>';
-
-                // Status (matches DB values exactly)
-        echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br>';
-        echo '<select id="wpec-f-status" class="wpec-s2" style="min-width:160px">';
-        echo '<option value="">'.esc_html__('— Any status —','wp-email-campaigns').'</option>';
-        echo '<option value="active">'.esc_html__('Active','wp-email-campaigns').'</option>';
-        echo '<option value="unsubscribed">'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
-        echo '<option value="bounced">'.esc_html__('Bounced','wp-email-campaigns').'</option>';
-        echo '</select></label>';
+       
 
         echo '</div>'; // row
 
@@ -865,22 +855,15 @@ public function ajax_status_add_by_email() {
         $country  = $multi('country');
         $job      = $multi('job_title');
         $postcode = $multi('postal_code');
+        $status    = $multi('status');
         $list_ids = array_map('absint', $multi('list_ids'));
 
         $emp_min  = isset($_POST['emp_min']) && $_POST['emp_min'] !== '' ? (int)$_POST['emp_min'] : null;
         $emp_max  = isset($_POST['emp_max']) && $_POST['emp_max'] !== '' ? (int)$_POST['emp_max'] : null;
         $rev_min  = isset($_POST['rev_min']) && $_POST['rev_min'] !== '' ? (int)$_POST['rev_min'] : null;
         $rev_max  = isset($_POST['rev_max']) && $_POST['rev_max'] !== '' ? (int)$_POST['rev_max'] : null;
-        // ADD: parse status filter
-        $status = sanitize_key( $_POST['status'] ?? '' );
-        // allow legacy alias
-        if ( $status === 'donotsend' ) { $status = 'unsubscribed'; }
+ 
 
-        // whitelist to avoid bad values
-        $allowed_statuses = [ 'active', 'unsubscribed', 'bounced' ];
-        if ( $status && ! in_array( $status, $allowed_statuses, true ) ) {
-            $status = '';
-        }
 
         $allowed_cols = [
             'company_name','company_employees','company_annual_revenue','contact_number',
@@ -912,6 +895,8 @@ public function ajax_status_add_by_email() {
         $in_clause($country,  'c.country');
         $in_clause($job,      'c.job_title');
         $in_clause($postcode, 'c.postal_code');
+        $in_clause($status,  'c.status');
+
 
         if ( $emp_min !== null ) { $where[] = "c.company_employees >= %d"; $args[] = $emp_min; }
         if ( $emp_max !== null ) { $where[] = "c.company_employees <= %d"; $args[] = $emp_max; }
@@ -943,12 +928,7 @@ public function ajax_status_add_by_email() {
 
 
         $where_sql = implode(' AND ', $where);
-// ADD: status WHERE clause
-if ( $status !== '' ) {
-    $where[] = "c.status = %s";
-    $args[]  = $status;
-}
-
+ 
         // Count distinct contacts
         $count_sql = "SELECT COUNT(DISTINCT c.id)
                       FROM $ct c
