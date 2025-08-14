@@ -363,12 +363,13 @@ class Contacts {
             echo '</select>';
         };
 
+                // Status (matches DB values exactly)
         echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br>';
-        echo '<select id="wpec-f-status" class="wpec-s2" style="min-width:240px">';
-        echo '<option value="">' . esc_html__('— Any —','wp-email-campaigns') . '</option>';
-        echo '<option value="active">' . esc_html__('Active','wp-email-campaigns') . '</option>';
-        echo '<option value="unsubscribed">' . esc_html__('Do Not Send','wp-email-campaigns') . '</option>';
-        echo '<option value="bounced">' . esc_html__('Bounced','wp-email-campaigns') . '</option>';
+        echo '<select id="wpec-f-status" class="wpec-s2" style="min-width:160px">';
+        echo '<option value="">'.esc_html__('— Any status —','wp-email-campaigns').'</option>';
+        echo '<option value="active">'.esc_html__('Active','wp-email-campaigns').'</option>';
+        echo '<option value="unsubscribed">'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
+        echo '<option value="bounced">'.esc_html__('Bounced','wp-email-campaigns').'</option>';
         echo '</select></label>';
 
         echo '</div>'; // row
@@ -869,15 +870,21 @@ public function ajax_status_add_by_email() {
         $rev_min  = isset($_POST['rev_min']) && $_POST['rev_min'] !== '' ? (int)$_POST['rev_min'] : null;
         $rev_max  = isset($_POST['rev_max']) && $_POST['rev_max'] !== '' ? (int)$_POST['rev_max'] : null;
         // ADD: parse status filter
-        $status = sanitize_key( $_POST['status'] ?? '' );
-        // allow legacy alias
-        if ( $status === 'donotsend' ) { $status = 'unsubscribed'; }
+        $status = sanitize_key($_POST['status'] ?? '');
 
-        // whitelist to avoid bad values
-        $allowed_statuses = [ 'active', 'unsubscribed', 'bounced' ];
-        if ( $status && ! in_array( $status, $allowed_statuses, true ) ) {
-            $status = '';
-        }
+// normalize common synonyms
+if ( in_array( $status, ['donotsend','do_not_send','do-not-send','dnd'], true ) ) {
+    $status = 'unsubscribed';
+}
+if ( in_array( $status, ['any','all'], true ) ) {
+    $status = '';
+}
+
+if ( $status ) {
+    $where[] = "c.status = %s";
+    $args[]  = $status;
+}
+
 
         $allowed_cols = [
             'company_name','company_employees','company_annual_revenue','contact_number',
