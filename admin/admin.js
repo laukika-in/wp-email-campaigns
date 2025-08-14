@@ -859,4 +859,124 @@
       }
     }
   });
+  // ===== Special Lists (Do Not Send / Bounced) =====
+(function($){
+  function buildRow(r){
+    var actions = '';
+    if (r.id) {
+      var viewUrl = window.ajaxurl
+        ? (new URLSearchParams({ post_type:'email_campaign', page:'wpec-contacts', view:'contact', contact_id:String(r.id) })).toString()
+        : '';
+      var href = (window.WPEC && WPEC.adminBase) ? (WPEC.adminBase + '?'+viewUrl) : (window.location.origin + '/wp-admin/edit.php?'+viewUrl);
+      actions = '<a class="button button-small" href="'+ href +'">View detail</a>';
+    }
+    return '<tr>'+
+      '<td><input type="checkbox" class="wpec-row-cb" data-id="'+ (r.id||'') +'"></td>'+
+      '<td>'+ (r.id||'') +'</td>'+
+      '<td>'+ (r.full_name||'') +'</td>'+
+      '<td>'+ (r.email||'') +'</td>'+
+      '<td>'+ actions +'</td>'+
+    '</tr>';
+  }
+
+  function fetchSpecial(opts){
+    var $wrap = $('#wpec-contacts-app[data-page="special"]');
+    if (!$wrap.length) return;
+
+    var status   = $wrap.data('status') || '';
+    var pageSize = parseInt($('#wpec-page-size').val() || '50', 10);
+    var page     = (opts && opts.page) ? opts.page : 1;
+
+    $('#wpec-contacts-table tbody').html('<tr><td colspan="5">Loading…</td></tr>');
+    $.post(WPEC.ajaxUrl, {
+      action: 'wpec_contacts_query',
+      nonce:  WPEC.nonce,
+      page:   page,
+      per_page: pageSize,
+      status: status,
+      cols: [] // keep table light
+    }).done(function(res){
+      if (!res || !res.success || !res.data) { $('#wpec-contacts-table tbody').html('<tr><td colspan="5">Error.</td></tr>'); return; }
+      var rows = res.data.rows || [];
+      if (!rows.length) { $('#wpec-contacts-table tbody').html('<tr><td colspan="5">No contacts.</td></tr>'); }
+      else {
+        var html = rows.map(buildRow).join('');
+        $('#wpec-contacts-table tbody').html(html);
+      }
+
+      // pager
+      var totalPages = res.data.total_pages || 1;
+      var cur = res.data.page || 1;
+      $('#wpec-page-numbers').text('Page '+cur+' of '+totalPages);
+      $('#wpec-page-prev').prop('disabled', cur <= 1).off('click').on('click', function(){ fetchSpecial({page: cur-1}); });
+      $('#wpec-page-next').prop('disabled', cur >= totalPages).off('click').on('click', function(){ fetchSpecial({page: cur+1}); });
+
+      // master checkbox + enable/disable remove btn
+      $('#wpec-master-cb').prop('checked', false);
+      $('#wpec-status-remove').prop('disabled', true);
+    });
+  }
+
+  // Only bind on special list pages
+  $(function(){
+    var $special = $('#wpec-contacts-app[data-page="special"]');
+    if (!$special.length) return;
+
+    // initial load
+    fetchSpecial({page:1});
+    $('#wpec-page-size').on('change', function(){ fetchSpecial({page:1}); });
+
+    // master checkbox
+    $(document).on('change', '#wpec-master-cb', function(){
+      var on = $(this).is(':checked');
+      $('.wpec-row-cb').prop('checked', on).trigger('change');
+    });
+    $(document).on('change', '.wpec-row-cb', function(){
+      var any = $('.wpec-row-cb:checked').length > 0;
+      $('#wpec-status-remove').prop('disabled', !any);
+    });
+
+    // Open/close modal
+    $(document).on('click', '#wpec-status-add', function(){
+      $('#wpec-modal-overlay, #wpec-modal').show();
+    });
+    $(document).on('click', '.wpec-modal-close, #wpec-modal-overlay', function(){
+      $('#wpec-modal-overlay, #wpec-modal').hide();
+    });
+
+    // Add by emails -> move into this special list
+    $(document).on('click', '#wpec-status-save', function(){
+      var emails = $('#wpec-status-emails').val() || '';
+      if (!emails.trim()) return;
+      $('#wpec-status-loader').show();
+      $.post(WPEC.ajaxUrl, {
+        action: 'wpec_status_add_by_email',
+        nonce:  WPEC.nonce,
+        status: $special.data('status') || '',
+        emails: emails
+      }).always(function(){
+        $('#wpec-status-loader').hide();
+        $('#wpec-modal-overlay, #wpec-modal').hide();
+        $('#wpec-status-emails').val('');
+        fetchSpecial({page:1});
+      });
+    });
+
+    // Remove selected -> move OUT (set active)
+    $(document).on('click', '#wpec-status-remove', function(){
+      var ids = $('.wpec-row-cb:checked').map(function(){ return $(this).data('id'); }).get();
+      if (!ids.length) return;
+      $('#wpec-status-loader').show();
+      $.post(WPEC.ajaxUrl, {
+        action: 'wpec_status_bulk_update',
+        nonce:  WPEC.nonce,
+        mode:   'remove',
+        status: $special.data('status') || '',
+        ids:    ids
+      }).always(function(){
+        $('#wpec-status-loader').hide();
+        fetchSpecial({page:1});
+      });
+    });
+  });
 })(jQuery);

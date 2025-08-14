@@ -46,7 +46,11 @@ class Contacts {
         add_action( 'admin_post_wpec_delete_list_mapping', [ $this, 'admin_post_delete_list_mapping' ] );
 
         // Export per-list
-        add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] );
+        add_action( 'admin_post_wpec_export_list', [ $this, 'export_list' ] ); 
+
+        // Special lists (Do Not Send / Bounced)
+        add_action( 'wp_ajax_wpec_status_bulk_update', [ $this, 'ajax_status_bulk_update' ] );
+        add_action( 'wp_ajax_wpec_status_add_by_email', [ $this, 'ajax_status_add_by_email' ] );
     }
 
     /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
@@ -104,6 +108,26 @@ class Contacts {
             'wpec-duplicates',
             [ $this, 'render_duplicates_page' ],
             22
+        );
+                // Special, non-deletable lists
+        add_submenu_page(
+            $parent,
+            __( 'Do Not Send', 'wp-email-campaigns' ),
+            __( 'Do Not Send', 'wp-email-campaigns' ),
+            Helpers::manage_cap(),
+            'wpec-donotsend',
+            function(){ $this->render_status_list( 'donotsend' ); },
+            23
+        );
+
+        add_submenu_page(
+            $parent,
+            __( 'Bounced', 'wp-email-campaigns' ),
+            __( 'Bounced', 'wp-email-campaigns' ),
+            Helpers::manage_cap(),
+            'wpec-bounced',
+            function(){ $this->render_status_list( 'bounced' ); },
+            24
         );
     }
 
@@ -375,6 +399,57 @@ class Contacts {
 
         echo '</div>'; // wrap
     }
+/** Special “lists” based on status: donotsend (=unsubscribed) and bounced */
+public function render_status_list( $status_slug ) {
+    if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
+
+    $title      = $status_slug === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' ) : __( 'Do Not Send', 'wp-email-campaigns' );
+    $status_val = $status_slug === 'bounced' ? 'bounced' : 'unsubscribed';
+
+    echo '<div class="wrap" id="wpec-contacts-app" data-page="special" data-status="'.esc_attr($status_val).'">';
+    echo '<h1>'.esc_html( $title ).'</h1>';
+
+    // Help
+    echo '<p class="description">'.esc_html__( 'This is a non-deletable list. You can add or remove contacts here; deleting contacts is disabled.', 'wp-email-campaigns' ).'</p>';
+
+    // Toolbar: add by email + remove selected (move out)
+    echo '<div class="wpec-card" style="display:flex; gap:8px; align-items:center;">';
+    echo '<button type="button" class="button" id="wpec-status-add">'.esc_html__('Add contacts (by email)','wp-email-campaigns').'</button>';
+    echo '<button type="button" class="button" id="wpec-status-remove" disabled>'.esc_html__('Remove selected from this list','wp-email-campaigns').'</button>';
+    echo '<span class="wpec-loader" id="wpec-status-loader" style="display:none"></span>';
+    echo '</div>';
+
+    // Simple add modal (hidden; JS toggles)
+    echo '<div id="wpec-modal-overlay" style="display:none"></div>';
+    echo '<div id="wpec-modal" class="wpec-modal" style="display:none"><div class="wpec-modal-inner">';
+    echo '<button class="wpec-modal-close" aria-label="Close">&times;</button>';
+    echo '<h2>'.esc_html__('Add contacts to list','wp-email-campaigns').'</h2>';
+    echo '<p>'.esc_html__('Paste emails separated by comma or newline. Only existing contacts will be updated.','wp-email-campaigns').'</p>';
+    echo '<textarea id="wpec-status-emails" rows="8" style="width:100%"></textarea>';
+    echo '<p><button class="button button-primary" id="wpec-status-save">'.esc_html__('Add','wp-email-campaigns').'</button></p>';
+    echo '</div></div>';
+
+    // Table (checkboxes + View details only — NO delete)
+    echo '<div id="wpec-contacts-table-wrap" class="wpec-card" data-initial="1">';
+    echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-contacts-table">';
+    echo '<thead><tr>';
+    echo '<th style="width:24px"><input type="checkbox" id="wpec-master-cb"></th>';
+    echo '<th>'.esc_html__('ID','wp-email-campaigns').'</th>';
+    echo '<th>'.esc_html__('Full name','wp-email-campaigns').'</th>';
+    echo '<th>'.esc_html__('Email','wp-email-campaigns').'</th>';
+    echo '<th>'.esc_html__('Actions','wp-email-campaigns').'</th>';
+    echo '</tr></thead><tbody></tbody></table></div>';
+
+    echo '<div class="wpec-pager">';
+    echo '<button class="button" id="wpec-page-prev" disabled>&laquo; ' . esc_html__('Prev','wp-email-campaigns') . '</button>';
+    echo '<span id="wpec-page-numbers"></span>';
+    echo '<button class="button" id="wpec-page-next" disabled>' . esc_html__('Next','wp-email-campaigns') . ' &raquo;</button>';
+    echo '<select id="wpec-page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select>';
+    echo '</div>';
+
+    echo '</div>'; // table wrap
+    echo '</div>'; // wrap
+}
 
     private function render_multi_select( $id, $values ) {
         // (no longer used for All Contacts – kept for compatibility elsewhere if needed)
@@ -630,6 +705,58 @@ class Contacts {
 
         fclose($out); exit;
     }
+// Bulk set/unset status for selected IDs
+public function ajax_status_bulk_update() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $ids    = isset($_POST['ids']) && is_array($_POST['ids']) ? array_map('absint', $_POST['ids']) : [];
+    $mode   = sanitize_key($_POST['mode'] ?? 'remove'); // 'add' -> set to status; 'remove' -> set back to active
+    $status = sanitize_key($_POST['status'] ?? 'unsubscribed'); // 'unsubscribed' or 'bounced'
+
+    if ( empty($ids) ) wp_send_json_error(['message'=>'No contacts']);
+
+    $ct = Helpers::table('contacts');
+    $db = Helpers::db();
+
+    if ( $mode === 'add' ) {
+        $updated = $db->query( "UPDATE $ct SET status='".esc_sql($status)."' WHERE id IN (".implode(',', $ids ).")" );
+    } else {
+        $updated = $db->query( "UPDATE $ct SET status='active' WHERE id IN (".implode(',', $ids ).")" );
+    }
+    wp_send_json_success([ 'updated' => (int)$updated ]);
+}
+
+// Add to special list via emails (existing contacts only)
+public function ajax_status_add_by_email() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $status = sanitize_key($_POST['status'] ?? 'unsubscribed');
+    $raw    = trim( (string)($_POST['emails'] ?? '') );
+    if ( $raw === '' ) wp_send_json_error(['message'=>'No emails provided']);
+
+    $emails = preg_split('/[\s,;]+/', $raw);
+    $emails = array_values( array_unique( array_filter( array_map( 'sanitize_email', $emails ), 'is_email' ) ) );
+    if ( empty( $emails ) ) wp_send_json_error(['message'=>'No valid emails']);
+
+    $ct = Helpers::table('contacts');
+    $db = Helpers::db();
+
+    $placeholders = implode( ',', array_fill(0, count($emails), '%s') );
+    $ids = $db->get_col( $db->prepare( "SELECT id FROM $ct WHERE email IN ($placeholders)", $emails ) );
+
+    $updated = 0;
+    if ( $ids ) {
+        $updated = $db->query( "UPDATE $ct SET status='".esc_sql($status)."' WHERE id IN (".implode(',', array_map('intval',$ids)).")" );
+    }
+
+    wp_send_json_success([
+        'found'   => count($ids),
+        'updated' => (int)$updated,
+        'skipped' => count($emails) - count($ids),
+    ]);
+}
 
     // ===================== BULK OPS (All Contacts) =====================
     public function ajax_contacts_bulk_delete() {
