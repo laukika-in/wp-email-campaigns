@@ -19,7 +19,7 @@ class Contacts {
         add_action( 'admin_menu', [ $this, 'admin_menu_adjustments' ], 999 );
 
         // Assets
-        add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
+        add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 
         // AJAX: import/process
         add_action( 'wp_ajax_wpec_list_upload',   [ $this, 'ajax_list_upload' ] );
@@ -108,8 +108,8 @@ class Contacts {
     }
 
     /** Ensure CSS/JS on all our admin pages; also expose Select2 sources */
-    public function enqueue_admin_assets( $hook ) {
-         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+   public function enqueue_assets( $hook ) {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
     if ( ! $screen ) return;
 
     $targets = [
@@ -144,7 +144,8 @@ class Contacts {
         'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
         'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
     ] );
-    }
+}
+
 
     // ===================== ROUTER (legacy Lists page) =====================
     public function render_router() {
