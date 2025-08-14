@@ -978,5 +978,5 @@
         fetchSpecial({page:1});
       });
     });
-  });
+  
 })(jQuery);
