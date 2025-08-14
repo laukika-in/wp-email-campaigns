@@ -31,20 +31,22 @@
     return $scope.find('input[name="ids[]"]:checked').length > 0;
   }
   function setBulkState() {
-    var $dup = $("#wpec-dup-form");
-    var $lst = $("#wpec-list-form");
-    $("#wpec-dup-bulk-delete").prop("disabled", !anyChecked($dup));
-    $("#wpec-list-bulk-delete").prop("disabled", !anyChecked($lst));
-    // All contacts bulkbar
-    var $tbl = $("#wpec-contacts-table");
-    var checked = $tbl.find("tbody input.row-cb:checked").length > 0;
-    $("#wpec-bulkbar #wpec-bulk-delete").prop("disabled", !checked);
-    var listSel = $("#wpec-bulk-move-list").val();
-    $("#wpec-bulkbar #wpec-bulk-move").prop("disabled", !(checked && listSel));
+    const $checks = $("#wpec-contacts-table tbody .wpec-row-cb:checked");
+    const hasSel = $checks.length > 0;
+
+    // Show/hide the bulk bar
+    $("#wpec-bulkbar").css("display", hasSel ? "flex" : "none");
+
+    // Enable/disable buttons
+    $("#wpec-bulk-delete").prop("disabled", !hasSel);
+    const dest = $("#wpec-bulk-dest").val() || "";
+    $("#wpec-bulk-apply").prop("disabled", !(hasSel && dest));
   }
+
+  // Bind updates (checkboxes + destination change)
   $(document).on(
     "change click",
-    '.wp-list-table input[type="checkbox"], #wpec-contacts-table input[type="checkbox"], #wpec-bulk-move-list',
+    '.wp-list-table input[type="checkbox"], #wpec-contacts-table input[type="checkbox"], #wpec-bulk-dest',
     setBulkState
   );
   $(document).ready(setBulkState);
@@ -588,9 +590,10 @@
           detailUrl.searchParams.set("contact_id", String(r.id));
           html += "<tr>";
           html +=
-            '<td><input type="checkbox" class="row-cb" data-id="' +
+            '<td style="width:24px;"><input type="checkbox" class="wpec-row-cb" data-id="' +
             r.id +
             '"></td>';
+
           html += "<td>" + (r.id || "") + "</td>";
           html +=
             '<td><a href="' +
@@ -694,15 +697,17 @@
     contactsQuery(1);
   });
 
-  // Master checkbox
+  // Master checkbox handler
   $(document).on("change", "#wpec-master-cb", function () {
     var on = $(this).is(":checked");
-    $("#wpec-contacts-table tbody input.row-cb").prop("checked", on);
+    $("#wpec-contacts-table tbody .wpec-row-cb").prop("checked", on);
     setBulkState();
   });
+
+  // Row checkbox handler
   $(document).on(
     "change",
-    "#wpec-contacts-table tbody input.row-cb",
+    "#wpec-contacts-table tbody .wpec-row-cb",
     setBulkState
   );
 
@@ -710,7 +715,7 @@
   $("#wpec-bulk-delete").on("click", function (e) {
     e.preventDefault();
     var ids = [];
-    $("#wpec-contacts-table tbody input.row-cb:checked").each(function () {
+    $("#wpec-contacts-table tbody .wpec-row-cb:checked").each(function () {
       ids.push(parseInt($(this).data("id"), 10));
     });
     if (!ids.length) return;
@@ -725,7 +730,7 @@
       .done(function (resp) {
         if (resp && resp.success) {
           // Remove rows
-          $("#wpec-contacts-table tbody input.row-cb:checked")
+          $("#wpec-contacts-table tbody .wpec-row-cb:checked")
             .closest("tr")
             .remove();
           setBulkState();
@@ -742,7 +747,7 @@
   $("#wpec-bulk-move").on("click", function (e) {
     e.preventDefault();
     var ids = [];
-    $("#wpec-contacts-table tbody input.row-cb:checked").each(function () {
+    $("#wpec-contacts-table tbody .wpec-row-cb:checked").each(function () {
       ids.push(parseInt($(this).data("id"), 10));
     });
     var listId = parseInt($("#wpec-bulk-move-list").val(), 10) || 0;
@@ -828,9 +833,9 @@
         placeholder: $(this).data("placeholder") || "",
       });
     });
-    $("#wpec-bulk-move-list").select2({
+    $("#wpec-bulk-dest").select2({
       width: "resolve",
-      placeholder: "Move to list…",
+      placeholder: "— Select —",
     });
   }
 
@@ -1077,30 +1082,32 @@
     }
   }
 
-  // Linkify the Lists column using lists_meta from the AJAX response
+  // Linkify the Lists column (5th cell) using lists_meta from the AJAX response
   function linkifyLists(rows) {
     if (!rows || !rows.length) return;
-    var $trs = $("#wpec-contacts-table tbody tr");
+    const base = window.WPEC && WPEC.listViewBase ? WPEC.listViewBase : "";
+    if (!base) return;
+
+    const $trs = $("#wpec-contacts-table tbody tr");
     $trs.each(function (i) {
-      var meta = rows[i] && rows[i].lists_meta;
+      const meta = rows[i] && rows[i].lists_meta;
       if (!meta) return;
-      var parts = meta.split("|");
-      var links = parts
+
+      // meta format: "123::List A|456::List B"
+      const parts = meta.split("|");
+      const links = parts
         .map(function (pair) {
-          var ix = pair.indexOf("::");
+          const ix = pair.indexOf("::");
           if (ix === -1) return null;
-          var id = pair.slice(0, ix);
-          var name = pair.slice(ix + 2);
-          var url =
-            (window.WPEC && WPEC.listViewBase ? WPEC.listViewBase : "") + id;
-          // escape name
-          var span = document.createElement("span");
-          span.textContent = name;
-          return '<a href="' + url + '">' + span.innerHTML + "</a>";
+          const id = pair.slice(0, ix);
+          const name = pair.slice(ix + 2);
+          return '<a href="' + base + id + '">' + escapeHtml(name) + "</a>";
         })
         .filter(Boolean);
-      var $cells = $(this).children("td");
-      var $listsCell = $cells.last(); // lists column is last
+
+      // 5th TD = "List(s)" (index 4) — extra columns (if any) come after this
+      const $cells = $(this).children("td");
+      const $listsCell = $cells.eq(4);
       $listsCell.html(links.length ? links.join(", ") : "<em>-</em>");
     });
   }

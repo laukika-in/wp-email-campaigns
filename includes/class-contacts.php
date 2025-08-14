@@ -298,7 +298,8 @@ class Contacts {
              ORDER BY l.name ASC LIMIT 1000", ARRAY_A
         );
 
-        echo '<div class="wrap">';
+        echo '<div class="wrap" id="wpec-contacts-app" data-page="all">';
+
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
  
