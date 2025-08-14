@@ -48,12 +48,9 @@ class Helpers {
     public static function campaign_group( $campaign_id ) {
         return 'wpec_campaign_' . absint( $campaign_id );
     }
-  public static function manage_cap(): string {
-        return apply_filters('wpec_manage_cap', 'manage_options'); // change if you use something else
-    }
 
-    public static function user_can_manage(): bool {
-        return current_user_can( self::manage_cap() );
+    public static function user_can_manage() {
+        return current_user_can( 'manage_options' );
     }
 
     public static function uploads_dir() {
@@ -69,7 +66,6 @@ class Helpers {
         return $dir;
     }
 
- 
     // ---------- Header mapping for imports ----------
     public static function norm_header( $str ) {
         $str = trim( strtolower( $str ) );
