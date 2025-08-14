@@ -1040,16 +1040,14 @@
     var $tbody = $("#wpec-contacts-table tbody");
     $tbody.find("tr").each(function () {
       var $tr = $(this);
-      // if checkbox already present, skip
+      // add per-row checkbox if missing
       if ($tr.find("td:first-child input.wpec-row-cb").length) return;
-
       var $cells = $tr.children("td");
-      if ($cells.length < 4) return; // expect: ID, Full name, Email, Lists
-
+      if (!$cells.length) return;
       var idText = $cells.eq(0).text().trim();
       var id = parseInt(idText, 10) || "";
       $tr.prepend(
-        '<td><input type="checkbox" class="wpec-row-cb" data-id="' +
+        '<td style="width:24px;"><input type="checkbox" class="wpec-row-cb" data-id="' +
           id +
           '"></td>'
       );
@@ -1057,7 +1055,7 @@
   }
 
   function currentSelection() {
-    return $(".wpec-row-cb:checked")
+    return $("#wpec-contacts-table tbody .wpec-row-cb:checked")
       .map(function () {
         return $(this).data("id");
       })
@@ -1066,12 +1064,11 @@
 
   function toggleBulkbar() {
     var any = currentSelection().length > 0;
-    $("#wpec-bulkbar").toggle(any);
-    $("#wpec-bulk-apply").prop("disabled", !any);
+    $("#wpec-bulkbar").css("display", any ? "flex" : "none");
+    $("#wpec-bulk-apply, #wpec-bulk-delete").prop("disabled", !any);
   }
 
   function refreshTable() {
-    // Prefer to reuse your existing refresh (Apply filters button)
     if ($("#wpec-f-apply").length) {
       $("#wpec-f-apply").trigger("click");
     } else {
@@ -1079,49 +1076,75 @@
     }
   }
 
+  // Linkify the Lists column using lists_meta from the AJAX response
+  function linkifyLists(rows) {
+    if (!rows || !rows.length) return;
+    var $trs = $("#wpec-contacts-table tbody tr");
+    $trs.each(function (i) {
+      var meta = rows[i] && rows[i].lists_meta;
+      if (!meta) return;
+      var parts = meta.split("|");
+      var links = parts
+        .map(function (pair) {
+          var ix = pair.indexOf("::");
+          if (ix === -1) return null;
+          var id = pair.slice(0, ix);
+          var name = pair.slice(ix + 2);
+          var url =
+            (window.WPEC && WPEC.listViewBase ? WPEC.listViewBase : "") + id;
+          // escape name
+          var span = document.createElement("span");
+          span.textContent = name;
+          return '<a href="' + url + '">' + span.innerHTML + "</a>";
+        })
+        .filter(Boolean);
+      var $cells = $(this).children("td");
+      var $listsCell = $cells.last(); // lists column is last
+      $listsCell.html(links.length ? links.join(", ") : "<em>-</em>");
+    });
+  }
+
   function wireAllPage() {
     if (!isAllPage()) return;
 
-    // Add master checkbox behavior
+    // master checkbox (header)
     $(document).on("change", "#wpec-master-cb", function () {
       var on = $(this).is(":checked");
-      $("#wpec-contacts-table tbody input.wpec-row-cb").prop("checked", on);
+      $("#wpec-contacts-table tbody .wpec-row-cb").prop("checked", on);
       toggleBulkbar();
     });
 
-    // Row checkbox behavior
+    // row checkboxes
     $(document).on(
       "change",
-      "#wpec-contacts-table tbody input.wpec-row-cb",
+      "#wpec-contacts-table tbody .wpec-row-cb",
       function () {
-        // If any unchecked, also uncheck master
         if (!$(this).is(":checked"))
           $("#wpec-master-cb").prop("checked", false);
         toggleBulkbar();
       }
     );
 
-    // Watch tbody changes and decorate newly loaded rows
+    // observe tbody for re-renders
     var $tbody = $("#wpec-contacts-table tbody");
     if ($tbody.length && "MutationObserver" in window) {
       new MutationObserver(function () {
         decorateAllRows();
+        toggleBulkbar();
       }).observe($tbody.get(0), { childList: true });
     }
 
-    // Initial decorate (for initial load and for any already-present rows)
+    // initial pass
     decorateAllRows();
     toggleBulkbar();
 
-    // Apply action
+    // Apply (move)
     $(document).on("click", "#wpec-bulk-apply", function () {
       var dest = $("#wpec-bulk-dest").val();
       var ids = currentSelection();
       if (!dest || !ids.length) return;
-
       $("#wpec-bulk-loader").show();
 
-      // status:* => DND/Bounced/Active
       if (dest.indexOf("status:") === 0) {
         var status = dest.split(":")[1]; // unsubscribed | bounced | active
         var mode = status === "active" ? "remove" : "add";
@@ -1136,9 +1159,7 @@
           $("#wpec-master-cb").prop("checked", false);
           refreshTable();
         });
-      }
-      // list:* => map to a normal list
-      else if (dest.indexOf("list:") === 0) {
+      } else if (dest.indexOf("list:") === 0) {
         var listId = parseInt(dest.split(":")[1], 10);
         $.post(WPEC.ajaxUrl, {
           action: "wpec_contacts_bulk_move",
@@ -1151,6 +1172,44 @@
           refreshTable();
         });
       }
+    });
+
+    // Delete selected
+    $(document).on("click", "#wpec-bulk-delete", function () {
+      var ids = currentSelection();
+      if (!ids.length) return;
+      if (!window.confirm("Delete selected contacts? This cannot be undone."))
+        return;
+
+      $("#wpec-bulk-loader").show();
+      $.post(WPEC.ajaxUrl, {
+        action: "wpec_contacts_bulk_delete",
+        nonce: WPEC.nonce,
+        ids: ids,
+      }).always(function () {
+        $("#wpec-bulk-loader").hide();
+        $("#wpec-master-cb").prop("checked", false);
+        refreshTable();
+      });
+    });
+
+    // Intercept the contacts AJAX to linkify lists after the table renders
+    $(document).ajaxSuccess(function (_e, xhr, settings) {
+      try {
+        if (!settings || !settings.data) return;
+        if (settings.url.indexOf("admin-ajax.php") === -1) return;
+        if (settings.data.indexOf("action=wpec_contacts_query") === -1) return;
+
+        var resp = xhr.responseJSON || JSON.parse(xhr.responseText);
+        if (resp && resp.success && resp.data && resp.data.rows) {
+          // Defer so the original renderer paints first
+          setTimeout(function () {
+            decorateAllRows();
+            linkifyLists(resp.data.rows);
+            toggleBulkbar();
+          }, 0);
+        }
+      } catch (err) {}
     });
   }
 
