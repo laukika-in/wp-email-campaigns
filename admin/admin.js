@@ -30,26 +30,35 @@
   function anyChecked($scope) {
     return $scope.find('input[name="ids[]"]:checked').length > 0;
   }
+  // Show/hide bulk bar and enable/disable Apply
   function setBulkState() {
-    const $checks = $("#wpec-contacts-table tbody .wpec-row-cb:checked");
-    const hasSel = $checks.length > 0;
+    const anyChecked =
+      $("#wpec-contacts-table tbody .wpec-row-cb:checked").length > 0;
+    const destVal = ($("#wpec-bulk-dest").val() || "").trim();
 
-    // Show/hide the bulk bar
-    $("#wpec-bulkbar").css("display", hasSel ? "flex" : "none");
+    // show bulk bar only when at least one row is checked
+    $("#wpec-bulkbar").toggle(!!anyChecked);
 
-    // Enable/disable buttons
-    $("#wpec-bulk-delete").prop("disabled", !hasSel);
-    const dest = $("#wpec-bulk-dest").val() || "";
-    $("#wpec-bulk-apply").prop("disabled", !(hasSel && dest));
+    // enable Apply when a destination is selected (list:NN OR status:xxx)
+    const canApply = !!(anyChecked && destVal.length);
+    $("#wpec-bulk-apply").prop("disabled", !canApply);
   }
 
-  // Bind updates (checkboxes + destination change)
+  // events that affect bulk state
+  $(document).on("change", "#wpec-master-cb", function () {
+    const checked = $(this).is(":checked");
+    $("#wpec-contacts-table tbody .wpec-row-cb").prop("checked", checked);
+    setBulkState();
+  });
   $(document).on(
-    "change click",
-    '.wp-list-table input[type="checkbox"], #wpec-contacts-table input[type="checkbox"], #wpec-bulk-dest',
+    "change",
+    "#wpec-contacts-table tbody .wpec-row-cb",
     setBulkState
   );
-  $(document).ready(setBulkState);
+  $(document).on("change", "#wpec-bulk-dest", setBulkState);
+
+  // ensure state is recalculated after table refresh
+  $(document).on("wpec:tableRefreshed", setBulkState);
 
   // ── Campaign publish confirm ──────────────────────────────────────────────
   $(function () {

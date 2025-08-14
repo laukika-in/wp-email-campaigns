@@ -724,19 +724,31 @@ public function ajax_status_bulk_update() {
     if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
 
     $ids    = isset($_POST['ids']) && is_array($_POST['ids']) ? array_map('absint', $_POST['ids']) : [];
-    $mode   = sanitize_key($_POST['mode'] ?? 'remove'); // 'add' -> set to status; 'remove' -> set back to active
-    $status = sanitize_key($_POST['status'] ?? 'unsubscribed'); // 'unsubscribed' or 'bounced'
+    $mode   = sanitize_key($_POST['mode'] ?? 'remove'); // 'add' or 'remove'
+    $status = sanitize_key($_POST['status'] ?? 'unsubscribed');
 
     if ( empty($ids) ) wp_send_json_error(['message'=>'No contacts']);
+
+    // Accept friendly alias
+    if ( $status === 'donotsend' ) { $status = 'unsubscribed'; }
+
+    // Only allow known statuses
+    $allowed = ['unsubscribed','bounced','active'];
+    if ( $mode === 'add' && ! in_array($status, $allowed, true) ) {
+        wp_send_json_error(['message'=>'Bad status']);
+    }
 
     $ct = Helpers::table('contacts');
     $db = Helpers::db();
 
     if ( $mode === 'add' ) {
-        $updated = $db->query( "UPDATE $ct SET status='".esc_sql($status)."' WHERE id IN (".implode(',', $ids ).")" );
+        // Move INTO virtual list (DND/Bounced)
+        $updated = $db->query( "UPDATE $ct SET status='".$status."' WHERE id IN (".implode(',', $ids ).")" );
     } else {
+        // Move OUT: back to active
         $updated = $db->query( "UPDATE $ct SET status='active' WHERE id IN (".implode(',', $ids ).")" );
     }
+
     wp_send_json_success([ 'updated' => (int)$updated ]);
 }
 
