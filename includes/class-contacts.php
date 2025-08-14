@@ -300,7 +300,22 @@ class Contacts {
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
         // Bulk actions toolbar
-        echo '<div class="wpec-card" id="wpec-bulkbar">';
+        echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
+        echo '<label style="margin-right:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</label>';
+        echo '<select id="wpec-bulk-dest" style="min-width:240px">';
+        echo '<option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
+        foreach ( $lists as $l ) {
+            printf('<option value="list:%d">%s</option>', (int)$l['id'], esc_html($l['name'].' ('.$l['cnt'].')'));
+        }
+        // special “virtual” destinations (statuses)
+        echo '<option value="status:unsubscribed">→ '.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
+        echo '<option value="status:bounced">→ '.esc_html__('Bounced','wp-email-campaigns').'</option>';
+        echo '<option value="status:active">→ '.esc_html__('Remove DND/Bounced (Active)','wp-email-campaigns').'</option>';
+        echo '</select> ';
+        echo '<button class="button" id="wpec-bulk-apply" disabled>'.esc_html__('Apply','wp-email-campaigns').'</button> ';
+        echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
+        echo '</div>';
+
         echo '<label class="wpec-bulk-action-label">'.esc_html__('Bulk actions:', 'wp-email-campaigns').'</label> ';
         echo '<button class="button" id="wpec-bulk-delete" disabled>'.esc_html__('Delete selected', 'wp-email-campaigns').'</button> ';
         echo '<span class="wpec-bulk-move">';
@@ -384,7 +399,14 @@ class Contacts {
         // Table + pagination
         echo '<div id="wpec-contacts-table-wrap" class="wpec-card">';
         echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-contacts-table">';
-        echo '<thead><tr><th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>'.esc_html__('ID','wp-email-campaigns').'</th><th>'.esc_html__('Full name','wp-email-campaigns').'</th><th>'.esc_html__('Email','wp-email-campaigns').'</th><th>'.esc_html__('List(s)','wp-email-campaigns').'</th></tr></thead>';
+       echo '<thead><tr>';
+        echo '<th style="width:24px"><input type="checkbox" id="wpec-master-cb"></th>';
+        echo '<th>'.esc_html__('ID','wp-email-campaigns').'</th>';
+        echo '<th>'.esc_html__('Full name','wp-email-campaigns').'</th>';
+        echo '<th>'.esc_html__('Email','wp-email-campaigns').'</th>';
+        echo '<th>'.esc_html__('List(s)','wp-email-campaigns').'</th>';
+        echo '</tr></thead>';
+
         echo '<tbody></tbody>';
         echo '</table></div>';
 
@@ -788,35 +810,32 @@ public function ajax_status_add_by_email() {
     }
 
     public function ajax_contacts_bulk_move() {
-        check_ajax_referer( 'wpec_admin', 'nonce' );
-        if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
 
-        $ids = isset($_POST['contact_ids']) ? array_map('absint', (array)$_POST['contact_ids']) : [];
-        $list_id = absint($_POST['list_id'] ?? 0);
-        if (!$ids || !$list_id) wp_send_json_error(['message'=>'Missing contacts or list']);
+    $ids     = isset($_POST['ids']) && is_array($_POST['ids']) ? array_map('absint', $_POST['ids']) : [];
+    $list_id = absint($_POST['list_id'] ?? 0);
+    if ( empty($ids) || ! $list_id ) wp_send_json_error(['message'=>'Bad params']);
 
-        $db = Helpers::db();
-        $li = Helpers::table('list_items');
-        $ls = Helpers::table('lists');
+    $db = Helpers::db();
+    $li = Helpers::table('list_items');
+    $now = Helpers::now();
 
-        $added = 0;
-        foreach ( $ids as $cid ) {
-            $exists = $db->get_var( $db->prepare("SELECT id FROM $li WHERE list_id=%d AND contact_id=%d", $list_id, $cid) );
-            if ( ! $exists ) {
-                $db->insert( $li, [
-                    'list_id' => $list_id,
-                    'contact_id' => $cid,
-                    'is_duplicate_import' => 0,
-                    'created_at' => Helpers::now(),
-                ] );
-                $added++;
-            }
+    $mapped = 0;
+    foreach ( $ids as $cid ) {
+        $exists = $db->get_var( $db->prepare( "SELECT id FROM $li WHERE list_id=%d AND contact_id=%d", $list_id, $cid ) );
+        if ( ! $exists ) {
+            $db->insert( $li, [
+                'list_id' => $list_id,
+                'contact_id' => $cid,
+                'is_duplicate_import' => 0,
+                'created_at' => $now,
+            ] );
+            $mapped++;
         }
-        if ( $added > 0 ) {
-            $db->query( $db->prepare("UPDATE $ls SET manual_added = COALESCE(manual_added,0)+%d WHERE id=%d", $added, $list_id) );
-        }
-        wp_send_json_success(['added'=>$added]);
     }
+    wp_send_json_success([ 'mapped' => $mapped ]);
+}
 
     // ===================== AJAX Contacts directory query =====================
     public function ajax_contacts_query() {

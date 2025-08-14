@@ -1031,4 +1031,128 @@
       });
     });
   });
+  function isAllPage() {
+    return $('#wpec-contacts-app[data-page="all"]').length > 0;
+  }
+
+  function decorateAllRows() {
+    if (!isAllPage()) return;
+    var $tbody = $("#wpec-contacts-table tbody");
+    $tbody.find("tr").each(function () {
+      var $tr = $(this);
+      // if checkbox already present, skip
+      if ($tr.find("td:first-child input.wpec-row-cb").length) return;
+
+      var $cells = $tr.children("td");
+      if ($cells.length < 4) return; // expect: ID, Full name, Email, Lists
+
+      var idText = $cells.eq(0).text().trim();
+      var id = parseInt(idText, 10) || "";
+      $tr.prepend(
+        '<td><input type="checkbox" class="wpec-row-cb" data-id="' +
+          id +
+          '"></td>'
+      );
+    });
+  }
+
+  function currentSelection() {
+    return $(".wpec-row-cb:checked")
+      .map(function () {
+        return $(this).data("id");
+      })
+      .get();
+  }
+
+  function toggleBulkbar() {
+    var any = currentSelection().length > 0;
+    $("#wpec-bulkbar").toggle(any);
+    $("#wpec-bulk-apply").prop("disabled", !any);
+  }
+
+  function refreshTable() {
+    // Prefer to reuse your existing refresh (Apply filters button)
+    if ($("#wpec-f-apply").length) {
+      $("#wpec-f-apply").trigger("click");
+    } else {
+      location.reload();
+    }
+  }
+
+  function wireAllPage() {
+    if (!isAllPage()) return;
+
+    // Add master checkbox behavior
+    $(document).on("change", "#wpec-master-cb", function () {
+      var on = $(this).is(":checked");
+      $("#wpec-contacts-table tbody input.wpec-row-cb").prop("checked", on);
+      toggleBulkbar();
+    });
+
+    // Row checkbox behavior
+    $(document).on(
+      "change",
+      "#wpec-contacts-table tbody input.wpec-row-cb",
+      function () {
+        // If any unchecked, also uncheck master
+        if (!$(this).is(":checked"))
+          $("#wpec-master-cb").prop("checked", false);
+        toggleBulkbar();
+      }
+    );
+
+    // Watch tbody changes and decorate newly loaded rows
+    var $tbody = $("#wpec-contacts-table tbody");
+    if ($tbody.length && "MutationObserver" in window) {
+      new MutationObserver(function () {
+        decorateAllRows();
+      }).observe($tbody.get(0), { childList: true });
+    }
+
+    // Initial decorate (for initial load and for any already-present rows)
+    decorateAllRows();
+    toggleBulkbar();
+
+    // Apply action
+    $(document).on("click", "#wpec-bulk-apply", function () {
+      var dest = $("#wpec-bulk-dest").val();
+      var ids = currentSelection();
+      if (!dest || !ids.length) return;
+
+      $("#wpec-bulk-loader").show();
+
+      // status:* => DND/Bounced/Active
+      if (dest.indexOf("status:") === 0) {
+        var status = dest.split(":")[1]; // unsubscribed | bounced | active
+        var mode = status === "active" ? "remove" : "add";
+        $.post(WPEC.ajaxUrl, {
+          action: "wpec_status_bulk_update",
+          nonce: WPEC.nonce,
+          mode: mode,
+          status: status,
+          ids: ids,
+        }).always(function () {
+          $("#wpec-bulk-loader").hide();
+          $("#wpec-master-cb").prop("checked", false);
+          refreshTable();
+        });
+      }
+      // list:* => map to a normal list
+      else if (dest.indexOf("list:") === 0) {
+        var listId = parseInt(dest.split(":")[1], 10);
+        $.post(WPEC.ajaxUrl, {
+          action: "wpec_contacts_bulk_move",
+          nonce: WPEC.nonce,
+          list_id: listId,
+          ids: ids,
+        }).always(function () {
+          $("#wpec-bulk-loader").hide();
+          $("#wpec-master-cb").prop("checked", false);
+          refreshTable();
+        });
+      }
+    });
+  }
+
+  $(wireAllPage);
 })(jQuery);
