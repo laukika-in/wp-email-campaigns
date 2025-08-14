@@ -1146,38 +1146,83 @@
     decorateAllRows();
     toggleBulkbar();
 
-    // Apply (move)
-    $(document).on("click", "#wpec-bulk-apply", function () {
-      var dest = $("#wpec-bulk-dest").val();
-      var ids = currentSelection();
+    // Bulk: Apply (list move OR status update)
+    $(document).on("click", "#wpec-bulk-apply", function (e) {
+      e.preventDefault();
+
+      const dest = $("#wpec-bulk-dest").val() || "";
+      const $checks = $("#wpec-contacts-table tbody .wpec-row-cb:checked");
+      const ids = $checks
+        .map(function () {
+          return parseInt($(this).data("id"), 10) || 0;
+        })
+        .get()
+        .filter(Boolean);
+
       if (!dest || !ids.length) return;
+
+      // UI lock
+      $("#wpec-bulk-apply").prop("disabled", true);
       $("#wpec-bulk-loader").show();
 
-      if (dest.indexOf("status:") === 0) {
-        var status = dest.split(":")[1]; // unsubscribed | bounced | active
-        var mode = status === "active" ? "remove" : "add";
-        $.post(WPEC.ajaxUrl, {
-          action: "wpec_status_bulk_update",
-          nonce: WPEC.nonce,
-          mode: mode,
-          status: status,
-          ids: ids,
-        }).always(function () {
-          $("#wpec-bulk-loader").hide();
-          $("#wpec-master-cb").prop("checked", false);
-          refreshTable();
+      // Helpers
+      const done = () => {
+        $("#wpec-bulk-loader").hide();
+        $("#wpec-bulk-apply").prop("disabled", false);
+        // clear selection & reload table
+        $("#wpec-master-cb").prop("checked", false);
+        setBulkState();
+        // Re-run the current query (works whether filters used or not)
+        $("#wpec-f-apply").trigger("click");
+      };
+      const fail = (msg) => {
+        $("#wpec-bulk-loader").hide();
+        $("#wpec-bulk-apply").prop("disabled", false);
+        alert(msg || "Operation failed.");
+      };
+
+      // list:NN or status:unsubscribed|bounced|active
+      if (dest.indexOf("list:") === 0) {
+        const listId = parseInt(dest.split(":")[1], 10) || 0;
+        if (!listId) return fail("Bad destination list.");
+
+        $.post(
+          WPEC.ajaxUrl,
+          {
+            action: "wpec_contacts_bulk_move",
+            nonce: WPEC.nonce,
+            ids: ids,
+            list_id: listId,
+          },
+          function (res) {
+            if (res && res.success) return done();
+            fail(res && res.data && res.data.message);
+          },
+          "json"
+        ).fail(function () {
+          fail();
         });
-      } else if (dest.indexOf("list:") === 0) {
-        var listId = parseInt(dest.split(":")[1], 10);
-        $.post(WPEC.ajaxUrl, {
-          action: "wpec_contacts_bulk_move",
-          nonce: WPEC.nonce,
-          list_id: listId,
-          ids: ids,
-        }).always(function () {
-          $("#wpec-bulk-loader").hide();
-          $("#wpec-master-cb").prop("checked", false);
-          refreshTable();
+      } else if (dest.indexOf("status:") === 0) {
+        const status = dest.split(":")[1]; // unsubscribed | bounced | active
+        const isRemove = status === "active"; // 'active' means remove from DND/Bounced
+
+        $.post(
+          WPEC.ajaxUrl,
+          {
+            action: "wpec_status_bulk_update",
+            nonce: WPEC.nonce,
+            ids: ids,
+            mode: isRemove ? "remove" : "add",
+            // 'status' is used only when mode = add; WP handler ignores it for remove.
+            status: isRemove ? "unsubscribed" : status,
+          },
+          function (res) {
+            if (res && res.success) return done();
+            fail(res && res.data && res.data.message);
+          },
+          "json"
+        ).fail(function () {
+          fail();
         });
       }
     });
