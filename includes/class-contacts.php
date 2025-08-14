@@ -362,6 +362,8 @@ class Contacts {
             }
             echo '</select>';
         };
+        echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br><select id="wpec-f-status" multiple class="wpec-s2" data-placeholder="'.esc_attr__('Select Status','wp-email-campaigns').'">';
+        foreach ( $status as $v ) { echo '<option value="'.esc_attr($v).'">'.esc_html($v).'</option>'; } echo '</select></label>';
 
                 // Status (matches DB values exactly)
         echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br>';
@@ -870,21 +872,15 @@ public function ajax_status_add_by_email() {
         $rev_min  = isset($_POST['rev_min']) && $_POST['rev_min'] !== '' ? (int)$_POST['rev_min'] : null;
         $rev_max  = isset($_POST['rev_max']) && $_POST['rev_max'] !== '' ? (int)$_POST['rev_max'] : null;
         // ADD: parse status filter
-        $status = sanitize_key($_POST['status'] ?? '');
+        $status = sanitize_key( $_POST['status'] ?? '' );
+        // allow legacy alias
+        if ( $status === 'donotsend' ) { $status = 'unsubscribed'; }
 
-// normalize common synonyms
-if ( in_array( $status, ['donotsend','do_not_send','do-not-send','dnd'], true ) ) {
-    $status = 'unsubscribed';
-}
-if ( in_array( $status, ['any','all'], true ) ) {
-    $status = '';
-}
-
-if ( $status ) {
-    $where[] = "c.status = %s";
-    $args[]  = $status;
-}
-
+        // whitelist to avoid bad values
+        $allowed_statuses = [ 'active', 'unsubscribed', 'bounced' ];
+        if ( $status && ! in_array( $status, $allowed_statuses, true ) ) {
+            $status = '';
+        }
 
         $allowed_cols = [
             'company_name','company_employees','company_annual_revenue','contact_number',
