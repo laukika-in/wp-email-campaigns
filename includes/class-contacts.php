@@ -354,6 +354,13 @@ class Contacts {
         echo '<input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0"> ';
         echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
         echo '</div></label>';
+        $render_select2 = function($id, $values) {
+            echo '<select id="'.$id.'" multiple="multiple" class="wpec-s2" style="min-width:240px">';
+            foreach ( (array)$values as $val ) {
+                echo '<option value="'.esc_attr($val).'">'.esc_html($val).'</option>';
+            }
+            echo '</select>';
+        };
 
         echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br>';
         echo '<select id="wpec-f-status" class="wpec-s2" style="min-width:240px">';
