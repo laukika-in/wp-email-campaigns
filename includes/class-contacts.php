@@ -299,7 +299,7 @@ class Contacts {
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
-        echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
+ 
 echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
 echo '<label style="margin-right:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</label>';
 echo '<select id="wpec-bulk-dest" style="min-width:240px">';
