@@ -114,7 +114,7 @@ class Contacts {
             $parent,
             __( 'Do Not Send', 'wp-email-campaigns' ),
             __( 'Do Not Send', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
+           $cap,
             'wpec-donotsend',
             function(){ $this->render_status_list( 'donotsend' ); },
             23
@@ -124,7 +124,7 @@ class Contacts {
             $parent,
             __( 'Bounced', 'wp-email-campaigns' ),
             __( 'Bounced', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
+           $cap,
             'wpec-bounced',
             function(){ $this->render_status_list( 'bounced' ); },
             24
