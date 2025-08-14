@@ -299,7 +299,6 @@ class Contacts {
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
-        // Bulk actions toolbar
         echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
         echo '<label style="margin-right:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</label>';
         echo '<select id="wpec-bulk-dest" style="min-width:240px">';
@@ -316,19 +315,6 @@ class Contacts {
         echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
         echo '</div>';
 
-        echo '<label class="wpec-bulk-action-label">'.esc_html__('Bulk actions:', 'wp-email-campaigns').'</label> ';
-        echo '<button class="button" id="wpec-bulk-delete" disabled>'.esc_html__('Delete selected', 'wp-email-campaigns').'</button> ';
-        echo '<span class="wpec-bulk-move">';
-        echo '<select id="wpec-bulk-move-list" style="min-width:260px">';
-        echo '<option value="">'.esc_html__('Move to list…','wp-email-campaigns').'</option>';
-        foreach ( $lists as $l ) {
-            printf('<option value="%d">%s (%s)</option>', (int)$l['id'], esc_html($l['name']), number_format_i18n((int)$l['cnt']));
-        }
-        echo '</select> ';
-        echo '<button class="button" id="wpec-bulk-move" disabled>'.esc_html__('Add to list', 'wp-email-campaigns').'</button>';
-        echo '</span>';
-        echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none;"></span>';
-        echo '</div>';
 
         // Controls: columns toggle + filters + export
         echo '<div id="wpec-contacts-controls" class="wpec-card">';
