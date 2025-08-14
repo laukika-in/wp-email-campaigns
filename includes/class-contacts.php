@@ -142,7 +142,7 @@ class Contacts {
             'startImport'    => isset($_GET['wpec_start_import']) ? intval($_GET['wpec_start_import']) : 0,
             'select2CdnJs'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
             'select2CdnCss'  => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-                'listViewBase'    => admin_url('edit.php?post_type=email_campaign&page=wpec-contacts&view=list&list_id=')
+            'listViewBase'    => admin_url('edit.php?post_type=email_campaign&page=wpec-contacts&view=list&list_id='),
 
         ] );
     }
@@ -282,24 +282,21 @@ class Contacts {
 
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
- 
-echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
-echo '<label style="margin-right:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</label>';
-echo '<select id="wpec-bulk-dest" style="min-width:240px">';
-echo '<option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
-foreach ( $lists as $l ) {
-    printf('<option value="list:%d">%s</option>', (int)$l['id'], esc_html($l['name'].' ('.$l['cnt'].')'));
-}
-echo '<option value="status:unsubscribed">→ '.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
-echo '<option value="status:bounced">→ '.esc_html__('Bounced','wp-email-campaigns').'</option>';
-echo '<option value="status:active">→ '.esc_html__('Remove DND/Bounced (Active)','wp-email-campaigns').'</option>';
-echo '</select> ';
-echo '<button class="button" id="wpec-bulk-apply" disabled>'.esc_html__('Apply','wp-email-campaigns').'</button> ';
-echo '<button class="button button-secondary" id="wpec-bulk-delete" disabled>'.esc_html__('Delete selected','wp-email-campaigns').'</button> ';
-echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
-echo '</div>';
-
-
+        echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
+        echo '<label style="margin-right:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</label>';
+        echo '<select id="wpec-bulk-dest" style="min-width:240px">';
+        echo '<option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
+        foreach ( $lists as $l ) {
+            printf('<option value="list:%d">%s</option>', (int)$l['id'], esc_html($l['name'].' ('.$l['cnt'].')'));
+        }
+        echo '<option value="status:unsubscribed">→ '.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
+        echo '<option value="status:bounced">→ '.esc_html__('Bounced','wp-email-campaigns').'</option>';
+        echo '<option value="status:active">→ '.esc_html__('Remove DND/Bounced (Active)','wp-email-campaigns').'</option>';
+        echo '</select> ';
+        echo '<button class="button" id="wpec-bulk-apply" disabled>'.esc_html__('Apply','wp-email-campaigns').'</button> ';
+        echo '<button class="button button-secondary" id="wpec-bulk-delete" disabled>'.esc_html__('Delete selected','wp-email-campaigns').'</button> ';
+        echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
+        echo '</div>';
 
         // Controls: columns toggle + filters + export
         echo '<div id="wpec-contacts-controls" class="wpec-card">';
@@ -359,12 +356,12 @@ echo '</div>';
         echo '</div></label>';
 
         echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br>';
-echo '<select id="wpec-f-status">';
-echo '<option value="">'.esc_html__('— Any —','wp-email-campaigns').'</option>';
-echo '<option value="active">'.esc_html__('Active','wp-email-campaigns').'</option>';
-echo '<option value="unsubscribed">'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
-echo '<option value="bounced">'.esc_html__('Bounced','wp-email-campaigns').'</option>';
-echo '</select></label>';
+        echo '<select id="wpec-f-status" class="wpec-s2" style="min-width:240px">';
+        echo '<option value="">' . esc_html__('— Any —','wp-email-campaigns') . '</option>';
+        echo '<option value="active">' . esc_html__('Active','wp-email-campaigns') . '</option>';
+        echo '<option value="unsubscribed">' . esc_html__('Do Not Send','wp-email-campaigns') . '</option>';
+        echo '<option value="bounced">' . esc_html__('Bounced','wp-email-campaigns') . '</option>';
+        echo '</select></label>';
 
         echo '</div>'; // row
 
@@ -908,15 +905,20 @@ public function ajax_status_add_by_email() {
         }
 
         $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email, c.status";
-
         foreach ( $cols as $cname ) { $select_cols .= ", c." . $cname; }
+
+        // Human-readable list names (existing)
         $select_cols .= ",
-        (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
+            (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
             FROM $li li INNER JOIN $ls l ON l.id=li.list_id
-        WHERE li.contact_id=c.id) AS lists,
-        (SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li.created_at DESC SEPARATOR '|')
+            WHERE li.contact_id=c.id) AS lists";
+
+        // NEW: machine-parsable id::name pairs for linkification in JS
+        $select_cols .= ",
+            (SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li.created_at DESC SEPARATOR '|')
             FROM $li li INNER JOIN $ls l ON l.id=li.list_id
-        WHERE li.contact_id=c.id) AS lists_meta";
+            WHERE li.contact_id=c.id) AS lists_meta";
+
 
 
         $where_sql = implode(' AND ', $where);

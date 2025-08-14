@@ -798,11 +798,6 @@
   $("#wpec-export-contacts").on("click", function (e) {
     e.preventDefault();
     var f = currentFilters();
-    if (f.status) {
-      form.append(
-        $("<input>", { type: "hidden", name: "status", value: f.status })
-      );
-    }
 
     var form = $(
       '<form method="POST" action="' + WPEC.ajaxUrl + '" target="_blank">'
@@ -812,6 +807,14 @@
         '<input type="hidden" name="action" value="wpec_contacts_export">'
       )
       .append('<input type="hidden" name="nonce" value="' + WPEC.nonce + '">');
+
+    // include Status when present
+    if (f.status) {
+      form.append(
+        $("<input>", { type: "hidden", name: "status", value: f.status })
+      );
+    }
+
     function appendArr(key, arr) {
       (arr || []).forEach(function (v) {
         form.append(
@@ -846,6 +849,7 @@
       form.append(
         $("<input>", { type: "hidden", name: "rev_max", value: f.rev_max })
       );
+
     $(document.body).append(form);
     form[0].submit();
     setTimeout(function () {
