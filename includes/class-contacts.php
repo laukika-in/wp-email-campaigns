@@ -108,27 +108,7 @@ class Contacts {
             'wpec-duplicates',
             [ $this, 'render_duplicates_page' ],
             22
-        );
-                // Special, non-deletable lists
-        add_submenu_page(
-            $parent,
-            __( 'Do Not Send', 'wp-email-campaigns' ),
-            __( 'Do Not Send', 'wp-email-campaigns' ),
-           $cap,
-            'wpec-donotsend',
-            function(){ $this->render_status_list( 'donotsend' ); },
-            23
-        );
-
-        add_submenu_page(
-            $parent,
-            __( 'Bounced', 'wp-email-campaigns' ),
-            __( 'Bounced', 'wp-email-campaigns' ),
-           $cap,
-            'wpec-bounced',
-            function(){ $this->render_status_list( 'bounced' ); },
-            24
-        );
+        ); 
     }
 
     /** Ensure CSS/JS on all our admin pages; also expose Select2 sources */
@@ -377,6 +357,15 @@ echo '</div>';
         echo '<input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0"> ';
         echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
         echo '</div></label>';
+
+        echo '<label>'.esc_html__('Status','wp-email-campaigns').'<br>';
+echo '<select id="wpec-f-status">';
+echo '<option value="">'.esc_html__('— Any —','wp-email-campaigns').'</option>';
+echo '<option value="active">'.esc_html__('Active','wp-email-campaigns').'</option>';
+echo '<option value="unsubscribed">'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
+echo '<option value="bounced">'.esc_html__('Bounced','wp-email-campaigns').'</option>';
+echo '</select></label>';
+
         echo '</div>'; // row
 
         echo '<div class="wpec-filter-actions">';
@@ -918,7 +907,8 @@ public function ajax_status_add_by_email() {
             foreach ($list_ids as $lid) { $args[] = $lid; }
         }
 
-        $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email";
+        $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email, c.status";
+
         foreach ( $cols as $cname ) { $select_cols .= ", c." . $cname; }
         $select_cols .= ",
         (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
@@ -1514,6 +1504,16 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         $pill = !empty($item['is_duplicate_import']) ? ' <span class="wpec-pill wpec-pill-dup">'.esc_html__('Duplicate','wp-email-campaigns').'</span>' : '';
         return esc_html( $item['email'] ) . $pill;
     }
+    public function column_status( $item ) {
+    $status = isset($item['status']) ? $item['status'] : '';
+    $label  = $status === 'unsubscribed' ? __( 'Do Not Send', 'wp-email-campaigns' )
+             : ( $status === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' )
+             : __( 'Active', 'wp-email-campaigns' ) );
+
+    $cls = ($status && $status !== 'active') ? ' wpec-pill wpec-pill-'.$status : '';
+    return '<span class="'.trim($cls).'">'.esc_html($label).'</span>';
+}
+
     public function column_actions( $item ) {
         $url = add_query_arg( [
             'post_type' => 'email_campaign','page'=>'wpec-contacts','view'=>'contact','contact_id'=> (int)$item['contact_id']

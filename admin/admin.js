@@ -512,6 +512,8 @@
       emp_max: $("#wpec-f-emp-max").val(),
       rev_min: $("#wpec-f-rev-min").val(),
       rev_max: $("#wpec-f-rev-max").val(),
+
+      status: $("#wpec-f-status").val() || "",
     };
   }
 
@@ -610,7 +612,17 @@
             '">' +
             escapeHtml(r.full_name || "") +
             "</a></td>";
-          html += "<td>" + escapeHtml(r.email || "") + "</td>";
+          var emailHtml = escapeHtml(r.email || "");
+          if (r.status && r.status !== "active") {
+            var txt = r.status === "unsubscribed" ? "DND" : "Bounced";
+            emailHtml +=
+              ' <span class="wpec-pill wpec-pill-' +
+              r.status +
+              '">' +
+              txt +
+              "</span>";
+          }
+          html += "<td>" + emailHtml + "</td>";
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
           cols.forEach(function (c) {
             html +=
@@ -700,6 +712,8 @@
       ""
     );
     $(".wpec-col-toggle").prop("checked", false);
+    $("#wpec-f-status").val("").trigger("change");
+
     contactsQuery(1);
   });
   $(document).on("change", ".wpec-col-toggle", function () {
@@ -784,6 +798,12 @@
   $("#wpec-export-contacts").on("click", function (e) {
     e.preventDefault();
     var f = currentFilters();
+    if (f.status) {
+      form.append(
+        $("<input>", { type: "hidden", name: "status", value: f.status })
+      );
+    }
+
     var form = $(
       '<form method="POST" action="' + WPEC.ajaxUrl + '" target="_blank">'
     );
