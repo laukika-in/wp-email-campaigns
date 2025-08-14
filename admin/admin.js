@@ -859,6 +859,7 @@
       }
     }
   });
+
   // ===== Special Lists (Do Not Send / Bounced) =====
 (function($){
   function buildRow(r){
@@ -978,5 +979,6 @@
         fetchSpecial({page:1});
       });
     });
-  
+  }); 
+
 })(jQuery);
