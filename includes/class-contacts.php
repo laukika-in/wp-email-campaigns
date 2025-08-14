@@ -52,51 +52,53 @@ class Contacts {
         add_action( 'admin_post_wpec_export_contacts', [ $this, 'export_contacts' ] );
     }
 
-    /** Load CSS/JS for our pages (and Select2 from CDN for searchable dropdowns) */
+
     public function enqueue_assets( $hook ) {
-    $screen = get_current_screen();
-    if ( ! $screen ) return;
+        $screen = get_current_screen();
+        if ( ! $screen ) return;
 
-    $targets = [
-        'email_campaign_page_wpec-all-contacts',
-        'email_campaign_page_wpec-contacts',     // Lists page
-        'email_campaign_page_wpec-import',       // Import page
-        'email_campaign_page_wpec-duplicates',   // Duplicates page (registered below)
-        'email_campaign_page_wpec-donotsend',
-        'email_campaign_page_wpec-bounced',
-    ];
-    if ( ! in_array( $screen->id, $targets, true ) ) return;
+        $targets = [
+            'email_campaign_page_wpec-all-contacts',
+            'email_campaign_page_wpec-contacts',      // Lists page
+            'email_campaign_page_wpec-import',        // Import page (if you created it earlier)
+            'email_campaign_page_wpec-dupes-all',     // Duplicates all page (if present)
+            'email_campaign_page_wpec-donotsend',
+            'email_campaign_page_wpec-bounced',
+        ];
+        if ( ! in_array( $screen->id, $targets, true ) ) return;
 
-    // Core plugin assets
-    wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], WPEC_VERSION );
-    wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VERSION, true );
+        // Core plugin assets
+        wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], WPEC_VERSION );
+        wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VERSION, true );
+wp_enqueue_style( 'select2-local', WPEC_URL . 'admin/vendor/select2.min.css', [], '4.1.0' );
+wp_enqueue_script( 'select2-local', WPEC_URL . 'admin/vendor/select2.min.js', [ 'jquery' ], '4.1.0', true );
 
-    // Select2 (searchable dropdowns)
-    wp_enqueue_style( 'select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', [], '4.1.0' );
-    wp_enqueue_script( 'select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', [ 'jquery' ], '4.1.0', true );
+        // Select2 from CDN (lightweight way to guarantee searchable dropdowns)
+        wp_enqueue_style( 'select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', [], '4.1.0' );
+        wp_enqueue_script( 'select2', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', [ 'jquery' ], '4.1.0', true );
 
-    // IMPORTANT: localize exactly what admin.js expects
-    wp_localize_script( 'wpec-admin', 'WPEC', [
-        'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
-        'nonce'           => wp_create_nonce( 'wpec_admin' ),
-        'startImport'     => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
-        // optional fallbacks used by ensureSelect2 (safe to leave empty)
-        'select2LocalCss' => '',
-        'select2LocalJs'  => '',
-        'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-        'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
-    ] );
-}
+        // Pass globals to JS
+        wp_localize_script( 'wpec-admin', 'WPEC_CFG', [
+            'ajax'   => admin_url( 'admin-ajax.php' ),
+            'nonce'  => wp_create_nonce( 'wpec_admin' ),
+             'startImport'     => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
 
+    // Prefer local Select2; admin.js will fall back to CDN only if needed
+    'select2LocalCss' => WPEC_URL . 'admin/vendor/select2.min.css',
+    'select2LocalJs'  => WPEC_URL . 'admin/vendor/select2.min.js',
+    'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
+    'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
+
+        ] );
+    }
+
+
+  
 
     /** Rename old submenu to "Lists", add Contacts, Import (if you moved it), and new special lists */
     public function admin_menu_adjustments() {
         global $submenu;
         $parent = 'edit.php?post_type=email_campaign';
-
-        // Determine capability with a safe fallback
-        $cap = method_exists(Helpers::class, 'manage_cap') ? $cap : 'manage_options';
-        
 
         // Rename existing "Contacts" (router screen) to "Lists"
         if ( isset( $submenu[ $parent ] ) ) {
@@ -113,7 +115,7 @@ class Contacts {
             $parent,
             __( 'Contacts', 'wp-email-campaigns' ),
             __( 'Contacts', 'wp-email-campaigns' ),
-            $cap,
+            Helpers::manage_cap(),
             'wpec-all-contacts',
             [ $this, 'render_all_contacts' ],
             21
@@ -125,7 +127,7 @@ class Contacts {
                 $parent,
                 __( 'Import', 'wp-email-campaigns' ),
                 __( 'Import', 'wp-email-campaigns' ),
-                $cap,
+                Helpers::manage_cap(),
                 'wpec-import',
                 [ $this, 'render_import_stub' ],
                 22
@@ -137,7 +139,7 @@ class Contacts {
             $parent,
             __( 'Do Not Send', 'wp-email-campaigns' ),
             __( 'Do Not Send', 'wp-email-campaigns' ),
-            $cap,
+            Helpers::manage_cap(),
             'wpec-donotsend',
             function(){ $this->render_status_list( 'donotsend' ); },
             23
@@ -146,7 +148,7 @@ class Contacts {
             $parent,
             __( 'Bounced', 'wp-email-campaigns' ),
             __( 'Bounced', 'wp-email-campaigns' ),
-            $cap,
+            Helpers::manage_cap(),
             'wpec-bounced',
             function(){ $this->render_status_list( 'bounced' ); },
             24
@@ -155,7 +157,7 @@ class Contacts {
     $parent,
     __( 'Duplicates', 'wp-email-campaigns' ),
     __( 'Duplicates', 'wp-email-campaigns' ),
-    $cap,
+    Helpers::manage_cap(),
     'wpec-duplicates',
     [ $this, 'render_duplicates_page' ],
     25
