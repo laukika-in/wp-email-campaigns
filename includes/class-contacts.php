@@ -162,6 +162,8 @@ class Contacts {
             'startImport'    => isset($_GET['wpec_start_import']) ? intval($_GET['wpec_start_import']) : 0,
             'select2CdnJs'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
             'select2CdnCss'  => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
+                'listViewBase'    => admin_url('edit.php?post_type=email_campaign&page=wpec-contacts&view=list&list_id=')
+
         ] );
     }
 
@@ -905,9 +907,14 @@ public function ajax_status_add_by_email() {
 
         $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email";
         foreach ( $cols as $cname ) { $select_cols .= ", c." . $cname; }
-        $select_cols .= ", (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
-                            FROM $li li INNER JOIN $ls l ON l.id=li.list_id
-                            WHERE li.contact_id=c.id) AS lists";
+        $select_cols .= ",
+        (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li.created_at DESC SEPARATOR ', ')
+            FROM $li li INNER JOIN $ls l ON l.id=li.list_id
+        WHERE li.contact_id=c.id) AS lists,
+        (SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li.created_at DESC SEPARATOR '|')
+            FROM $li li INNER JOIN $ls l ON l.id=li.list_id
+        WHERE li.contact_id=c.id) AS lists_meta";
+
 
         $where_sql = implode(' AND ', $where);
 

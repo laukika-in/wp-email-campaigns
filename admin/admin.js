@@ -1031,6 +1031,7 @@
       });
     });
   });
+
   function isAllPage() {
     return $('#wpec-contacts-app[data-page="all"]').length > 0;
   }
