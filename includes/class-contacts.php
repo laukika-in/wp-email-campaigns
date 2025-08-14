@@ -300,20 +300,22 @@ class Contacts {
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
         echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
+echo '<div id="wpec-bulkbar" class="wpec-card" style="display:none;align-items:center;gap:8px;">';
 echo '<label style="margin-right:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</label>';
 echo '<select id="wpec-bulk-dest" style="min-width:240px">';
 echo '<option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
 foreach ( $lists as $l ) {
     printf('<option value="list:%d">%s</option>', (int)$l['id'], esc_html($l['name'].' ('.$l['cnt'].')'));
 }
-// special “virtual” destinations (statuses)
 echo '<option value="status:unsubscribed">→ '.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
 echo '<option value="status:bounced">→ '.esc_html__('Bounced','wp-email-campaigns').'</option>';
 echo '<option value="status:active">→ '.esc_html__('Remove DND/Bounced (Active)','wp-email-campaigns').'</option>';
 echo '</select> ';
 echo '<button class="button" id="wpec-bulk-apply" disabled>'.esc_html__('Apply','wp-email-campaigns').'</button> ';
+echo '<button class="button button-secondary" id="wpec-bulk-delete" disabled>'.esc_html__('Delete selected','wp-email-campaigns').'</button> ';
 echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
 echo '</div>';
+
 
 
         // Controls: columns toggle + filters + export
