@@ -248,9 +248,34 @@ add_action( 'wp_ajax_wpec_list_save_mapping', [ $this, 'ajax_list_save_mapping' 
 
         echo '<p><button type="submit" class="button button-primary" id="wpec-upload-btn">' . esc_html__( 'Upload & Import', 'wp-email-campaigns' ) . '</button> ';
         echo '<span class="wpec-loader" style="display:none;"></span></p>';
+        // === Step 2: Mapping (inline) ===
+        echo '<div id="wpec-step-map" class="wpec-card" style="display:none">';
+        echo '  <h2 style="margin-top:0;">'.esc_html__('Map columns','wp-email-campaigns').'</h2>';
+        echo '  <div id="wpec-map-errors-inline" class="notice notice-error" style="display:none"></div>';
+        echo '  <div id="wpec-map-body-inline"></div>';
+        echo '  <p style="margin-top:12px">';
+        echo '    <button class="button" id="wpec-map-back-inline">'.esc_html__('Back','wp-email-campaigns').'</button> ';
+        echo '    <button class="button button-primary" id="wpec-map-next-inline">'.esc_html__('Next','wp-email-campaigns').'</button>';
+        echo '  </p>';
+        echo '</div>';
 
-        echo '<div id="wpec-progress-wrap" style="display:none;"><div class="wpec-progress"><span id="wpec-progress-bar" style="width:0%"></span></div><p id="wpec-progress-text"></p></div>';
-        echo '<div id="wpec-import-result" class="wpec-result" style="display:none;"></div>';
+        // === Step 3: Review (inline) ===
+        echo '<div id="wpec-step-review" class="wpec-card" style="display:none">';
+        echo '  <h2 style="margin-top:0;">'.esc_html__('Review mapping','wp-email-campaigns').'</h2>';
+        echo '  <div id="wpec-map-review"></div>';
+        echo '  <p style="margin-top:12px">';
+        echo '    <button class="button" id="wpec-map-back-to-map">'.esc_html__('Back','wp-email-campaigns').'</button> ';
+        echo '    <button class="button button-primary" id="wpec-map-confirm">'.esc_html__('Start import','wp-email-campaigns').'</button> ';
+        echo '    <span class="wpec-loader" id="wpec-map-loader-inline" style="display:none"></span>';
+        echo '  </p>';
+        echo '</div>';
+
+        // === Step 4: Progress & Summary (inline) ===
+        echo '<div id="wpec-step-progress" class="wpec-card" style="display:none">';
+        echo '  <h2 style="margin-top:0;">'.esc_html__('Import progress','wp-email-campaigns').'</h2>';
+        echo '  <div id="wpec-progress-wrap" style="display:none;"><div class="wpec-progress"><span id="wpec-progress-bar" style="width:0%"></span></div><p id="wpec-progress-text"></p></div>';
+        echo '  <div id="wpec-import-result" class="wpec-result" style="display:none;"></div>';
+        echo '</div>';
 
         echo '</form></div>';
 

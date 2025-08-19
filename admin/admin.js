@@ -336,6 +336,7 @@
       });
   }
   // ===== Mapping step (between Upload and Process) =====
+// ===== Import Wizard (inline: Upload -> Map -> Review -> Progress) =====
 
 const WPEC_DB_FIELDS = [
   { key: "first_name", label: "First name", required: true },
@@ -351,72 +352,96 @@ const WPEC_DB_FIELDS = [
   { key: "state",                   label: "State" },
   { key: "city",                    label: "City" },
   { key: "postal_code",             label: "Postal code" },
-  { key: "status",                  label: "Status" } // accepts active|unsubscribed|bounced
+  { key: "status",                  label: "Status" } // active|unsubscribed|bounced
 ];
 
-let WPEC_currentListForMap = 0;
+let WPEC_listId = 0;
+let WPEC_headers = [];
+let WPEC_map = {};       // current selection (field -> column index)
 
-function openMapping(listId) {
-  WPEC_currentListForMap = parseInt(listId, 10) || 0;
-  if (!WPEC_currentListForMap) return;
+// Simple step controller
+function enterStep(n) {
+  // Step 1 = upload panel
+  $("#wpec-upload-panel").toggle(n === 1);
+  // Step 2 = map
+  $("#wpec-step-map").toggle(n === 2);
+  // Step 3 = review
+  $("#wpec-step-review").toggle(n === 3);
+  // Step 4 = progress
+  $("#wpec-step-progress").toggle(n === 4);
 
-  // Show modal + overlay
-  $("#wpec-modal-overlay").show();
-  $("#wpec-map-modal").show();
-  $("#wpec-map-loader").show();
-  $("#wpec-map-errors").hide().empty();
-  $("#wpec-map-body").empty();
+  // generic loader only during requests we trigger
+  if (n === 2 || n === 3 || n === 4) {
+    $(".wpec-loader").hide(); // hide the small spinners unless explicitly shown
+  }
+}
 
-  // Fetch headers + suggestions
+// Read headers + render mapping UI
+function openMappingInline(listId) {
+  WPEC_listId = parseInt(listId, 10) || 0;
+  if (!WPEC_listId) return;
+
+  // jump to Step 2
+  enterStep(2);
+
+  $("#wpec-map-errors-inline").hide().empty();
+  $("#wpec-map-body-inline").html('<p>Reading file header…</p>');
+
   $.post(WPEC.ajaxUrl, {
     action: "wpec_list_headers",
     nonce: WPEC.nonce,
-    list_id: WPEC_currentListForMap
+    list_id: WPEC_listId
   })
     .done(function (resp) {
-      $("#wpec-map-loader").hide();
       if (!resp || !resp.success) {
-        $("#wpec-map-errors")
+        $("#wpec-map-body-inline").html("");
+        $("#wpec-map-errors-inline")
           .show()
           .text((resp && resp.data && resp.data.message) || "Failed to read headers.");
         return;
       }
-      renderMappingUI(resp.data.headers || [], resp.data.suggested || {});
+      WPEC_headers = resp.data.headers || [];
+      const suggested = resp.data.suggested || {};
+      // seed current map with suggestions
+      WPEC_map = {};
+      Object.keys(suggested).forEach(function (k) {
+        WPEC_map[k] = parseInt(suggested[k], 10);
+      });
+      renderMappingUIInline();
     })
     .fail(function () {
-      $("#wpec-map-loader").hide();
-      $("#wpec-map-errors").show().text("Failed to read headers.");
+      $("#wpec-map-body-inline").html("");
+      $("#wpec-map-errors-inline").show().text("Failed to read headers.");
     });
 }
 
-function renderMappingUI(headers, suggested) {
-  // Build a 2-column grid: DB field (left) -> select(headers) (right)
-  let html = '<table class="widefat striped"><thead><tr>' +
-             '<th style="width:280px">Database field</th><th>File column</th>' +
-             '</tr></thead><tbody>';
-
+function renderMappingUIInline() {
   function optionList(selectedIdx) {
     let out = '<option value="">' + "— Unmapped —" + "</option>";
-    headers.forEach(function (h, i) {
+    WPEC_headers.forEach(function (h, i) {
       const sel = (String(selectedIdx) === String(i)) ? ' selected' : '';
       out += '<option value="' + i + '"' + sel + '>' + escapeHtml(h || ("Column " + (i+1))) + '</option>';
     });
     return out;
   }
 
+  let html = '<table class="widefat striped"><thead><tr>' +
+             '<th style="width:280px">Database field</th><th>File column</th>' +
+             '</tr></thead><tbody>';
+
   WPEC_DB_FIELDS.forEach(function (f) {
-    const guess = suggested[f.key];
-    const reqBadge = f.required ? ' <span class="wpec-pill wpec-pill-dup">Required</span>' : '';
+    const req = f.required ? ' <span class="wpec-pill wpec-pill-dup">Required</span>' : '';
+    const sel = (f.key in WPEC_map) ? WPEC_map[f.key] : "";
     html += '<tr>';
-    html += '<td><strong>' + f.label + '</strong>' + reqBadge + '<br/><span class="description">' + (f.key) + '</span></td>';
-    html += '<td><select class="wpec-map-sel" data-field="' + f.key + '">' + optionList(guess) + '</select></td>';
+    html += '<td><strong>' + f.label + '</strong>' + req + '<br/><span class="description">' + f.key + '</span></td>';
+    html += '<td><select class="wpec-map-sel" data-field="' + f.key + '">' + optionList(sel) + '</select></td>';
     html += '</tr>';
   });
 
   html += '</tbody></table>';
-  $("#wpec-map-body").html(html);
+  $("#wpec-map-body-inline").html(html);
 
-  // Make selects searchable if Select2 is present
+  // enhance selects
   ensureSelect2(function () {
     $(".wpec-map-sel").select2({
       width: "resolve",
@@ -426,94 +451,83 @@ function renderMappingUI(headers, suggested) {
   });
 }
 
-// Continue: validate + save mapping, then start the importer
-$(document).on("click", "#wpec-map-continue", function (e) {
+// Back to upload
+$(document).on("click", "#wpec-map-back-inline", function (e) {
   e.preventDefault();
-  if (!WPEC_currentListForMap) return;
+  enterStep(1);
+});
 
-  // Collect map
-  const map = {};
+// Next -> validate and go to review (don’t save yet)
+$(document).on("click", "#wpec-map-next-inline", function (e) {
+  e.preventDefault();
+
+  // collect mapping from selects
+  WPEC_map = {};
   $(".wpec-map-sel").each(function () {
     const field = $(this).data("field");
-    const val   = $(this).val();
-    if (val !== "" && val != null) map[field] = parseInt(val, 10);
+    const val = $(this).val();
+    if (val !== "" && val != null) WPEC_map[field] = parseInt(val, 10);
   });
 
-  // Validate required
-  const missing = WPEC_DB_FIELDS
-    .filter(f => f.required)
-    .filter(f => !(f.key in map));
+  // required fields must be present
+  const missing = WPEC_DB_FIELDS.filter(f => f.required && !(f.key in WPEC_map));
   if (missing.length) {
-    $("#wpec-map-errors")
+    $("#wpec-map-errors-inline")
       .show()
       .text("Please map required fields: " + missing.map(m => m.label).join(", "));
     return;
+  } else {
+    $("#wpec-map-errors-inline").hide().empty();
   }
 
-  // Save
-  $("#wpec-map-loader").show();
+  // build review table
+  let t = '<table class="widefat striped"><thead><tr><th>Field</th><th>Mapped to</th></tr></thead><tbody>';
+  WPEC_DB_FIELDS.forEach(function (f) {
+    const idx = WPEC_map[f.key];
+    const label = (idx != null && idx >= 0) ? (WPEC_headers[idx] || ("Column " + (idx+1))) : "— Unmapped —";
+    t += '<tr><td><strong>' + f.label + '</strong></td><td>' + escapeHtml(label) + '</td></tr>';
+  });
+  t += '</tbody></table>';
+  $("#wpec-map-review").html(t);
+
+  enterStep(3);
+});
+
+// Back from review -> mapping
+$(document).on("click", "#wpec-map-back-to-map", function (e) {
+  e.preventDefault();
+  enterStep(2);
+});
+
+// Confirm -> save mapping then start import (Step 4)
+$(document).on("click", "#wpec-map-confirm", function (e) {
+  e.preventDefault();
+  if (!WPEC_listId) return;
+
+  $("#wpec-map-loader-inline").show();
   $.post(WPEC.ajaxUrl, {
     action: "wpec_list_save_mapping",
     nonce: WPEC.nonce,
-    list_id: WPEC_currentListForMap,
-    map: map
+    list_id: WPEC_listId,
+    map: WPEC_map
   })
     .done(function (resp) {
-      $("#wpec-map-loader").hide();
+      $("#wpec-map-loader-inline").hide();
       if (!resp || !resp.success) {
-        $("#wpec-map-errors")
-          .show()
-          .text((resp && resp.data && resp.data.message) || "Failed to save mapping.");
+        alert((resp && resp.data && resp.data.message) || "Failed to save mapping.");
         return;
       }
-      // Close modal and start import
-      $("#wpec-map-modal, #wpec-modal-overlay").hide();
-      $(".wpec-loader").show();
+      // Step 4: progress
+      enterStep(4);
       setProgress(1, "Starting import...");
-      processList(WPEC_currentListForMap);
+      processList(WPEC_listId);
     })
     .fail(function () {
-      $("#wpec-map-loader").hide();
-      $("#wpec-map-errors").show().text("Failed to save mapping.");
+      $("#wpec-map-loader-inline").hide();
+      alert("Failed to save mapping.");
     });
 });
 
-// Back/close
-$(document).on("click", "#wpec-map-back, #wpec-map-modal .wpec-modal-close", function (e) {
-  e.preventDefault();
-  $("#wpec-map-modal, #wpec-modal-overlay").hide();
-});
-
-  $(document).on("submit", "#wpec-list-upload-form", function (e) {
-    e.preventDefault();
-    var $btn = $("#wpec-upload-btn");
-    var fd = new FormData(this);
-    $btn.prop("disabled", true);
-    $(".wpec-loader").show();
-    setProgress(0, "Uploading file...");
-    $.ajax({
-      url: WPEC.ajaxUrl + "?action=wpec_list_upload",
-      type: "POST",
-      data: fd,
-      processData: false,
-      contentType: false,
-    })
-      .done(function (resp) {
-        if (!resp || !resp.success) {
-          $(".wpec-loader").hide();
-          $btn.prop("disabled", false);
-          alert((resp && resp.data && resp.data.message) || "Upload failed");
-          return;
-        }
-        // Open mapping step (new) instead of starting import
-        openMapping(resp.data.list_id);
-      })
-      .fail(function () {
-        $(".wpec-loader").hide();
-        $btn.prop("disabled", false);
-        alert("Upload failed.");
-      });
-  });
 
   $(function () {
     if (WPEC && WPEC.startImport && parseInt(WPEC.startImport, 10) > 0) {
