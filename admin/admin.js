@@ -270,7 +270,11 @@
     html +=
       "<li><strong>Total uploaded:</strong> " + (stats.imported || 0) + "</li>";
     html +=
-      "<li><strong>Duplicates (global):</strong> " +
+      "<li><strong>Duplicates in this import:</strong> " +
+      (stats.duplicates_this_import || 0) +
+      "</li>";
+    html +=
+      "<li><strong>Total duplicates:</strong> " +
       (stats.duplicates || 0) +
       "</li>";
     html +=

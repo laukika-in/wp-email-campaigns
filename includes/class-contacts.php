@@ -1338,8 +1338,13 @@ public function ajax_status_add_by_email() {
                 'header_map'     => null,
                 'last_invalid'   => 0, // reset last import invalid count
             ], [ 'id' => (int)$existing_list_id ] );
+            \update_option( 'wpec_import_' . (int) $existing_list_id, [
+                'dup'     => 0,
+                'started' => Helpers::now(),
+            ], false );
             return [ 'list_id'  => (int)$existing_list_id, 'csv_path' => $dest ];
         }
+        
 
         $db->insert( $lists, [
             'name'           => $list_name,
@@ -1359,7 +1364,10 @@ public function ajax_status_add_by_email() {
             'last_invalid'   => 0,
         ] );
         $list_id = (int) $db->insert_id;
-
+        \update_option( 'wpec_import_' . (int) $existing_list_id, [
+            'dup'     => 0,
+            'started' => Helpers::now(),
+        ], false );
         return [ 'list_id'  => $list_id, 'csv_path' => $dest ];
     }
 
@@ -1511,6 +1519,10 @@ public function ajax_list_set_header_map() {
                 'updated_at'   => Helpers::now(),
                 'last_invalid' => 0,
             ], [ 'id' => $list_id ] );
+            \update_option( 'wpec_import_' . (int) $list_id, [
+                'dup'     => 0,
+                'started' => Helpers::now(),
+            ], false );
         }
 
         $pointer = (int) $db->get_var( $db->prepare( "SELECT file_pointer FROM $lists WHERE id=%d", $list_id ) );
@@ -1589,6 +1601,11 @@ public function ajax_list_set_header_map() {
                 ] );
             }
         }
+// Update "duplicates in this import"
+$imp = \get_option( 'wpec_import_' . (int) $list_id, [ 'dup' => 0 ] );
+$imp['dup'] = (int)($imp['dup'] ?? 0) + (int)$dup_count;
+\update_option( 'wpec_import_' . (int) $list_id, $imp, false );
+$dup_this_import = (int) $imp['dup'];
 
         $new_pointer = ftell( $handle ); $eof = feof( $handle ); fclose( $handle );
 
@@ -1608,6 +1625,8 @@ public function ajax_list_set_header_map() {
         if ( $eof ) {
             $data_upd['status'] = 'ready'; @unlink( $path );
             $data_upd['file_path'] = null; $data_upd['file_pointer'] = null;
+            \delete_option( 'wpec_import_' . (int) $list_id );
+
         }
         $db->update( $lists, $data_upd, [ 'id' => $list_id ] );
 
@@ -1617,7 +1636,14 @@ public function ajax_list_set_header_map() {
         wp_send_json_success( [
             'done'     => $done,
             'progress' => $progress,
-            'stats'    => [ 'imported'=>$imported, 'invalid'=>$invalid_t, 'duplicates'=>$dupes_t, 'total'=>$total ],
+            'stats' => [
+            'imported'               => (int)$imported,
+            'invalid'                => (int)$invalid_t,
+            'duplicates'             => (int)$dupes_t,            
+            'duplicates_this_import' => (int)$dup_this_import,     
+            'total'                  => (int)$total,
+        ],
+
             'list_id'  => $list_id,
         ] );
     }
