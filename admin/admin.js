@@ -1218,6 +1218,19 @@
         $("#wpec-bulk-loader").hide();
       });
   });
+  // Duplicates page: enable/disable bulk delete when checkboxes change
+  function wpecToggleDupBulk() {
+    var any = $('#wpec-dup-form input[name="ids[]"]:checked').length > 0;
+    $("#wpec-dup-bulk-delete").prop("disabled", !any);
+  }
+  // header + row checkboxes
+  $(document).on(
+    "change",
+    '#wpec-dup-form input[type="checkbox"]',
+    wpecToggleDupBulk
+  );
+  // initialize on load
+  $(wpecToggleDupBulk);
 
   // Bulk move to list
   $("#wpec-bulk-move").on("click", function (e) {

@@ -1847,25 +1847,43 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     protected $list_id;
     public function __construct( $list_id = 0 ) { parent::__construct( [ 'plural' => 'duplicates', 'singular' => 'duplicate' ] ); $this->list_id = (int) $list_id; }
     public function get_columns() {
-        return [
-            'cb'            => '<input type="checkbox" />',
-            'email'         => __( 'Email', 'wp-email-campaigns' ),
-            'first_name'    => __( 'First name', 'wp-email-campaigns' ),
-            'last_name'     => __( 'Last name', 'wp-email-campaigns' ),
-            'dup_count'     => __( 'Duplicate count', 'wp-email-campaigns' ),
-            'current_list'  => __( 'Current list', 'wp-email-campaigns' ),
-            'imported_at'   => __( 'Last imported date', 'wp-email-campaigns' ),
-            'previous_list' => __( 'Previous list', 'wp-email-campaigns' ),
-            'actions'       => __( 'Actions', 'wp-email-campaigns' ),
-        ];
-    }
+    return [
+        'cb'            => '<input type="checkbox" />',
+        'email'         => __( 'Email', 'wp-email-campaigns' ),
+        'first_name'    => __( 'First name', 'wp-email-campaigns' ),
+        'last_name'     => __( 'Last name', 'wp-email-campaigns' ),
+        'dup_count'     => __( 'Duplicate count', 'wp-email-campaigns' ),
+        'current_list'  => __( 'Current list', 'wp-email-campaigns' ),
+        'imported_at'   => __( 'Last imported date', 'wp-email-campaigns' ),
+        'other_lists'   => __( 'Duplicated lists', 'wp-email-campaigns' ), // <-- renamed + new data
+        'actions'       => __( 'Actions', 'wp-email-campaigns' ),
+    ];
+}
+
     public function get_primary_column_name() { return 'email'; }
+    public function column_email( $item ) {
+    $email  = esc_html( $item['email'] ?? '' );
+    $status = isset( $item['status'] ) ? strtolower( $item['status'] ) : '';
+    $pill   = '';
+
+    if ( $status === 'unsubscribed' ) {
+        $pill = ' <span class="wpec-pill wpec-pill-dnd">' . esc_html__( 'DND', 'wp-email-campaigns' ) . '</span>';
+    } elseif ( $status === 'bounced' ) {
+        $pill = ' <span class="wpec-pill wpec-pill-bounced">' . esc_html__( 'Bounced', 'wp-email-campaigns' ) . '</span>';
+    }
+
+    return $email . $pill;
+}
+
     protected function column_cb( $item ) {
         $value = (int)$item['list_id'] . ':' . (int)$item['contact_id'];
         return sprintf('<input type="checkbox" name="ids[]" value="%s"/>', esc_attr($value));
     }
     public function prepare_items() {
         global $wpdb;
+
+        $ct = Helpers::table('contacts');
+
         $dupes = Helpers::table('dupes'); $lists = Helpers::table('lists'); $li = Helpers::table('list_items');
         $per_page = 30; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
@@ -1878,56 +1896,58 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $dupes d $where", $args ) );
         $sql = "
             SELECT d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
-                   d.list_id, l.name AS current_list,
-                   (
-                     SELECT COUNT(*) FROM $dupes d2 WHERE d2.contact_id = d.contact_id
-                   ) AS dup_count,
-                   (
-                     SELECT l2.name
-                     FROM $li li2
-                     INNER JOIN $lists l2 ON l2.id = li2.list_id
-                     WHERE li2.contact_id = d.contact_id
-                       AND li2.list_id <> d.list_id
-                     ORDER BY li2.created_at DESC
-                     LIMIT 1
-                   ) AS previous_list,
-                   d.contact_id
+                d.list_id, l.name AS current_list,
+                (
+                    SELECT COUNT(*) FROM $dupes d2 WHERE d2.contact_id = d.contact_id
+                ) AS dup_count,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT l2.name ORDER BY li2.created_at DESC SEPARATOR ', ')
+                    FROM $li li2
+                    INNER JOIN $lists l2 ON l2.id = li2.list_id
+                    WHERE li2.contact_id = d.contact_id
+                    AND li2.list_id <> d.list_id
+                ) AS other_lists,
+                d.contact_id,
+                c.status
             FROM $dupes d
             INNER JOIN $lists l ON l.id = d.list_id
+            INNER JOIN $ct c ON c.id = d.contact_id
             $where
             ORDER BY d.id DESC
             LIMIT %d OFFSET %d
         ";
+
         $rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
         $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
         $this->set_pagination_args( [ 'total_items' => $total, 'per_page' => $per_page, 'total_pages' => ceil( $total / $per_page ) ] );
     }
     public function column_default( $item, $col ) {
-        switch ( $col ) {
-            case 'email':
-            case 'first_name':
-            case 'last_name':
-                return esc_html( $item[ $col ] ?? '' );
-            case 'dup_count':
-                return esc_html( (string)($item['dup_count'] ?? '0') );
-            case 'current_list':
-                $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
-                return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
-            case 'previous_list':
-                return esc_html( $item['previous_list'] ?? '' );
-            case 'imported_at':
-                return esc_html( $item['imported_at'] ?? '' );
-            case 'actions':
-                $view = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'contact','contact_id'=>(int)$item['contact_id'] ], admin_url('edit.php') );
-                $btn = sprintf(
-                    '<button type="button" class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d">%s</button> <a class="button button-small" href="%s">%s</a>',
-                    (int)$item['list_id'], (int)$item['contact_id'],
-                    esc_html__('Delete from current list', 'wp-email-campaigns'),
-                    esc_url($view), esc_html__('View detail','wp-email-campaigns')
-                );
-                return $btn;
-        }
-        return '';
+    switch ( $col ) {
+        case 'email':
+        case 'first_name':
+        case 'last_name':
+            return esc_html( $item[ $col ] ?? '' );
+        case 'dup_count':
+            return esc_html( (string)($item['dup_count'] ?? '0') );
+        case 'current_list':
+            $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
+            return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
+        case 'other_lists': // <-- new name
+            return esc_html( $item['other_lists'] ?? '' );
+        case 'imported_at':
+            return esc_html( $item['imported_at'] ?? '' );
+        case 'actions':
+            $view = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'contact','contact_id'=>(int)$item['contact_id'] ], admin_url('edit.php') );
+            $btn = sprintf(
+                '<button type="button" class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d">%s</button> <a class="button button-small" href="%s">%s</a>',
+                (int)$item['list_id'], (int)$item['contact_id'],
+                esc_html__('Delete from current list', 'wp-email-campaigns'),
+                esc_url($view), esc_html__('View detail','wp-email-campaigns')
+            );
+            return $btn;
     }
+    return '';
+}
+
     public function no_items() { _e( 'No duplicates found.', 'wp-email-campaigns' ); }
 }
