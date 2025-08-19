@@ -62,6 +62,9 @@ class Contacts {
 add_action( 'wp_ajax_wpec_list_probe_headers', [ $this, 'ajax_list_probe_headers' ] );
 add_action( 'wp_ajax_wpec_list_set_header_map', [ $this, 'ajax_list_set_header_map' ] );
 
+add_action( 'wp_ajax_wpec_list_delete', [ $this, 'ajax_list_delete' ] );
+
+
     }
 
     /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
@@ -742,6 +745,33 @@ public function ajax_presets_save() {
 
     $this->presets_write( $uid, $items );
     wp_send_json_success( [ 'items' => $items, 'saved_id' => $id, 'default_id' => $this->presets_default_get($uid) ] );
+}
+public function ajax_list_delete() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $list_id = absint($_POST['list_id'] ?? 0);
+    if ( ! $list_id ) wp_send_json_error(['message'=>'Bad list id']);
+
+    $db = Helpers::db();
+    $lists = Helpers::table('lists');
+    $li    = Helpers::table('list_items');
+    $dupes = Helpers::table('dupes');
+
+    // ensure empty
+    $count = (int) $db->get_var( $db->prepare( "SELECT COUNT(*) FROM $li WHERE list_id=%d", $list_id ) );
+    if ( $count > 0 ) {
+        wp_send_json_error(['message'=>'Only empty lists can be deleted.']);
+    }
+
+    // delete list + any stray dupes rows for that list
+    $db->delete( $dupes, [ 'list_id' => $list_id ] );
+    $deleted = $db->delete( $lists, [ 'id' => $list_id ] );
+
+    if ( $deleted ) {
+        wp_send_json_success(['deleted'=>1]);
+    }
+    wp_send_json_error(['message'=>'Delete failed']);
 }
 
 public function ajax_presets_delete() {
@@ -1749,19 +1779,57 @@ class WPEC_Lists_Table extends \WP_List_Table {
     public function prepare_items() {
         global $wpdb;
         $lists = Helpers::table('lists');
+            $li    = Helpers::table('list_items'); // <-- add this
+
         $per_page = 20; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
         $where = 'WHERE 1=1'; $args = [];
         if ( $search ) { $where .= " AND (name LIKE %s)"; $args[] = '%'.$wpdb->esc_like($search).'%'; }
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $lists $where", $args ) );
-        $rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $lists $where ORDER BY id DESC LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
+         $sql = "SELECT l.*, COUNT(li.id) AS cnt
+            FROM $lists l
+            LEFT JOIN $li li ON li.list_id = l.id
+            $where
+            GROUP BY l.id
+            ORDER BY l.id DESC
+            LIMIT %d OFFSET %d";
+        $rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
         $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
         $this->set_pagination_args( [ 'total_items'=>$total, 'per_page'=>$per_page, 'total_pages'=>ceil($total/$per_page) ] );
     }
+    public function column_actions( $item ) {
+    $view = add_query_arg( [
+        'post_type' => 'email_campaign', 'page' => 'wpec-contacts', 'view' => 'list', 'list_id' => (int)$item['id'],
+    ], admin_url('edit.php') );
+    $dupes = admin_url('edit.php?post_type=email_campaign&page=wpec-duplicates');
+
+    $cnt = isset($item['cnt']) ? (int)$item['cnt'] : 0;
+    if ( $cnt === 0 ) {
+        $del = sprintf(
+            ' <button type="button" class="button button-link-delete wpec-list-delete" data-list-id="%d">%s</button>',
+            (int)$item['id'], esc_html__('Delete','wp-email-campaigns')
+        );
+    } else {
+        $del = sprintf(
+            ' <button type="button" class="button" disabled title="%s">%s</button>',
+            esc_attr__('Only empty lists can be deleted','wp-email-campaigns'),
+            esc_html__('Delete','wp-email-campaigns')
+        );
+    }
+
+    return sprintf(
+        '<a class="button" href="%s">%s</a> <a class="button" href="%s">%s</a>%s',
+        esc_url($view), esc_html__('View','wp-email-campaigns'),
+        esc_url($dupes), esc_html__('View Duplicates','wp-email-campaigns'),
+        $del
+    );
+}
+
     public function column_metrics( $item ) {
         return sprintf('<button type="button" class="button wpec-toggle-counts" data-list-id="%d">%s</button>',
             (int)$item['id'], esc_html__('View counts','wp-email-campaigns') );
     }
+    
     public function column_default( $item, $col ) {
         switch ( $col ) {
             case 'name': return esc_html($item['name']);
@@ -1803,7 +1871,8 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     }
     public function prepare_items() {
         global $wpdb;
-        $li = Helpers::table('list_items'); $ct = Helpers::table('contacts');
+        $li = Helpers::table('list_items'); 
+        $ct = Helpers::table('contacts');
         $per_page = 50; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
         $where = "WHERE li.list_id=%d"; $args  = [ $this->list_id ];
@@ -1812,6 +1881,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
             $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%';
         }
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $li li INNER JOIN $ct c ON c.id=li.contact_id $where", $args ) );
+
         $rows = $wpdb->get_results( $wpdb->prepare(
             "SELECT c.id AS contact_id, c.email, CONCAT_WS(' ', c.first_name, c.last_name) AS name, c.status, li.created_at, li.is_duplicate_import
              FROM $li li INNER JOIN $ct c ON c.id=li.contact_id

@@ -128,6 +128,36 @@
       }
     });
   }
+  // === Lists: delete empty list ===
+  jQuery(document).on("click", ".wpec-list-delete", function (e) {
+    e.preventDefault();
+    var $btn = jQuery(this);
+    var id = parseInt($btn.data("listId"), 10) || 0;
+    if (!id) return;
+    if (!confirm("Delete this empty list?")) return;
+
+    $btn.prop("disabled", true);
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_list_delete",
+        nonce: WPEC.nonce,
+        list_id: id,
+      })
+      .done(function (resp) {
+        if (resp && resp.success) {
+          $btn.closest("tr").fadeOut(120, function () {
+            jQuery(this).remove();
+          });
+        } else {
+          alert((resp && resp.data && resp.data.message) || "Delete failed.");
+          $btn.prop("disabled", false);
+        }
+      })
+      .fail(function () {
+        alert("Request failed.");
+        $btn.prop("disabled", false);
+      });
+  });
 
   // Wire up toolbar
   $(document)
