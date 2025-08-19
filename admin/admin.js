@@ -376,10 +376,14 @@
             listCnt
         );
 
-        if (resp.data.done) {
+        if (resp.data && resp.data.deleted_empty_list) {
           $(".wpec-loader").hide();
+          if (resp.data.message) alert(resp.data.message);
+
           if (WPEC) WPEC.startImport = 0;
           showResultPanel(s, resp.data.list_id);
+          location.reload();
+          return;
         } else {
           setTimeout(function () {
             processList(listId);
@@ -827,6 +831,10 @@
     e.preventDefault();
     $("#wpec-modal-overlay").show();
     $("#wpec-modal-list").show();
+    $("#wpec-add-contact-newlist-toggle")
+      .prop("checked", true)
+      .trigger("change");
+    $('#wpec-add-contact-newlist input[name="new_list_name"]').focus();
   });
   $(document).on("change", "#wpec-add-contact-newlist-toggle", function () {
     var on = $(this).is(":checked");

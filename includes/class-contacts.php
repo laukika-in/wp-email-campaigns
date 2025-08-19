@@ -1371,6 +1371,9 @@ public function ajax_status_add_by_email() {
             'total'=>0,'imported'=>0,'invalid'=>0,'duplicates'=>0,'deleted'=>0,'manual_added'=>0,'last_invalid'=>0
         ] );
         $id = (int)$db->insert_id;
+        wp_send_json_error([
+        'message' => 'Empty lists are not allowed.'
+    ]);
         wp_send_json_success([ 'list_id'=>$id, 'name'=>$name ]);
     }
 
@@ -1712,14 +1715,32 @@ public function ajax_list_set_header_map() {
             'last_invalid' => $last_invalid,
         ];
         if ( $eof ) {
-            $data_upd['status'] = 'ready'; @unlink( $path );
-            $data_upd['file_path'] = null; $data_upd['file_pointer'] = null;
+    // If nothing was actually imported into this list, remove the empty list entirely.
+    if ( $imported <= 0 ) {
+        // Clean dupes for this list, then delete the list
+        $db->delete( $dupes, [ 'list_id' => $list_id ] );
+        @unlink( $path );
+        $db->delete( $lists, [ 'id' => $list_id ] );
+
+        wp_send_json_success( [
+            'done' => true,
+            'deleted_empty_list' => true,
+            'message' => 'No new contacts were imported; the temporary list has been removed.'
+        ] );
+    }
+
+    // Otherwise, finalize as ready
+    $data_upd['status'] = 'ready';
+    @unlink( $path );
+    $data_upd['file_path'] = null; 
+    $data_upd['file_pointer'] = null;
+    
             \delete_option( 'wpec_import_' . (int) $list_id );
+}
 
-        }
-        $db->update( $lists, $data_upd, [ 'id' => $list_id ] );
-
-        $done = $eof;
+$db->update( $lists, $data_upd, [ 'id' => $list_id ] );
+$done = $eof;
+ 
         $progress = $done ? 100 : ( $total > 0 ? min( 99, round( ( $imported / max(1,$total) ) * 100 ) ) : 0 );
 
         wp_send_json_success( [
