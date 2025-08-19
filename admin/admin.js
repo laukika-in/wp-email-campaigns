@@ -1,4 +1,179 @@
 (function ($) {
+  // ===== Saved Views (Presets) for All Contacts =====
+function presetPayload() {
+  return Object.assign(currentFilters(), {
+    cols: collectCols(),
+    page_size: parseInt($("#wpec-page-size").val(), 10) || 50,
+  });
+}
+function applyPresetToUI(p) {
+  if (!p || !p.data) return;
+  var d = p.data;
+
+  // Scalars
+  $("#wpec-f-search").val(d.search || "");
+  $("#wpec-f-emp-min").val(d.emp_min || "");
+  $("#wpec-f-emp-max").val(d.emp_max || "");
+  $("#wpec-f-rev-min").val(d.rev_min || "");
+  $("#wpec-f-rev-max").val(d.rev_max || "");
+  if (d.page_size) $("#wpec-page-size").val(String(d.page_size));
+
+  // Multi-selects (use Select2 if present)
+  function setMulti(sel, vals) {
+    if (!Array.isArray(vals)) vals = [];
+    var $el = $(sel);
+    $el.val(vals);
+    if ($el.hasClass("wpec-s2") && $el.data("select2")) $el.trigger("change");
+  }
+  setMulti("#wpec-f-company", d.company_name);
+  setMulti("#wpec-f-city", d.city);
+  setMulti("#wpec-f-state", d.state);
+  setMulti("#wpec-f-country", d.country);
+  setMulti("#wpec-f-job", d.job_title);
+  setMulti("#wpec-f-postcode", d.postal_code);
+  setMulti("#wpec-f-list", d.list_ids);
+  setMulti("#wpec-f-status", d.status);
+
+  // Columns
+  $(".wpec-col-toggle").prop("checked", false);
+  (d.cols || []).forEach(function (c) {
+    $('.wpec-col-toggle[value="' + c + '"]').prop("checked", true);
+  });
+}
+function refreshPresetButtonsState() {
+  var hasSel = !!$("#wpec-preset").val();
+  $("#wpec-preset-load, #wpec-preset-overwrite, #wpec-preset-delete").prop(
+    "disabled",
+    !hasSel
+  );
+  // Default checkbox reflects selection
+  var sel = $("#wpec-preset").val();
+  var isDefault =
+    sel && window.WPEC && WPEC._presets && WPEC._presets.default_id === sel;
+  $("#wpec-preset-default").prop("checked", !!isDefault);
+}
+function loadPresetsList(cb) {
+  $.post(WPEC.ajaxUrl, { action: "wpec_presets_list", nonce: WPEC.nonce })
+    .done(function (res) {
+      if (!res || !res.success) return;
+      WPEC._presets = {
+        items: res.data.items || [],
+        default_id: res.data.default_id || "",
+      };
+      var $sel = $("#wpec-preset").empty();
+      $sel.append('<option value="">' + "— Select a view —" + "</option>");
+      (WPEC._presets.items || []).forEach(function (it) {
+        $sel.append(
+          $("<option>", { value: it.id, text: it.name })
+        );
+      });
+      if (WPEC._presets.default_id) {
+        $sel.val(WPEC._presets.default_id);
+      }
+      refreshPresetButtonsState();
+      if (cb) cb();
+    })
+    .fail(function () {
+      if (cb) cb();
+    });
+}
+function savePreset(name, overwriteId) {
+  var payload = presetPayload();
+  $.post(WPEC.ajaxUrl, {
+    action: "wpec_presets_save",
+    nonce: WPEC.nonce,
+    name: name,
+    id: overwriteId || "",
+    data: JSON.stringify(payload),
+  }).done(function (res) {
+    if (res && res.success) {
+      WPEC._presets = {
+        items: res.data.items || [],
+        default_id: res.data.default_id || "",
+      };
+      loadPresetsList(function () {
+        if (res.data.saved_id) $("#wpec-preset").val(res.data.saved_id);
+        refreshPresetButtonsState();
+      });
+    } else {
+      alert((res && res.data && res.data.message) || "Save failed.");
+    }
+  });
+}
+function deletePreset(id) {
+  $.post(WPEC.ajaxUrl, {
+    action: "wpec_presets_delete",
+    nonce: WPEC.nonce,
+    id: id,
+  }).done(function (res) {
+    if (res && res.success) {
+      WPEC._presets = {
+        items: res.data.items || [],
+        default_id: res.data.default_id || "",
+      };
+      loadPresetsList(refreshPresetButtonsState);
+    } else {
+      alert((res && res.data && res.data.message) || "Delete failed.");
+    }
+  });
+}
+function setDefaultPreset(id) {
+  $.post(WPEC.ajaxUrl, {
+    action: "wpec_presets_set_default",
+    nonce: WPEC.nonce,
+    id: id || "",
+  }).done(function (res) {
+    if (res && res.success) {
+      if (!WPEC._presets) WPEC._presets = {};
+      WPEC._presets.default_id = res.data.default_id || "";
+      refreshPresetButtonsState();
+    }
+  });
+}
+
+// Wire up toolbar
+$(document)
+  .on("change", "#wpec-preset", refreshPresetButtonsState)
+  .on("click", "#wpec-preset-load", function (e) {
+    e.preventDefault();
+    var id = $("#wpec-preset").val();
+    if (!id || !WPEC._presets) return;
+    var found = (WPEC._presets.items || []).find(function (x) {
+      return x.id === id;
+    });
+    if (!found) return;
+    applyPresetToUI(found);
+    contactsQuery(1);
+  })
+  .on("click", "#wpec-preset-save", function (e) {
+    e.preventDefault();
+    var name = window.prompt("Name this view:");
+    if (!name) return;
+    savePreset(name, "");
+  })
+  .on("click", "#wpec-preset-overwrite", function (e) {
+    e.preventDefault();
+    var id = $("#wpec-preset").val();
+    if (!id) return;
+    var item = (WPEC._presets.items || []).find(function (x) {
+      return x.id === id;
+    });
+    var name = (item && item.name) || "Untitled";
+    if (!confirm('Overwrite "' + name + '" with current filters?')) return;
+    savePreset(name, id);
+  })
+  .on("click", "#wpec-preset-delete", function (e) {
+    e.preventDefault();
+    var id = $("#wpec-preset").val();
+    if (!id) return;
+    if (!confirm("Delete this saved view?")) return;
+    deletePreset(id);
+  })
+  .on("change", "#wpec-preset-default", function () {
+    var id = $("#wpec-preset").val() || "";
+    setDefaultPreset(this.checked ? id : "");
+  });
+
   // ── Select2 loader (local first; fallback CDN) ────────────────────────────
   function ensureSelect2(cb) {
     if ($.fn.select2) {
@@ -873,11 +1048,22 @@
 
   $(function () {
     if (onContactsPage()) {
-      ensureSelect2(function () {
-        initSelect2();
-        contactsQuery(1);
-      });
-    } else {
+  ensureSelect2(function () {
+    initSelect2();
+    // Load presets (and default) first, then run the query
+    loadPresetsList(function () {
+      var defaultId = WPEC._presets && WPEC._presets.default_id;
+      if (defaultId) {
+        var item = (WPEC._presets.items || []).find(function (x) {
+          return x.id === defaultId;
+        });
+        if (item) applyPresetToUI(item);
+      }
+      contactsQuery(1);
+    });
+  });
+}
+ else {
       // Import page Select2 for existing list + add-contact list
       if (
         $("#wpec-existing-list").length ||

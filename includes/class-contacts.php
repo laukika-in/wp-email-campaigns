@@ -51,6 +51,13 @@ class Contacts {
         // Special lists (Do Not Send / Bounced)
         add_action( 'wp_ajax_wpec_status_bulk_update', [ $this, 'ajax_status_bulk_update' ] );
         add_action( 'wp_ajax_wpec_status_add_by_email', [ $this, 'ajax_status_add_by_email' ] );
+
+        // Presets (Saved Views)
+        add_action( 'wp_ajax_wpec_presets_list',        [ $this, 'ajax_presets_list' ] );
+        add_action( 'wp_ajax_wpec_presets_save',        [ $this, 'ajax_presets_save' ] );
+        add_action( 'wp_ajax_wpec_presets_delete',      [ $this, 'ajax_presets_delete' ] );
+        add_action( 'wp_ajax_wpec_presets_set_default', [ $this, 'ajax_presets_set_default' ] );
+
     }
 
     /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
@@ -299,6 +306,16 @@ class Contacts {
         echo '<button class="button button-secondary" id="wpec-bulk-delete" disabled>'.esc_html__('Delete selected','wp-email-campaigns').'</button> ';
         echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
         echo '</div>';
+// Presets toolbar (Saved Views)
+echo '<div id="wpec-presets" class="wpec-card" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">';
+echo '<strong style="margin-right:6px;">' . esc_html__( 'Saved views', 'wp-email-campaigns' ) . '</strong>';
+echo '<select id="wpec-preset" style="min-width:260px"></select>';
+echo '<label style="margin-left:6px;"><input type="checkbox" id="wpec-preset-default"> ' . esc_html__( 'Default', 'wp-email-campaigns' ) . '</label>';
+echo '<button class="button" id="wpec-preset-load" disabled>' . esc_html__( 'Load', 'wp-email-campaigns' ) . '</button>';
+echo '<button class="button" id="wpec-preset-save">' . esc_html__( 'Save current as…', 'wp-email-campaigns' ) . '</button>';
+echo '<button class="button" id="wpec-preset-overwrite" disabled>' . esc_html__( 'Overwrite', 'wp-email-campaigns' ) . '</button>';
+echo '<button class="button" id="wpec-preset-delete" disabled>' . esc_html__( 'Delete', 'wp-email-campaigns' ) . '</button>';
+echo '</div>';
 
         // Controls: columns toggle + filters + export
         echo '<div id="wpec-contacts-controls" class="wpec-card">';
@@ -602,6 +619,139 @@ public function render_status_list( $status_slug ) {
         echo '</form></div>';
     }
     public function render_duplicates_page() { $this->render_duplicates(0); }
+/** ===== Saved Views (Presets) — user-scoped ===== */
+
+private function presets_read( $user_id ) {
+    $presets = get_user_meta( $user_id, 'wpec_contact_presets', true );
+    return is_array( $presets ) ? $presets : [];
+}
+private function presets_write( $user_id, $items ) {
+    // normalize to simple array (id, name, data)
+    $clean = [];
+    foreach ( (array) $items as $it ) {
+        if ( !is_array( $it ) ) continue;
+        $id   = isset($it['id'])   ? sanitize_text_field($it['id'])   : '';
+        $name = isset($it['name']) ? sanitize_text_field($it['name']) : '';
+        $data = isset($it['data']) && is_array($it['data']) ? $it['data'] : [];
+        if ( $id && $name ) $clean[] = [ 'id'=>$id, 'name'=>$name, 'data'=>$this->preset_sanitize_payload($data) ];
+    }
+    update_user_meta( $user_id, 'wpec_contact_presets', $clean );
+}
+private function presets_default_get( $user_id ) {
+    $id = get_user_meta( $user_id, 'wpec_contact_presets_default', true );
+    return is_string($id) ? $id : '';
+}
+private function presets_default_set( $user_id, $id ) {
+    $id = sanitize_text_field( (string) $id );
+    if ( $id === '' ) {
+        delete_user_meta( $user_id, 'wpec_contact_presets_default' );
+    } else {
+        update_user_meta( $user_id, 'wpec_contact_presets_default', $id );
+    }
+}
+private function preset_sanitize_payload( $data ) {
+    // Only whitelisted keys are persisted
+    $out = [];
+    $keys_array = [ 'company_name','city','state','country','job_title','postal_code','list_ids','status','cols' ];
+    $keys_scalar = [ 'search','emp_min','emp_max','rev_min','rev_max','page_size' ];
+
+    foreach ( $keys_array as $k ) {
+        if ( isset($data[$k]) ) {
+            $vals = (array) $data[$k];
+            $vals = array_values(array_unique(array_filter(array_map('sanitize_text_field', $vals), function($v){ return $v !== ''; })));
+            if ( $k === 'list_ids' ) $vals = array_map('absint', $vals);
+            $out[$k] = $vals;
+        }
+    }
+    foreach ( $keys_scalar as $k ) {
+        if ( isset($data[$k]) && $data[$k] !== '' ) {
+            if ( in_array($k, ['emp_min','emp_max','rev_min','rev_max','page_size'], true) ) {
+                $out[$k] = (int) $data[$k];
+            } else {
+                $out[$k] = sanitize_text_field( $data[$k] );
+            }
+        }
+    }
+    return $out;
+}
+
+public function ajax_presets_list() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+    $uid = get_current_user_id();
+    if ( !$uid ) wp_send_json_error(['message'=>'No user']);
+    $items = $this->presets_read( $uid );
+    $def   = $this->presets_default_get( $uid );
+    wp_send_json_success( [ 'items' => $items, 'default_id' => $def ] );
+}
+
+public function ajax_presets_save() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+    $uid = get_current_user_id();
+    if ( !$uid ) wp_send_json_error(['message'=>'No user']);
+
+    $id   = isset($_POST['id']) ? sanitize_text_field( wp_unslash($_POST['id']) ) : '';
+    $name = isset($_POST['name']) ? sanitize_text_field( wp_unslash($_POST['name']) ) : '';
+    $raw  = isset($_POST['data']) ? wp_unslash($_POST['data']) : '';
+    $data = json_decode( $raw, true );
+    if ( !$name || !is_array($data) ) wp_send_json_error(['message'=>'Bad payload']);
+
+    $items = $this->presets_read( $uid );
+    $payload = $this->preset_sanitize_payload( $data );
+
+    if ( $id ) {
+        // overwrite existing
+        $found = false;
+        foreach ( $items as &$it ) {
+            if ( isset($it['id']) && $it['id'] === $id ) {
+                $it['name'] = $name;
+                $it['data'] = $payload;
+                $found = true;
+                break;
+            }
+        }
+        if ( !$found ) {
+            // if missing, treat as new
+            $items[] = [ 'id' => $id, 'name' => $name, 'data' => $payload ];
+        }
+    } else {
+        $id = 'p_' . uniqid('', true);
+        $items[] = [ 'id' => $id, 'name' => $name, 'data' => $payload ];
+        // limit to last 50
+        if ( count($items) > 50 ) { $items = array_slice($items, -50); }
+    }
+
+    $this->presets_write( $uid, $items );
+    wp_send_json_success( [ 'items' => $items, 'saved_id' => $id, 'default_id' => $this->presets_default_get($uid) ] );
+}
+
+public function ajax_presets_delete() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+    $uid = get_current_user_id();
+    if ( !$uid ) wp_send_json_error(['message'=>'No user']);
+    $id  = isset($_POST['id']) ? sanitize_text_field( wp_unslash($_POST['id']) ) : '';
+    if ( !$id ) wp_send_json_error(['message'=>'Bad id']);
+
+    $items = $this->presets_read( $uid );
+    $items = array_values( array_filter( $items, function($it) use ($id){ return !isset($it['id']) || $it['id'] !== $id; } ) );
+    $this->presets_write( $uid, $items );
+    if ( $this->presets_default_get($uid) === $id ) $this->presets_default_set($uid, '');
+
+    wp_send_json_success( [ 'items' => $items, 'default_id' => $this->presets_default_get($uid) ] );
+}
+
+public function ajax_presets_set_default() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+    $uid = get_current_user_id();
+    if ( !$uid ) wp_send_json_error(['message'=>'No user']);
+    $id  = isset($_POST['id']) ? sanitize_text_field( wp_unslash($_POST['id']) ) : '';
+    // allow clearing with empty id
+    $this->presets_default_set( $uid, $id );
+    wp_send_json_success( [ 'default_id' => $this->presets_default_get($uid) ] );
+}
 
     // ===================== EXPORTS =====================
     public function export_list() {
