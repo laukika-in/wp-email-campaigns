@@ -6,7 +6,14 @@
  * Author:            Anirudh
  * Text Domain:       wp-email-campaigns
  */
+/*
+UI: detail page, upload Ui, filter ui, 
+features missing: move to other list in list page
+bug: delete button not working
+Test features once, dfetail page move option not working, many places delete button not working
 
+
+*/
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 $plugin_data = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
