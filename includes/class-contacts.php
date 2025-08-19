@@ -247,7 +247,9 @@ add_action( 'wp_ajax_wpec_list_set_header_map', [ $this, 'ajax_list_set_header_m
 
         echo '<p><button type="submit" class="button button-primary" id="wpec-upload-btn">' . esc_html__( 'Upload & Import', 'wp-email-campaigns' ) . '</button> ';
         echo '<span class="wpec-loader" style="display:none;"></span></p>';
-        // STEP 2: Mapping (hidden by default)
+   
+        echo '</form></div>';
+// STEP 2: Mapping (hidden by default)
 echo '<div id="wpec-map-panel" class="wpec-card" style="display:none;">';
 echo '  <h2 style="margin-top:0;">' . esc_html__( 'Map fields', 'wp-email-campaigns' ) . '</h2>';
 echo '  <div id="wpec-map-table"></div>';
@@ -264,9 +266,6 @@ echo '  <p><button class="button button-primary" id="wpec-start-import">'.esc_ht
 echo '  <div id="wpec-progress-wrap" style="display:none;"><div class="wpec-progress"><span id="wpec-progress-bar" style="width:0%"></span></div><p id="wpec-progress-text"></p></div>';
 echo '  <div id="wpec-import-result" class="wpec-result" style="display:none;"></div>';
 echo '</div>';
-
-        echo '</form></div>';
-
 
         // Modals
         $this->render_add_contact_modal( $lists );
