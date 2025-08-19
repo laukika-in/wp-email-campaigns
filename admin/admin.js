@@ -336,198 +336,289 @@
       });
   }
   // ===== Mapping step (between Upload and Process) =====
-// ===== Import Wizard (inline: Upload -> Map -> Review -> Progress) =====
 
-const WPEC_DB_FIELDS = [
-  { key: "first_name", label: "First name", required: true },
-  { key: "last_name",  label: "Last name",  required: true },
-  { key: "email",      label: "Email",      required: true },
-  { key: "company_name",            label: "Company name" },
-  { key: "company_employees",       label: "Company employees" },
-  { key: "company_annual_revenue",  label: "Company annual revenue" },
-  { key: "contact_number",          label: "Contact number" },
-  { key: "job_title",               label: "Job title" },
-  { key: "industry",                label: "Industry" },
-  { key: "country",                 label: "Country" },
-  { key: "state",                   label: "State" },
-  { key: "city",                    label: "City" },
-  { key: "postal_code",             label: "Postal code" },
-  { key: "status",                  label: "Status" } // active|unsubscribed|bounced
-];
+  // state for this upload session
+  var WPEC_UPLOAD = { listId: 0, cols: [], map: {} };
 
-let WPEC_listId = 0;
-let WPEC_headers = [];
-let WPEC_map = {};       // current selection (field -> column index)
-
-// Simple step controller
-function enterStep(n) {
-  // Step 1 = upload panel
-  $("#wpec-upload-panel").toggle(n === 1);
-  // Step 2 = map
-  $("#wpec-step-map").toggle(n === 2);
-  // Step 3 = review
-  $("#wpec-step-review").toggle(n === 3);
-  // Step 4 = progress
-  $("#wpec-step-progress").toggle(n === 4);
-
-  // generic loader only during requests we trigger
-  if (n === 2 || n === 3 || n === 4) {
-    $(".wpec-loader").hide(); // hide the small spinners unless explicitly shown
+  // show/hide step panels
+  function enterStep(n) {
+    $("#wpec-upload-panel").toggle(n === 1); // step 1 (upload)
+    $("#wpec-map-panel").toggle(n === 2); // step 2 (mapping)
+    $("#wpec-review-panel").toggle(n === 3); // step 3 (review)
+    // hide progress UI unless we are actually importing
+    if (n !== 3) $("#wpec-progress-wrap, #wpec-import-result").hide();
   }
-}
 
-// Read headers + render mapping UI
-function openMappingInline(listId) {
-  WPEC_listId = parseInt(listId, 10) || 0;
-  if (!WPEC_listId) return;
+  // simple header normalizer
+  function norm(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
 
-  // jump to Step 2
-  enterStep(2);
+  // field list we support (left column = DB fields, right = Select2 of headers)
+  var DB_FIELDS = [
+    ["first_name", "First name", true],
+    ["last_name", "Last name", true],
+    ["email", "Email", true],
+    ["company_name", "Company name", false],
+    ["company_employees", "Company number of employees", false],
+    ["company_annual_revenue", "Company annual revenue", false],
+    ["contact_number", "Contact number", false],
+    ["job_title", "Job title", false],
+    ["industry", "Industry", false],
+    ["country", "Country", false],
+    ["state", "State", false],
+    ["city", "City", false],
+    ["postal_code", "Postal code", false],
+  ];
 
-  $("#wpec-map-errors-inline").hide().empty();
-  $("#wpec-map-body-inline").html('<p>Reading file header…</p>');
-
-  $.post(WPEC.ajaxUrl, {
-    action: "wpec_list_headers",
-    nonce: WPEC.nonce,
-    list_id: WPEC_listId
-  })
-    .done(function (resp) {
-      if (!resp || !resp.success) {
-        $("#wpec-map-body-inline").html("");
-        $("#wpec-map-errors-inline")
-          .show()
-          .text((resp && resp.data && resp.data.message) || "Failed to read headers.");
-        return;
+  // heuristic auto-map
+  function autoGuess(cols) {
+    var guessed = {};
+    var lookup = cols.map(norm);
+    function findOne(cands) {
+      for (var i = 0; i < lookup.length; i++) {
+        if (cands.indexOf(lookup[i]) !== -1) return i;
       }
-      WPEC_headers = resp.data.headers || [];
-      const suggested = resp.data.suggested || {};
-      // seed current map with suggestions
-      WPEC_map = {};
-      Object.keys(suggested).forEach(function (k) {
-        WPEC_map[k] = parseInt(suggested[k], 10);
+      return -1;
+    }
+    guessed.first_name = findOne([
+      "first name",
+      "firstname",
+      "f name",
+      "given name",
+    ]);
+    guessed.last_name = findOne([
+      "last name",
+      "lastname",
+      "surname",
+      "family name",
+    ]);
+    guessed.email = findOne(["email", "email address", "e mail"]);
+    guessed.company_name = findOne([
+      "company",
+      "company name",
+      "org",
+      "organization",
+    ]);
+    guessed.company_employees = findOne([
+      "employees",
+      "employee count",
+      "company employees",
+    ]);
+    guessed.company_annual_revenue = findOne([
+      "annual revenue",
+      "revenue",
+      "company revenue",
+    ]);
+    guessed.contact_number = findOne([
+      "contact number",
+      "phone",
+      "phone number",
+      "mobile",
+    ]);
+    guessed.job_title = findOne(["job title", "title", "role"]);
+    guessed.industry = findOne(["industry"]);
+    guessed.country = findOne(["country"]);
+    guessed.state = findOne(["state", "region", "province"]);
+    guessed.city = findOne(["city", "town"]);
+    guessed.postal_code = findOne([
+      "postal code",
+      "postcode",
+      "zip",
+      "zip code",
+    ]);
+    return guessed;
+  }
+
+  // build mapping table UI
+  function renderMapUI(cols) {
+    var html =
+      '<table class="widefat striped"><thead><tr><th style="width:280px">Our field</th><th>Uploaded column</th></tr></thead><tbody>';
+    DB_FIELDS.forEach(function (f) {
+      html +=
+        '<tr data-key="' +
+        f[0] +
+        '"><th>' +
+        f[1] +
+        (f[2] ? ' <span class="description">(required)</span>' : "") +
+        "</th>";
+      html += '<td><select class="wpec-map-sel" data-key="' + f[0] + '">';
+      html += '<option value="">— None —</option>';
+      cols.forEach(function (c, i) {
+        html += '<option value="' + i + '">' + c + "</option>";
       });
-      renderMappingUIInline();
+      html += "</select></td></tr>";
+    });
+    html += "</tbody></table>";
+    $("#wpec-map-table").html(html);
+
+    // apply guesses
+    var g = autoGuess(cols);
+    Object.keys(g).forEach(function (k) {
+      var idx = g[k];
+      if (idx >= 0)
+        $('#wpec-map-table select.wpec-map-sel[data-key="' + k + '"]').val(
+          String(idx)
+        );
+    });
+
+    // Select2 (if present)
+    if ($.fn.select2) {
+      $("#wpec-map-table .wpec-map-sel").select2({
+        width: "resolve",
+        placeholder: "— None —",
+      });
+    }
+
+    validateMap();
+  }
+
+  function validateMap() {
+    var requiredOk =
+      $('#wpec-map-table select.wpec-map-sel[data-key="first_name"]').val() &&
+      $('#wpec-map-table select.wpec-map-sel[data-key="last_name"]').val() &&
+      $('#wpec-map-table select.wpec-map-sel[data-key="email"]').val();
+    $("#wpec-map-next").prop("disabled", !requiredOk);
+  }
+
+  // STEP 1: upload file (do not start import)
+  $(document).on("submit", "#wpec-list-upload-form", function (e) {
+    e.preventDefault();
+
+    var fd = new FormData(this);
+    // switch server action to our existing uploader
+    fd.append("action", "wpec_list_upload");
+    fd.append("nonce", WPEC.nonce);
+
+    // lock UI
+    $("#wpec-upload-btn").prop("disabled", true);
+    $(".wpec-loader").show();
+
+    $.ajax({
+      url: WPEC.ajaxUrl,
+      type: "POST",
+      data: fd,
+      processData: false,
+      contentType: false,
+      dataType: "json",
     })
-    .fail(function () {
-      $("#wpec-map-body-inline").html("");
-      $("#wpec-map-errors-inline").show().text("Failed to read headers.");
+      .done(function (resp) {
+        if (!resp || !resp.success || !resp.data || !resp.data.list_id) {
+          alert((resp && resp.data && resp.data.message) || "Upload failed.");
+          $("#wpec-upload-btn").prop("disabled", false);
+          $(".wpec-loader").hide();
+          return;
+        }
+        WPEC_UPLOAD.listId = parseInt(resp.data.list_id, 10);
+
+        // probe headers of the uploaded CSV
+        $.post(WPEC.ajaxUrl, {
+          action: "wpec_list_probe_headers",
+          nonce: WPEC.nonce,
+          list_id: WPEC_UPLOAD.listId,
+        }).done(function (r2) {
+          $("#wpec-upload-btn").prop("disabled", false);
+          $(".wpec-loader").hide();
+
+          if (!r2 || !r2.success || !r2.data || !r2.data.columns) {
+            alert(
+              (r2 && r2.data && r2.data.message) || "Could not read header row."
+            );
+            return;
+          }
+          WPEC_UPLOAD.cols = r2.data.columns;
+          renderMapUI(WPEC_UPLOAD.cols);
+          enterStep(2); // show mapping below the upload card
+          window.scrollTo({
+            top: $("#wpec-map-panel").offset().top - 40,
+            behavior: "smooth",
+          });
+        });
+      })
+      .fail(function () {
+        $("#wpec-upload-btn").prop("disabled", false);
+        $(".wpec-loader").hide();
+        alert("Upload failed.");
+      });
+  });
+
+  // mapping changes -> validate
+  $(document).on("change", "#wpec-map-table .wpec-map-sel", validateMap);
+
+  // STEP 2: back
+  $(document).on("click", "#wpec-map-back", function (e) {
+    e.preventDefault();
+    enterStep(1);
+  });
+
+  // STEP 2: next (save map, move to review)
+  $(document).on("click", "#wpec-map-next", function (e) {
+    e.preventDefault();
+
+    // collect mapping
+    var map = {};
+    $("#wpec-map-table .wpec-map-sel").each(function () {
+      var key = $(this).data("key");
+      var v = $(this).val();
+      if (v !== "") map[key] = parseInt(v, 10);
     });
-}
 
-function renderMappingUIInline() {
-  function optionList(selectedIdx) {
-    let out = '<option value="">' + "— Unmapped —" + "</option>";
-    WPEC_headers.forEach(function (h, i) {
-      const sel = (String(selectedIdx) === String(i)) ? ' selected' : '';
-      out += '<option value="' + i + '"' + sel + '>' + escapeHtml(h || ("Column " + (i+1))) + '</option>';
-    });
-    return out;
-  }
-
-  let html = '<table class="widefat striped"><thead><tr>' +
-             '<th style="width:280px">Database field</th><th>File column</th>' +
-             '</tr></thead><tbody>';
-
-  WPEC_DB_FIELDS.forEach(function (f) {
-    const req = f.required ? ' <span class="wpec-pill wpec-pill-dup">Required</span>' : '';
-    const sel = (f.key in WPEC_map) ? WPEC_map[f.key] : "";
-    html += '<tr>';
-    html += '<td><strong>' + f.label + '</strong>' + req + '<br/><span class="description">' + f.key + '</span></td>';
-    html += '<td><select class="wpec-map-sel" data-field="' + f.key + '">' + optionList(sel) + '</select></td>';
-    html += '</tr>';
-  });
-
-  html += '</tbody></table>';
-  $("#wpec-map-body-inline").html(html);
-
-  // enhance selects
-  ensureSelect2(function () {
-    $(".wpec-map-sel").select2({
-      width: "resolve",
-      placeholder: "— Unmapped —",
-      allowClear: true
-    });
-  });
-}
-
-// Back to upload
-$(document).on("click", "#wpec-map-back-inline", function (e) {
-  e.preventDefault();
-  enterStep(1);
-});
-
-// Next -> validate and go to review (don’t save yet)
-$(document).on("click", "#wpec-map-next-inline", function (e) {
-  e.preventDefault();
-
-  // collect mapping from selects
-  WPEC_map = {};
-  $(".wpec-map-sel").each(function () {
-    const field = $(this).data("field");
-    const val = $(this).val();
-    if (val !== "" && val != null) WPEC_map[field] = parseInt(val, 10);
-  });
-
-  // required fields must be present
-  const missing = WPEC_DB_FIELDS.filter(f => f.required && !(f.key in WPEC_map));
-  if (missing.length) {
-    $("#wpec-map-errors-inline")
-      .show()
-      .text("Please map required fields: " + missing.map(m => m.label).join(", "));
-    return;
-  } else {
-    $("#wpec-map-errors-inline").hide().empty();
-  }
-
-  // build review table
-  let t = '<table class="widefat striped"><thead><tr><th>Field</th><th>Mapped to</th></tr></thead><tbody>';
-  WPEC_DB_FIELDS.forEach(function (f) {
-    const idx = WPEC_map[f.key];
-    const label = (idx != null && idx >= 0) ? (WPEC_headers[idx] || ("Column " + (idx+1))) : "— Unmapped —";
-    t += '<tr><td><strong>' + f.label + '</strong></td><td>' + escapeHtml(label) + '</td></tr>';
-  });
-  t += '</tbody></table>';
-  $("#wpec-map-review").html(t);
-
-  enterStep(3);
-});
-
-// Back from review -> mapping
-$(document).on("click", "#wpec-map-back-to-map", function (e) {
-  e.preventDefault();
-  enterStep(2);
-});
-
-// Confirm -> save mapping then start import (Step 4)
-$(document).on("click", "#wpec-map-confirm", function (e) {
-  e.preventDefault();
-  if (!WPEC_listId) return;
-
-  $("#wpec-map-loader-inline").show();
-  $.post(WPEC.ajaxUrl, {
-    action: "wpec_list_save_mapping",
-    nonce: WPEC.nonce,
-    list_id: WPEC_listId,
-    map: WPEC_map
-  })
-    .done(function (resp) {
-      $("#wpec-map-loader-inline").hide();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_list_set_header_map",
+      nonce: WPEC.nonce,
+      list_id: WPEC_UPLOAD.listId,
+      map: JSON.stringify(map),
+    }).done(function (resp) {
       if (!resp || !resp.success) {
-        alert((resp && resp.data && resp.data.message) || "Failed to save mapping.");
+        alert(
+          (resp && resp.data && resp.data.message) || "Could not save mapping."
+        );
         return;
       }
-      // Step 4: progress
-      enterStep(4);
-      setProgress(1, "Starting import...");
-      processList(WPEC_listId);
-    })
-    .fail(function () {
-      $("#wpec-map-loader-inline").hide();
-      alert("Failed to save mapping.");
-    });
-});
 
+      // summary view
+      var s =
+        '<table class="widefat striped"><thead><tr><th>Our field</th><th>Mapped column</th></tr></thead><tbody>';
+      DB_FIELDS.forEach(function (f) {
+        var idx = map[f[0]];
+        var val =
+          idx != null && idx >= 0 ? WPEC_UPLOAD.cols[idx] || "#" + idx : "—";
+        s +=
+          "<tr><td>" +
+          f[1] +
+          (f[2] ? " *" : "") +
+          "</td><td>" +
+          val +
+          "</td></tr>";
+      });
+      s += "</tbody></table>";
+      $("#wpec-map-summary").html(s);
+
+      enterStep(3);
+      window.scrollTo({
+        top: $("#wpec-review-panel").offset().top - 40,
+        behavior: "smooth",
+      });
+    });
+  });
+
+  // STEP 3: start import -> reuse existing processList()
+  $(document).on("click", "#wpec-start-import", function (e) {
+    e.preventDefault();
+    $("#wpec-progress-wrap").show();
+    $(".wpec-loader").show();
+    if (typeof processList === "function") {
+      processList(WPEC_UPLOAD.listId);
+    }
+  });
+
+  // ensure we start on step 1 when page loads
+  $(function () {
+    enterStep(1);
+  });
 
   $(function () {
     if (WPEC && WPEC.startImport && parseInt(WPEC.startImport, 10) > 0) {

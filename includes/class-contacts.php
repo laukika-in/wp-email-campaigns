@@ -59,9 +59,8 @@ class Contacts {
         add_action( 'wp_ajax_wpec_presets_set_default', [ $this, 'ajax_presets_set_default' ] );
 
         // === Mapping step (new) ===
-add_action( 'wp_ajax_wpec_list_headers',      [ $this, 'ajax_list_headers' ] );
-add_action( 'wp_ajax_wpec_list_save_mapping', [ $this, 'ajax_list_save_mapping' ] );
-
+add_action( 'wp_ajax_wpec_list_probe_headers', [ $this, 'ajax_list_probe_headers' ] );
+add_action( 'wp_ajax_wpec_list_set_header_map', [ $this, 'ajax_list_set_header_map' ] );
 
     }
 
@@ -278,6 +277,23 @@ add_action( 'wp_ajax_wpec_list_save_mapping', [ $this, 'ajax_list_save_mapping' 
         echo '</div>';
 
         echo '</form></div>';
+// STEP 2: Mapping (hidden by default)
+echo '<div id="wpec-map-panel" class="wpec-card" style="display:none;">';
+echo '  <h2 style="margin-top:0;">' . esc_html__( 'Map fields', 'wp-email-campaigns' ) . '</h2>';
+echo '  <div id="wpec-map-table"></div>';
+echo '  <p><button class="button" id="wpec-map-back">'.esc_html__('Back','wp-email-campaigns').'</button> ';
+echo '     <button class="button button-primary" id="wpec-map-next" disabled>'.esc_html__('Next','wp-email-campaigns').'</button></p>';
+echo '</div>';
+
+// STEP 3: Review & Import (hidden by default)
+echo '<div id="wpec-review-panel" class="wpec-card" style="display:none;">';
+echo '  <h2 style="margin-top:0;">' . esc_html__( 'Review & Import', 'wp-email-campaigns' ) . '</h2>';
+echo '  <div id="wpec-map-summary" style="margin-bottom:10px;"></div>';
+echo '  <p><button class="button button-primary" id="wpec-start-import">'.esc_html__('Start Import','wp-email-campaigns').'</button> <span class="wpec-loader" style="display:none;"></span></p>';
+// reuse your existing progress + result blocks (IDs must match what admin.js uses)
+echo '  <div id="wpec-progress-wrap" style="display:none;"><div class="wpec-progress"><span id="wpec-progress-bar" style="width:0%"></span></div><p id="wpec-progress-text"></p></div>';
+echo '  <div id="wpec-import-result" class="wpec-result" style="display:none;"></div>';
+echo '</div>';
 
         // Modals
         $this->render_add_contact_modal( $lists );
@@ -1391,91 +1407,83 @@ public function ajax_status_add_by_email() {
         }
         wp_send_json_success( [ 'list_id' => (int) $result['list_id'] ] );
     }
-/** Step 1: Read header row + suggest a map */
-public function ajax_list_headers() {
-    check_ajax_referer( 'wpec_admin', 'nonce' );
-    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
 
-    $list_id = absint($_POST['list_id'] ?? 0);
-    if ( ! $list_id ) wp_send_json_error(['message'=>'Bad list id']);
+    /** Read CSV header row for a list file (no DB changes) */
+public function ajax_list_probe_headers() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error( ['message'=>'Denied'] );
+
+    $list_id = absint( $_POST['list_id'] ?? 0 );
+    if ( ! $list_id ) wp_send_json_error( ['message'=>'Bad list id'] );
 
     $db    = Helpers::db();
     $lists = Helpers::table('lists');
-
-    $row = $db->get_row( $db->prepare("SELECT file_path FROM $lists WHERE id=%d", $list_id) );
-    if ( ! $row || empty($row->file_path) || ! file_exists($row->file_path) ) {
-        wp_send_json_error(['message'=>'Upload file missing']);
+    $row   = $db->get_row( $db->prepare( "SELECT file_path FROM $lists WHERE id=%d", $list_id ), ARRAY_A );
+    if ( ! $row || empty( $row['file_path'] ) || ! file_exists( $row['file_path'] ) ) {
+        wp_send_json_error( ['message'=>'Upload file missing'] );
     }
 
-    $h = fopen($row->file_path, 'r');
-    if ( ! $h ) wp_send_json_error(['message'=>'Unable to open file']);
-    $header = fgetcsv($h);
-    fclose($h);
+    $h = fopen( $row['file_path'], 'r' );
+    if ( ! $h ) wp_send_json_error( ['message'=>'Unable to open file'] );
+    $header = fgetcsv( $h );
+    // position right after header if needed later
+    $after_header_ptr = ftell( $h );
+    fclose( $h );
 
-    if ( $header === false || empty($header) ) {
-        wp_send_json_error(['message'=>'File missing header row']);
-    }
-
-    // Auto-suggest using your existing helper (same logic your importer uses)
-    $suggested = Helpers::parse_header_map( $header ); // e.g. ['first_name'=>2,'email'=>5,...]
-    $suggested = is_array($suggested) ? array_map('intval', $suggested) : [];
-
-    wp_send_json_success([
-        'headers'   => array_map('strval', $header),
-        'suggested' => $suggested,
-        'required'  => ['first_name','last_name','email'],
-    ]);
+    if ( empty( $header ) ) wp_send_json_error( ['message'=>'File missing header row'] );
+    $cols = array_map( function( $v ){ return is_string($v) ? trim($v) : (string)$v; }, $header );
+    wp_send_json_success( [ 'columns' => $cols, 'after_header_ptr' => (int)$after_header_ptr ] );
 }
 
-/** Step 2: Save chosen map, set file pointer after header, then importer can run */
-public function ajax_list_save_mapping() {
+/** Persist chosen header map; set file pointer to after header */
+public function ajax_list_set_header_map() {
     check_ajax_referer( 'wpec_admin', 'nonce' );
-    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error( ['message'=>'Denied'] );
 
-    $list_id = absint($_POST['list_id'] ?? 0);
-    $map_in  = isset($_POST['map']) && is_array($_POST['map']) ? $_POST['map'] : [];
+    $list_id = absint( $_POST['list_id'] ?? 0 );
+    $raw     = $_POST['map'] ?? '';
+    if ( ! $list_id ) wp_send_json_error( ['message'=>'Bad list id'] );
 
-    if ( ! $list_id ) wp_send_json_error(['message'=>'Bad list id']);
-
-    // Normalize incoming map: keep only ints >= 0
-    $map = [];
-    foreach ( $map_in as $field => $idx ) {
-        $field = sanitize_key($field);
-        if ($idx === '' || $idx === null) continue;
-        $map[$field] = max( -1, intval($idx) );
+    // accept either json string or array
+    if ( is_string( $raw ) ) {
+        $map = json_decode( wp_unslash( $raw ), true );
+    } else {
+        $map = (array) $raw;
     }
+    if ( ! is_array( $map ) ) wp_send_json_error( ['message'=>'Bad map'] );
 
-    // Required fields
+    // validate required
     foreach ( ['first_name','last_name','email'] as $req ) {
-        if ( ! isset($map[$req]) || $map[$req] < 0 ) {
-            wp_send_json_error(['message' => sprintf('Please map required field: %s', $req)]);
+        if ( ! isset($map[$req]) || $map[$req] === '' ) {
+            wp_send_json_error( ['message'=>'Missing required field mapping: '.$req] );
         }
     }
 
     $db    = Helpers::db();
     $lists = Helpers::table('lists');
-
-    $row = $db->get_row( $db->prepare("SELECT file_path FROM $lists WHERE id=%d", $list_id) );
-    if ( ! $row || empty($row->file_path) || ! file_exists($row->file_path) ) {
-        wp_send_json_error(['message'=>'Upload file missing']);
+    $row   = $db->get_row( $db->prepare( "SELECT file_path FROM $lists WHERE id=%d", $list_id ), ARRAY_A );
+    if ( ! $row || empty( $row['file_path'] ) || ! file_exists( $row['file_path'] ) ) {
+        wp_send_json_error( ['message'=>'Upload file missing'] );
     }
 
-    // Move pointer to AFTER header row (so importer starts at first data row)
-    $h = fopen($row->file_path, 'r');
-    if ( ! $h ) wp_send_json_error(['message'=>'Unable to open file']);
-    $header = fgetcsv($h); // skip header
-    $after  = ftell($h);
-    fclose($h);
+    // compute pointer after header row
+    $h = fopen( $row['file_path'], 'r' );
+    if ( ! $h ) wp_send_json_error( ['message'=>'Unable to open file'] );
+    fgetcsv( $h );
+    $after_header_ptr = ftell( $h );
+    fclose( $h );
 
+    // persist map + reset last_invalid + point after header
     $db->update( $lists, [
         'header_map'   => wp_json_encode( $map ),
-        'file_pointer' => $after,
+        'file_pointer' => (int) $after_header_ptr,
         'updated_at'   => Helpers::now(),
         'last_invalid' => 0,
     ], [ 'id' => $list_id ] );
 
-    wp_send_json_success([ 'saved' => true ]);
+    wp_send_json_success( [ 'ok' => 1 ] );
 }
+
 
     public function ajax_list_process() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
