@@ -1340,9 +1340,10 @@ public function ajax_status_add_by_email() {
             ], [ 'id' => (int)$existing_list_id ] );
             \update_option( 'wpec_import_' . (int) $existing_list_id, [
                 'dup'     => 0,
+                'up'      => 0,
                 'started' => Helpers::now(),
             ], false );
-            return [ 'list_id'  => (int)$existing_list_id, 'csv_path' => $dest ];
+
         }
         
 
@@ -1364,10 +1365,11 @@ public function ajax_status_add_by_email() {
             'last_invalid'   => 0,
         ] );
         $list_id = (int) $db->insert_id;
-        \update_option( 'wpec_import_' . (int) $existing_list_id, [
-            'dup'     => 0,
-            'started' => Helpers::now(),
-        ], false );
+            \update_option( 'wpec_import_' . (int) $existing_list_id, [
+                'dup'     => 0,
+                'up'      => 0,
+                'started' => Helpers::now(),
+            ], false );
         return [ 'list_id'  => $list_id, 'csv_path' => $dest ];
     }
 
@@ -1521,8 +1523,10 @@ public function ajax_list_set_header_map() {
             ], [ 'id' => $list_id ] );
             \update_option( 'wpec_import_' . (int) $list_id, [
                 'dup'     => 0,
+                'up'      => 0,
                 'started' => Helpers::now(),
             ], false );
+
         }
 
         $pointer = (int) $db->get_var( $db->prepare( "SELECT file_pointer FROM $lists WHERE id=%d", $list_id ) );
@@ -1601,11 +1605,20 @@ public function ajax_list_set_header_map() {
                 ] );
             }
         }
-// Update "duplicates in this import"
-$imp = \get_option( 'wpec_import_' . (int) $list_id, [ 'dup' => 0 ] );
-$imp['dup'] = (int)($imp['dup'] ?? 0) + (int)$dup_count;
-\update_option( 'wpec_import_' . (int) $list_id, $imp, false );
-$dup_this_import = (int) $imp['dup'];
+        // ── Accumulate "this import" counters (dup + up) ───────────────────────────
+        $imp = \get_option( 'wpec_import_' . (int) $list_id, [ 'dup' => 0, 'up' => 0 ] );
+        $imp['dup'] = (int)($imp['dup'] ?? 0) + (int)$dup_count;
+        $imp['up']  = (int)($imp['up']  ?? 0) + (int)$valid_imports;
+        \update_option( 'wpec_import_' . (int) $list_id, $imp, false );
+
+        $dup_this_import      = (int) $imp['dup'];
+        $uploaded_this_import = (int) $imp['up'];
+
+        // ── Compute requested snapshot metrics ─────────────────────────────────────
+        $list_contacts_now   = (int) $db->get_var( $db->prepare( "SELECT COUNT(*) FROM $li WHERE list_id=%d", $list_id ) );
+        $list_dupes_now      = (int) $db->get_var( $db->prepare( "SELECT COUNT(*) FROM $dupes WHERE list_id=%d", $list_id ) );
+        $contacts_overall    = (int) $db->get_var( "SELECT COUNT(*) FROM $ct" );
+        $dupes_overall       = (int) $db->get_var( "SELECT COUNT(*) FROM $dupes" );
 
         $new_pointer = ftell( $handle ); $eof = feof( $handle ); fclose( $handle );
 
@@ -1637,12 +1650,21 @@ $dup_this_import = (int) $imp['dup'];
             'done'     => $done,
             'progress' => $progress,
             'stats' => [
-            'imported'               => (int)$imported,
-            'invalid'                => (int)$invalid_t,
-            'duplicates'             => (int)$dupes_t,            
-            'duplicates_this_import' => (int)$dup_this_import,     
-            'total'                  => (int)$total,
+            // NEW (scoped + overall)
+            'uploaded_this_import'   => (int) $uploaded_this_import,  // Now uploaded (this file)
+            'duplicates_this_import' => (int) $dup_this_import,       // Duplicates (this file)
+            'list_contacts'          => (int) $list_contacts_now,     // Contacts in this list (after upload)
+            'list_duplicates'        => (int) $list_dupes_now,        // Duplicates in this list (total)
+            'contacts_overall'       => (int) $contacts_overall,      // All contacts (global)
+            'duplicates_overall'     => (int) $dupes_overall,         // All duplicates (global)
+
+            // LEGACY (kept so existing progress text doesn’t break elsewhere)
+            'imported'               => (int) $imported,              // cumulative imported (list)
+            'invalid'                => (int) $invalid_t,             // cumulative not-uploaded (list)
+            'duplicates'             => (int) $dupes_t,               // cumulative duplicates (list)
+            'total'                  => (int) $total,                 // cumulative rows seen (list)
         ],
+
 
             'list_id'  => $list_id,
         ] );

@@ -268,18 +268,29 @@
     html += '<h3 style="margin-top:0;">Import Summary</h3>';
     html += '<ul class="wpec-stats">';
     html +=
-      "<li><strong>Total uploaded:</strong> " + (stats.imported || 0) + "</li>";
+      "<li><strong>Now uploaded (this file):</strong> " +
+      (stats.uploaded_this_import || 0) +
+      "</li>";
     html +=
       "<li><strong>Duplicates in this import:</strong> " +
       (stats.duplicates_this_import || 0) +
       "</li>";
     html +=
-      "<li><strong>Total duplicates:</strong> " +
-      (stats.duplicates || 0) +
+      "<li><strong>Contacts in the list:</strong> " +
+      (stats.list_contacts || 0) +
       "</li>";
     html +=
-      "<li><strong>Not uploaded:</strong> " + (stats.invalid || 0) + "</li>";
-    html += "<li><strong>Total seen:</strong> " + (stats.total || 0) + "</li>";
+      "<li><strong>Duplicates in list:</strong> " +
+      (stats.list_duplicates || 0) +
+      "</li>";
+    html +=
+      "<li><strong>Total contacts (overall):</strong> " +
+      (stats.contacts_overall || 0) +
+      "</li>";
+    html +=
+      "<li><strong>Total duplicates (overall):</strong> " +
+      (stats.duplicates_overall || 0) +
+      "</li>";
     html += "</ul>";
     html += "<p>";
     html +=
@@ -313,17 +324,28 @@
         }
         var s = resp.data.stats || {};
         var pct = resp.data.progress || 0;
+
+        var nowUp =
+          s.uploaded_this_import != null
+            ? s.uploaded_this_import
+            : s.imported || 0;
+        var dupImp =
+          s.duplicates_this_import != null
+            ? s.duplicates_this_import
+            : s.duplicates || 0;
+        var listCnt =
+          s.list_contacts != null ? s.list_contacts : s.imported || 0;
+
         setProgress(
           pct,
-          "Imported: " +
-            (s.imported || 0) +
-            " | Duplicates: " +
-            (s.duplicates || 0) +
-            " | Not uploaded: " +
-            (s.invalid || 0) +
-            " | Total seen: " +
-            (s.total || 0)
+          "Now uploaded: " +
+            nowUp +
+            " | Duplicates in this import: " +
+            dupImp +
+            " | Contacts in list: " +
+            listCnt
         );
+
         if (resp.data.done) {
           $(".wpec-loader").hide();
           if (WPEC) WPEC.startImport = 0;
