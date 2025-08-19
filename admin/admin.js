@@ -1,178 +1,176 @@
 (function ($) {
   // ===== Saved Views (Presets) for All Contacts =====
-function presetPayload() {
-  return Object.assign(currentFilters(), {
-    cols: collectCols(),
-    page_size: parseInt($("#wpec-page-size").val(), 10) || 50,
-  });
-}
-function applyPresetToUI(p) {
-  if (!p || !p.data) return;
-  var d = p.data;
-
-  // Scalars
-  $("#wpec-f-search").val(d.search || "");
-  $("#wpec-f-emp-min").val(d.emp_min || "");
-  $("#wpec-f-emp-max").val(d.emp_max || "");
-  $("#wpec-f-rev-min").val(d.rev_min || "");
-  $("#wpec-f-rev-max").val(d.rev_max || "");
-  if (d.page_size) $("#wpec-page-size").val(String(d.page_size));
-
-  // Multi-selects (use Select2 if present)
-  function setMulti(sel, vals) {
-    if (!Array.isArray(vals)) vals = [];
-    var $el = $(sel);
-    $el.val(vals);
-    if ($el.hasClass("wpec-s2") && $el.data("select2")) $el.trigger("change");
+  function presetPayload() {
+    return Object.assign(currentFilters(), {
+      cols: collectCols(),
+      page_size: parseInt($("#wpec-page-size").val(), 10) || 50,
+    });
   }
-  setMulti("#wpec-f-company", d.company_name);
-  setMulti("#wpec-f-city", d.city);
-  setMulti("#wpec-f-state", d.state);
-  setMulti("#wpec-f-country", d.country);
-  setMulti("#wpec-f-job", d.job_title);
-  setMulti("#wpec-f-postcode", d.postal_code);
-  setMulti("#wpec-f-list", d.list_ids);
-  setMulti("#wpec-f-status", d.status);
+  function applyPresetToUI(p) {
+    if (!p || !p.data) return;
+    var d = p.data;
 
-  // Columns
-  $(".wpec-col-toggle").prop("checked", false);
-  (d.cols || []).forEach(function (c) {
-    $('.wpec-col-toggle[value="' + c + '"]').prop("checked", true);
-  });
-}
-function refreshPresetButtonsState() {
-  var hasSel = !!$("#wpec-preset").val();
-  $("#wpec-preset-load, #wpec-preset-overwrite, #wpec-preset-delete").prop(
-    "disabled",
-    !hasSel
-  );
-  // Default checkbox reflects selection
-  var sel = $("#wpec-preset").val();
-  var isDefault =
-    sel && window.WPEC && WPEC._presets && WPEC._presets.default_id === sel;
-  $("#wpec-preset-default").prop("checked", !!isDefault);
-}
-function loadPresetsList(cb) {
-  $.post(WPEC.ajaxUrl, { action: "wpec_presets_list", nonce: WPEC.nonce })
-    .done(function (res) {
-      if (!res || !res.success) return;
-      WPEC._presets = {
-        items: res.data.items || [],
-        default_id: res.data.default_id || "",
-      };
-      var $sel = $("#wpec-preset").empty();
-      $sel.append('<option value="">' + "— Select a view —" + "</option>");
-      (WPEC._presets.items || []).forEach(function (it) {
-        $sel.append(
-          $("<option>", { value: it.id, text: it.name })
-        );
-      });
-      if (WPEC._presets.default_id) {
-        $sel.val(WPEC._presets.default_id);
-      }
-      refreshPresetButtonsState();
-      if (cb) cb();
-    })
-    .fail(function () {
-      if (cb) cb();
+    // Scalars
+    $("#wpec-f-search").val(d.search || "");
+    $("#wpec-f-emp-min").val(d.emp_min || "");
+    $("#wpec-f-emp-max").val(d.emp_max || "");
+    $("#wpec-f-rev-min").val(d.rev_min || "");
+    $("#wpec-f-rev-max").val(d.rev_max || "");
+    if (d.page_size) $("#wpec-page-size").val(String(d.page_size));
+
+    // Multi-selects (use Select2 if present)
+    function setMulti(sel, vals) {
+      if (!Array.isArray(vals)) vals = [];
+      var $el = $(sel);
+      $el.val(vals);
+      if ($el.hasClass("wpec-s2") && $el.data("select2")) $el.trigger("change");
+    }
+    setMulti("#wpec-f-company", d.company_name);
+    setMulti("#wpec-f-city", d.city);
+    setMulti("#wpec-f-state", d.state);
+    setMulti("#wpec-f-country", d.country);
+    setMulti("#wpec-f-job", d.job_title);
+    setMulti("#wpec-f-postcode", d.postal_code);
+    setMulti("#wpec-f-list", d.list_ids);
+    setMulti("#wpec-f-status", d.status);
+
+    // Columns
+    $(".wpec-col-toggle").prop("checked", false);
+    (d.cols || []).forEach(function (c) {
+      $('.wpec-col-toggle[value="' + c + '"]').prop("checked", true);
     });
-}
-function savePreset(name, overwriteId) {
-  var payload = presetPayload();
-  $.post(WPEC.ajaxUrl, {
-    action: "wpec_presets_save",
-    nonce: WPEC.nonce,
-    name: name,
-    id: overwriteId || "",
-    data: JSON.stringify(payload),
-  }).done(function (res) {
-    if (res && res.success) {
-      WPEC._presets = {
-        items: res.data.items || [],
-        default_id: res.data.default_id || "",
-      };
-      loadPresetsList(function () {
-        if (res.data.saved_id) $("#wpec-preset").val(res.data.saved_id);
+  }
+  function refreshPresetButtonsState() {
+    var hasSel = !!$("#wpec-preset").val();
+    $("#wpec-preset-load, #wpec-preset-overwrite, #wpec-preset-delete").prop(
+      "disabled",
+      !hasSel
+    );
+    // Default checkbox reflects selection
+    var sel = $("#wpec-preset").val();
+    var isDefault =
+      sel && window.WPEC && WPEC._presets && WPEC._presets.default_id === sel;
+    $("#wpec-preset-default").prop("checked", !!isDefault);
+  }
+  function loadPresetsList(cb) {
+    $.post(WPEC.ajaxUrl, { action: "wpec_presets_list", nonce: WPEC.nonce })
+      .done(function (res) {
+        if (!res || !res.success) return;
+        WPEC._presets = {
+          items: res.data.items || [],
+          default_id: res.data.default_id || "",
+        };
+        var $sel = $("#wpec-preset").empty();
+        $sel.append('<option value="">' + "— Select a view —" + "</option>");
+        (WPEC._presets.items || []).forEach(function (it) {
+          $sel.append($("<option>", { value: it.id, text: it.name }));
+        });
+        if (WPEC._presets.default_id) {
+          $sel.val(WPEC._presets.default_id);
+        }
         refreshPresetButtonsState();
+        if (cb) cb();
+      })
+      .fail(function () {
+        if (cb) cb();
       });
-    } else {
-      alert((res && res.data && res.data.message) || "Save failed.");
-    }
-  });
-}
-function deletePreset(id) {
-  $.post(WPEC.ajaxUrl, {
-    action: "wpec_presets_delete",
-    nonce: WPEC.nonce,
-    id: id,
-  }).done(function (res) {
-    if (res && res.success) {
-      WPEC._presets = {
-        items: res.data.items || [],
-        default_id: res.data.default_id || "",
-      };
-      loadPresetsList(refreshPresetButtonsState);
-    } else {
-      alert((res && res.data && res.data.message) || "Delete failed.");
-    }
-  });
-}
-function setDefaultPreset(id) {
-  $.post(WPEC.ajaxUrl, {
-    action: "wpec_presets_set_default",
-    nonce: WPEC.nonce,
-    id: id || "",
-  }).done(function (res) {
-    if (res && res.success) {
-      if (!WPEC._presets) WPEC._presets = {};
-      WPEC._presets.default_id = res.data.default_id || "";
-      refreshPresetButtonsState();
-    }
-  });
-}
+  }
+  function savePreset(name, overwriteId) {
+    var payload = presetPayload();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_presets_save",
+      nonce: WPEC.nonce,
+      name: name,
+      id: overwriteId || "",
+      data: JSON.stringify(payload),
+    }).done(function (res) {
+      if (res && res.success) {
+        WPEC._presets = {
+          items: res.data.items || [],
+          default_id: res.data.default_id || "",
+        };
+        loadPresetsList(function () {
+          if (res.data.saved_id) $("#wpec-preset").val(res.data.saved_id);
+          refreshPresetButtonsState();
+        });
+      } else {
+        alert((res && res.data && res.data.message) || "Save failed.");
+      }
+    });
+  }
+  function deletePreset(id) {
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_presets_delete",
+      nonce: WPEC.nonce,
+      id: id,
+    }).done(function (res) {
+      if (res && res.success) {
+        WPEC._presets = {
+          items: res.data.items || [],
+          default_id: res.data.default_id || "",
+        };
+        loadPresetsList(refreshPresetButtonsState);
+      } else {
+        alert((res && res.data && res.data.message) || "Delete failed.");
+      }
+    });
+  }
+  function setDefaultPreset(id) {
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_presets_set_default",
+      nonce: WPEC.nonce,
+      id: id || "",
+    }).done(function (res) {
+      if (res && res.success) {
+        if (!WPEC._presets) WPEC._presets = {};
+        WPEC._presets.default_id = res.data.default_id || "";
+        refreshPresetButtonsState();
+      }
+    });
+  }
 
-// Wire up toolbar
-$(document)
-  .on("change", "#wpec-preset", refreshPresetButtonsState)
-  .on("click", "#wpec-preset-load", function (e) {
-    e.preventDefault();
-    var id = $("#wpec-preset").val();
-    if (!id || !WPEC._presets) return;
-    var found = (WPEC._presets.items || []).find(function (x) {
-      return x.id === id;
+  // Wire up toolbar
+  $(document)
+    .on("change", "#wpec-preset", refreshPresetButtonsState)
+    .on("click", "#wpec-preset-load", function (e) {
+      e.preventDefault();
+      var id = $("#wpec-preset").val();
+      if (!id || !WPEC._presets) return;
+      var found = (WPEC._presets.items || []).find(function (x) {
+        return x.id === id;
+      });
+      if (!found) return;
+      applyPresetToUI(found);
+      contactsQuery(1);
+    })
+    .on("click", "#wpec-preset-save", function (e) {
+      e.preventDefault();
+      var name = window.prompt("Name this view:");
+      if (!name) return;
+      savePreset(name, "");
+    })
+    .on("click", "#wpec-preset-overwrite", function (e) {
+      e.preventDefault();
+      var id = $("#wpec-preset").val();
+      if (!id) return;
+      var item = (WPEC._presets.items || []).find(function (x) {
+        return x.id === id;
+      });
+      var name = (item && item.name) || "Untitled";
+      if (!confirm('Overwrite "' + name + '" with current filters?')) return;
+      savePreset(name, id);
+    })
+    .on("click", "#wpec-preset-delete", function (e) {
+      e.preventDefault();
+      var id = $("#wpec-preset").val();
+      if (!id) return;
+      if (!confirm("Delete this saved view?")) return;
+      deletePreset(id);
+    })
+    .on("change", "#wpec-preset-default", function () {
+      var id = $("#wpec-preset").val() || "";
+      setDefaultPreset(this.checked ? id : "");
     });
-    if (!found) return;
-    applyPresetToUI(found);
-    contactsQuery(1);
-  })
-  .on("click", "#wpec-preset-save", function (e) {
-    e.preventDefault();
-    var name = window.prompt("Name this view:");
-    if (!name) return;
-    savePreset(name, "");
-  })
-  .on("click", "#wpec-preset-overwrite", function (e) {
-    e.preventDefault();
-    var id = $("#wpec-preset").val();
-    if (!id) return;
-    var item = (WPEC._presets.items || []).find(function (x) {
-      return x.id === id;
-    });
-    var name = (item && item.name) || "Untitled";
-    if (!confirm('Overwrite "' + name + '" with current filters?')) return;
-    savePreset(name, id);
-  })
-  .on("click", "#wpec-preset-delete", function (e) {
-    e.preventDefault();
-    var id = $("#wpec-preset").val();
-    if (!id) return;
-    if (!confirm("Delete this saved view?")) return;
-    deletePreset(id);
-  })
-  .on("change", "#wpec-preset-default", function () {
-    var id = $("#wpec-preset").val() || "";
-    setDefaultPreset(this.checked ? id : "");
-  });
 
   // ── Select2 loader (local first; fallback CDN) ────────────────────────────
   function ensureSelect2(cb) {
@@ -337,13 +335,162 @@ $(document)
         alert("Import request failed.");
       });
   }
+  // ===== Mapping step (between Upload and Process) =====
+
+const WPEC_DB_FIELDS = [
+  { key: "first_name", label: "First name", required: true },
+  { key: "last_name",  label: "Last name",  required: true },
+  { key: "email",      label: "Email",      required: true },
+  { key: "company_name",            label: "Company name" },
+  { key: "company_employees",       label: "Company employees" },
+  { key: "company_annual_revenue",  label: "Company annual revenue" },
+  { key: "contact_number",          label: "Contact number" },
+  { key: "job_title",               label: "Job title" },
+  { key: "industry",                label: "Industry" },
+  { key: "country",                 label: "Country" },
+  { key: "state",                   label: "State" },
+  { key: "city",                    label: "City" },
+  { key: "postal_code",             label: "Postal code" },
+  { key: "status",                  label: "Status" } // accepts active|unsubscribed|bounced
+];
+
+let WPEC_currentListForMap = 0;
+
+function openMapping(listId) {
+  WPEC_currentListForMap = parseInt(listId, 10) || 0;
+  if (!WPEC_currentListForMap) return;
+
+  // Show modal + overlay
+  $("#wpec-modal-overlay").show();
+  $("#wpec-map-modal").show();
+  $("#wpec-map-loader").show();
+  $("#wpec-map-errors").hide().empty();
+  $("#wpec-map-body").empty();
+
+  // Fetch headers + suggestions
+  $.post(WPEC.ajaxUrl, {
+    action: "wpec_list_headers",
+    nonce: WPEC.nonce,
+    list_id: WPEC_currentListForMap
+  })
+    .done(function (resp) {
+      $("#wpec-map-loader").hide();
+      if (!resp || !resp.success) {
+        $("#wpec-map-errors")
+          .show()
+          .text((resp && resp.data && resp.data.message) || "Failed to read headers.");
+        return;
+      }
+      renderMappingUI(resp.data.headers || [], resp.data.suggested || {});
+    })
+    .fail(function () {
+      $("#wpec-map-loader").hide();
+      $("#wpec-map-errors").show().text("Failed to read headers.");
+    });
+}
+
+function renderMappingUI(headers, suggested) {
+  // Build a 2-column grid: DB field (left) -> select(headers) (right)
+  let html = '<table class="widefat striped"><thead><tr>' +
+             '<th style="width:280px">Database field</th><th>File column</th>' +
+             '</tr></thead><tbody>';
+
+  function optionList(selectedIdx) {
+    let out = '<option value="">' + "— Unmapped —" + "</option>";
+    headers.forEach(function (h, i) {
+      const sel = (String(selectedIdx) === String(i)) ? ' selected' : '';
+      out += '<option value="' + i + '"' + sel + '>' + escapeHtml(h || ("Column " + (i+1))) + '</option>';
+    });
+    return out;
+  }
+
+  WPEC_DB_FIELDS.forEach(function (f) {
+    const guess = suggested[f.key];
+    const reqBadge = f.required ? ' <span class="wpec-pill wpec-pill-dup">Required</span>' : '';
+    html += '<tr>';
+    html += '<td><strong>' + f.label + '</strong>' + reqBadge + '<br/><span class="description">' + (f.key) + '</span></td>';
+    html += '<td><select class="wpec-map-sel" data-field="' + f.key + '">' + optionList(guess) + '</select></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  $("#wpec-map-body").html(html);
+
+  // Make selects searchable if Select2 is present
+  ensureSelect2(function () {
+    $(".wpec-map-sel").select2({
+      width: "resolve",
+      placeholder: "— Unmapped —",
+      allowClear: true
+    });
+  });
+}
+
+// Continue: validate + save mapping, then start the importer
+$(document).on("click", "#wpec-map-continue", function (e) {
+  e.preventDefault();
+  if (!WPEC_currentListForMap) return;
+
+  // Collect map
+  const map = {};
+  $(".wpec-map-sel").each(function () {
+    const field = $(this).data("field");
+    const val   = $(this).val();
+    if (val !== "" && val != null) map[field] = parseInt(val, 10);
+  });
+
+  // Validate required
+  const missing = WPEC_DB_FIELDS
+    .filter(f => f.required)
+    .filter(f => !(f.key in map));
+  if (missing.length) {
+    $("#wpec-map-errors")
+      .show()
+      .text("Please map required fields: " + missing.map(m => m.label).join(", "));
+    return;
+  }
+
+  // Save
+  $("#wpec-map-loader").show();
+  $.post(WPEC.ajaxUrl, {
+    action: "wpec_list_save_mapping",
+    nonce: WPEC.nonce,
+    list_id: WPEC_currentListForMap,
+    map: map
+  })
+    .done(function (resp) {
+      $("#wpec-map-loader").hide();
+      if (!resp || !resp.success) {
+        $("#wpec-map-errors")
+          .show()
+          .text((resp && resp.data && resp.data.message) || "Failed to save mapping.");
+        return;
+      }
+      // Close modal and start import
+      $("#wpec-map-modal, #wpec-modal-overlay").hide();
+      $(".wpec-loader").show();
+      setProgress(1, "Starting import...");
+      processList(WPEC_currentListForMap);
+    })
+    .fail(function () {
+      $("#wpec-map-loader").hide();
+      $("#wpec-map-errors").show().text("Failed to save mapping.");
+    });
+});
+
+// Back/close
+$(document).on("click", "#wpec-map-back, #wpec-map-modal .wpec-modal-close", function (e) {
+  e.preventDefault();
+  $("#wpec-map-modal, #wpec-modal-overlay").hide();
+});
+
   $(document).on("submit", "#wpec-list-upload-form", function (e) {
     e.preventDefault();
     var $btn = $("#wpec-upload-btn");
     var fd = new FormData(this);
     $btn.prop("disabled", true);
     $(".wpec-loader").show();
-    setProgress(0, "Preparing upload...");
+    setProgress(0, "Uploading file...");
     $.ajax({
       url: WPEC.ajaxUrl + "?action=wpec_list_upload",
       type: "POST",
@@ -358,8 +505,8 @@ $(document)
           alert((resp && resp.data && resp.data.message) || "Upload failed");
           return;
         }
-        setProgress(1, "Starting import...");
-        processList(resp.data.list_id);
+        // Open mapping step (new) instead of starting import
+        openMapping(resp.data.list_id);
       })
       .fail(function () {
         $(".wpec-loader").hide();
@@ -367,6 +514,7 @@ $(document)
         alert("Upload failed.");
       });
   });
+
   $(function () {
     if (WPEC && WPEC.startImport && parseInt(WPEC.startImport, 10) > 0) {
       $(".wpec-loader").show();
@@ -1048,22 +1196,21 @@ $(document)
 
   $(function () {
     if (onContactsPage()) {
-  ensureSelect2(function () {
-    initSelect2();
-    // Load presets (and default) first, then run the query
-    loadPresetsList(function () {
-      var defaultId = WPEC._presets && WPEC._presets.default_id;
-      if (defaultId) {
-        var item = (WPEC._presets.items || []).find(function (x) {
-          return x.id === defaultId;
+      ensureSelect2(function () {
+        initSelect2();
+        // Load presets (and default) first, then run the query
+        loadPresetsList(function () {
+          var defaultId = WPEC._presets && WPEC._presets.default_id;
+          if (defaultId) {
+            var item = (WPEC._presets.items || []).find(function (x) {
+              return x.id === defaultId;
+            });
+            if (item) applyPresetToUI(item);
+          }
+          contactsQuery(1);
         });
-        if (item) applyPresetToUI(item);
-      }
-      contactsQuery(1);
-    });
-  });
-}
- else {
+      });
+    } else {
       // Import page Select2 for existing list + add-contact list
       if (
         $("#wpec-existing-list").length ||

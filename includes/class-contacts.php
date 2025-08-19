@@ -58,6 +58,11 @@ class Contacts {
         add_action( 'wp_ajax_wpec_presets_delete',      [ $this, 'ajax_presets_delete' ] );
         add_action( 'wp_ajax_wpec_presets_set_default', [ $this, 'ajax_presets_set_default' ] );
 
+        // === Mapping step (new) ===
+add_action( 'wp_ajax_wpec_list_headers',      [ $this, 'ajax_list_headers' ] );
+add_action( 'wp_ajax_wpec_list_save_mapping', [ $this, 'ajax_list_save_mapping' ] );
+
+
     }
 
     /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
@@ -1361,6 +1366,91 @@ public function ajax_status_add_by_email() {
         }
         wp_send_json_success( [ 'list_id' => (int) $result['list_id'] ] );
     }
+/** Step 1: Read header row + suggest a map */
+public function ajax_list_headers() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $list_id = absint($_POST['list_id'] ?? 0);
+    if ( ! $list_id ) wp_send_json_error(['message'=>'Bad list id']);
+
+    $db    = Helpers::db();
+    $lists = Helpers::table('lists');
+
+    $row = $db->get_row( $db->prepare("SELECT file_path FROM $lists WHERE id=%d", $list_id) );
+    if ( ! $row || empty($row->file_path) || ! file_exists($row->file_path) ) {
+        wp_send_json_error(['message'=>'Upload file missing']);
+    }
+
+    $h = fopen($row->file_path, 'r');
+    if ( ! $h ) wp_send_json_error(['message'=>'Unable to open file']);
+    $header = fgetcsv($h);
+    fclose($h);
+
+    if ( $header === false || empty($header) ) {
+        wp_send_json_error(['message'=>'File missing header row']);
+    }
+
+    // Auto-suggest using your existing helper (same logic your importer uses)
+    $suggested = Helpers::parse_header_map( $header ); // e.g. ['first_name'=>2,'email'=>5,...]
+    $suggested = is_array($suggested) ? array_map('intval', $suggested) : [];
+
+    wp_send_json_success([
+        'headers'   => array_map('strval', $header),
+        'suggested' => $suggested,
+        'required'  => ['first_name','last_name','email'],
+    ]);
+}
+
+/** Step 2: Save chosen map, set file pointer after header, then importer can run */
+public function ajax_list_save_mapping() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
+
+    $list_id = absint($_POST['list_id'] ?? 0);
+    $map_in  = isset($_POST['map']) && is_array($_POST['map']) ? $_POST['map'] : [];
+
+    if ( ! $list_id ) wp_send_json_error(['message'=>'Bad list id']);
+
+    // Normalize incoming map: keep only ints >= 0
+    $map = [];
+    foreach ( $map_in as $field => $idx ) {
+        $field = sanitize_key($field);
+        if ($idx === '' || $idx === null) continue;
+        $map[$field] = max( -1, intval($idx) );
+    }
+
+    // Required fields
+    foreach ( ['first_name','last_name','email'] as $req ) {
+        if ( ! isset($map[$req]) || $map[$req] < 0 ) {
+            wp_send_json_error(['message' => sprintf('Please map required field: %s', $req)]);
+        }
+    }
+
+    $db    = Helpers::db();
+    $lists = Helpers::table('lists');
+
+    $row = $db->get_row( $db->prepare("SELECT file_path FROM $lists WHERE id=%d", $list_id) );
+    if ( ! $row || empty($row->file_path) || ! file_exists($row->file_path) ) {
+        wp_send_json_error(['message'=>'Upload file missing']);
+    }
+
+    // Move pointer to AFTER header row (so importer starts at first data row)
+    $h = fopen($row->file_path, 'r');
+    if ( ! $h ) wp_send_json_error(['message'=>'Unable to open file']);
+    $header = fgetcsv($h); // skip header
+    $after  = ftell($h);
+    fclose($h);
+
+    $db->update( $lists, [
+        'header_map'   => wp_json_encode( $map ),
+        'file_pointer' => $after,
+        'updated_at'   => Helpers::now(),
+        'last_invalid' => 0,
+    ], [ 'id' => $list_id ] );
+
+    wp_send_json_success([ 'saved' => true ]);
+}
 
     public function ajax_list_process() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
@@ -1526,6 +1616,7 @@ public function ajax_status_add_by_email() {
             'list_id'  => $list_id,
         ] );
     }
+
 // ===================== Modals used on Import page =====================
     private function render_add_contact_modal( $lists ) {
         echo '<div id="wpec-modal-overlay" style="display:none;"></div>';
@@ -1569,6 +1660,23 @@ public function ajax_status_add_by_email() {
         echo '<p><button class="button button-primary" type="submit">'.esc_html__('Create','wp-email-campaigns').'</button> <span class="wpec-loader" id="wpec-create-list-loader" style="display:none;"></span></p>';
         echo '</form>';
         echo '</div></div>';
+
+                // === Mapping Modal (new) ===
+        echo '<div id="wpec-map-modal" class="wpec-modal" style="display:none">';
+        echo '  <div class="wpec-modal-inner">';
+        echo '    <button class="wpec-modal-close" type="button" aria-label="Close">&times;</button>';
+        echo '    <h2>'.esc_html__('Map columns','wp-email-campaigns').'</h2>';
+        echo '    <p class="description">'.esc_html__('Match your file columns to database fields. Required fields must be mapped.','wp-email-campaigns').'</p>';
+        echo '    <div id="wpec-map-errors" class="notice notice-error" style="display:none"></div>';
+        echo '    <div id="wpec-map-body"></div>';
+        echo '    <p style="margin-top:12px">';
+        echo '      <button class="button" id="wpec-map-back">'.esc_html__('Back','wp-email-campaigns').'</button> ';
+        echo '      <button class="button button-primary" id="wpec-map-continue">'.esc_html__('Continue import','wp-email-campaigns').'</button> ';
+        echo '      <span class="wpec-loader" id="wpec-map-loader" style="display:none"></span>';
+        echo '    </p>';
+        echo '  </div>';
+        echo '</div>';
+
     }
     private function render_create_list_modal() { /* included in render_add_contact_modal */ }
 }
