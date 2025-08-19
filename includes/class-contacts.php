@@ -1901,12 +1901,16 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
                     SELECT COUNT(*) FROM $dupes d2 WHERE d2.contact_id = d.contact_id
                 ) AS dup_count,
                 (
-                    SELECT GROUP_CONCAT(DISTINCT l2.name ORDER BY li2.created_at DESC SEPARATOR ', ')
-                    FROM $li li2
-                    INNER JOIN $lists l2 ON l2.id = li2.list_id
-                    WHERE li2.contact_id = d.contact_id
-                    AND li2.list_id <> d.list_id
-                ) AS other_lists,
+                     SELECT GROUP_CONCAT(
+           DISTINCT CONCAT(l2.id,'::',l2.name)
+           ORDER BY li2.created_at DESC
+           SEPARATOR '|'
+         )
+  FROM $li li2
+  INNER JOIN $lists l2 ON l2.id = li2.list_id
+  WHERE li2.contact_id = d.contact_id
+    AND li2.list_id <> d.list_id
+                ) AS other_lists_meta,
                 d.contact_id,
                 c.status
             FROM $dupes d
@@ -1932,8 +1936,33 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         case 'current_list':
             $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
             return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
-        case 'other_lists': // <-- new name
-            return esc_html( $item['other_lists'] ?? '' );
+        case 'other_lists': {
+    $meta = isset($item['other_lists_meta']) ? (string)$item['other_lists_meta'] : '';
+    if ($meta === '') {
+        return '<em>-</em>';
+    }
+    $pairs = explode('|', $meta);
+    $links = [];
+    foreach ($pairs as $pair) {
+        $parts = explode('::', $pair, 2);
+        $lid   = isset($parts[0]) ? (int)$parts[0] : 0;
+        $lname = isset($parts[1]) ? $parts[1] : '';
+        if ($lid && $lname !== '') {
+            $url = add_query_arg(
+                [
+                    'post_type' => 'email_campaign',
+                    'page'      => 'wpec-contacts',
+                    'view'      => 'list',
+                    'list_id'   => $lid,
+                ],
+                admin_url('edit.php')
+            );
+            $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
+        }
+    }
+    return $links ? implode(', ', $links) : '<em>-</em>';
+}
+
         case 'imported_at':
             return esc_html( $item['imported_at'] ?? '' );
         case 'actions':
