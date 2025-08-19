@@ -1807,3 +1807,118 @@
 
   $(wireAllPage);
 })(jQuery);
+// === Contact detail actions (sidebar) ===
+jQuery(function () {
+  var $wrap = jQuery("#wpec-contact-detail");
+  if (!$wrap.length) return;
+  var cid = parseInt($wrap.data("contactId"), 10) || 0;
+  if (!cid) return;
+
+  function busy(on) {
+    jQuery("#wpec-contact-actions-loader").toggle(!!on);
+  }
+
+  // Status -> Active
+  jQuery("#wpec-contact-set-active").on("click", function () {
+    busy(true);
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_status_bulk_update",
+        nonce: WPEC.nonce,
+        mode: "remove", // remove from DND/Bounced => Active
+        status: "unsubscribed", // ignored by server for "remove"
+        ids: [cid],
+      })
+      .always(function () {
+        busy(false);
+        location.reload();
+      });
+  });
+
+  // Status -> Do Not Send (unsubscribed)
+  jQuery("#wpec-contact-mark-dnd").on("click", function () {
+    busy(true);
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_status_bulk_update",
+        nonce: WPEC.nonce,
+        mode: "add",
+        status: "unsubscribed",
+        ids: [cid],
+      })
+      .always(function () {
+        busy(false);
+        location.reload();
+      });
+  });
+
+  // Status -> Bounced
+  jQuery("#wpec-contact-mark-bounced").on("click", function () {
+    busy(true);
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_status_bulk_update",
+        nonce: WPEC.nonce,
+        mode: "add",
+        status: "bounced",
+        ids: [cid],
+      })
+      .always(function () {
+        busy(false);
+        location.reload();
+      });
+  });
+
+  // Add to list
+  jQuery("#wpec-contact-addlist-btn").on("click", function () {
+    var listId =
+      parseInt(jQuery("#wpec-contact-addlist-select").val(), 10) || 0;
+    if (!listId) return;
+    busy(true);
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_contacts_bulk_move",
+        nonce: WPEC.nonce,
+        contact_ids: [cid],
+        list_id: listId,
+      })
+      .done(function (resp) {
+        if (resp && resp.success) {
+          location.reload();
+        } else {
+          alert((resp && resp.data && resp.data.message) || "Move failed.");
+        }
+      })
+      .always(function () {
+        busy(false);
+      });
+  });
+
+  // Delete contact
+  jQuery("#wpec-contact-delete").on("click", function () {
+    if (!confirm("Delete this contact? This removes it from all lists."))
+      return;
+    busy(true);
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_contacts_bulk_delete",
+        nonce: WPEC.nonce,
+        contact_ids: [cid],
+      })
+      .done(function (resp) {
+        if (resp && resp.success) {
+          window.location =
+            WPEC && WPEC.adminBase
+              ? WPEC.adminBase +
+                "?post_type=email_campaign&page=wpec-all-contacts"
+              : window.location.origin +
+                "/wp-admin/edit.php?post_type=email_campaign&page=wpec-all-contacts";
+        } else {
+          alert((resp && resp.data && resp.data.message) || "Delete failed.");
+        }
+      })
+      .always(function () {
+        busy(false);
+      });
+  });
+});
