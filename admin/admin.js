@@ -1929,4 +1929,101 @@ jQuery(function () {
         busy(false);
       });
   });
+
+  // ===== Contact Detail page wiring =====
+
+  var $detail = $("#wpec-contact-detail");
+  if (!$detail.length) return;
+
+  var cid = parseInt($detail.data("contact-id"), 10) || 0;
+  function setPill(status) {
+    var $pill = $("#wpec-status-pill");
+    $pill
+      .removeClass("is-active is-unsubscribed is-bounced")
+      .addClass(
+        status === "bounced"
+          ? "is-bounced"
+          : status === "unsubscribed"
+          ? "is-unsubscribed"
+          : "is-active"
+      )
+      .text(status);
+  }
+
+  // Status change
+  $(document).on("change", "#wpec-contact-status", function () {
+    var status = $(this).val();
+    $("#wpec-contact-loader").show();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_contact_update_status",
+      nonce: WPEC.nonce,
+      contact_id: cid,
+      status: status,
+    })
+      .done(function (res) {
+        if (res && res.success) setPill(status);
+        else alert((res && res.data && res.data.message) || "Update failed.");
+      })
+      .always(function () {
+        $("#wpec-contact-loader").hide();
+      });
+  });
+
+  // Add to list
+  $(document).on("click", "#wpec-contact-add-btn", function (e) {
+    e.preventDefault();
+    var listId = parseInt($("#wpec-contact-add-list").val(), 10) || 0;
+    if (!listId) return;
+    $("#wpec-contact-loader").show();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_contact_add_to_list",
+      nonce: WPEC.nonce,
+      contact_id: cid,
+      list_id: listId,
+    })
+      .done(function (res) {
+        if (res && res.success && res.data) {
+          var chip =
+            '<span class="wpec-chip" data-list-id="' +
+            res.data.list_id +
+            '" data-contact-id="' +
+            cid +
+            '"><a href="' +
+            res.data.list_url +
+            '">' +
+            res.data.list_name +
+            '</a><button type="button" class="wpec-chip-remove" aria-label="Remove">&times;</button></span>';
+          $("#wpec-list-chips").append(chip);
+          $("#wpec-contact-add-list").val("");
+        } else {
+          alert((res && res.data && res.data.message) || "Add failed.");
+        }
+      })
+      .always(function () {
+        $("#wpec-contact-loader").hide();
+      });
+  });
+
+  // Remove from list (uses existing AJAX endpoint)
+  $(document).on("click", ".wpec-chip-remove", function () {
+    var $chip = $(this).closest(".wpec-chip");
+    var listId = parseInt($chip.data("listId"), 10) || 0;
+    if (!listId || !cid) return;
+    if (!confirm("Remove this contact from the list?")) return;
+
+    $("#wpec-contact-loader").show();
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_delete_list_mapping",
+      nonce: WPEC.nonce,
+      list_id: listId,
+      contact_id: cid,
+    })
+      .done(function (res) {
+        if (res && res.success) $chip.remove();
+        else alert((res && res.data && res.data.message) || "Remove failed.");
+      })
+      .always(function () {
+        $("#wpec-contact-loader").hide();
+      });
+  });
 });

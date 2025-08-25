@@ -271,3 +271,139 @@
   background: #ef4444;
   color: #fff;
 } /* red */
+/* ===== Contact Detail page ===== */
+.wpec-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+}
+@media (max-width: 1024px) {
+  .wpec-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wpec-card {
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  padding: 16px;
+}
+.wpec-card + .wpec-card {
+  margin-top: 16px;
+}
+
+.wpec-card-header {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+.wpec-header-left {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex: 1 1 auto;
+}
+.wpec-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 18px;
+  background: #f0f2f4;
+  color: #3c434a;
+  border: 1px solid #e2e4e7;
+}
+.wpec-head-meta {
+  line-height: 1.35;
+}
+.wpec-head-name {
+  margin: 0 0 4px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.wpec-head-email {
+  color: #50575e;
+}
+.wpec-head-lists {
+  margin-top: 6px;
+}
+
+.wpec-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.wpec-header-actions label select {
+  min-width: 200px;
+}
+
+.wpec-status-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  text-transform: none;
+  border: 1px solid transparent;
+}
+.wpec-status-pill.is-active {
+  background: #edf7ee;
+  color: #176a32;
+  border-color: #cfe7d2;
+}
+.wpec-status-pill.is-unsubscribed {
+  background: #f5f5f5;
+  color: #444;
+  border-color: #e2e2e2;
+}
+.wpec-status-pill.is-bounced {
+  background: #fff3f2;
+  color: #b42318;
+  border-color: #f3c6c3;
+}
+
+.wpec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #e2e4e7;
+  border-radius: 999px;
+  background: #fafbfc;
+  margin: 4px 6px 0 0;
+}
+.wpec-chip a {
+  text-decoration: none;
+}
+.wpec-chip .wpec-chip-remove {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: 2px;
+}
+.wpec-chip .wpec-chip-remove:hover {
+  color: #b42318;
+}
+
+.wpec-detail-table th {
+  width: 220px;
+}
+.wpec-quick-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpec-quick-actions li + li {
+  margin-top: 8px;
+}

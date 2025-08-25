@@ -2,16 +2,17 @@
 /**
  * Plugin Name:       WP Email Campaigns
  * Description:       Transactional email campaigns via CPT with Excel/CSV import, Action Scheduler (1 email/3s), contacts, and reporting.
- * Version:           1.4.1
+ * Version:           1.4.2
  * Author:            Anirudh
  * Text Domain:       wp-email-campaigns
  */
 /*
 UI: detail page, upload Ui, filter ui, 
 features missing: move to other list in list page
-bug: delete button not working
-Test features once, dfetail page move option not working, many places delete button not working
+bug: delete button not working, view current list is showing all list
+Test features once, detail page move option not working, many places delete button not working
 
+email: save template structure, followup (link to parent mail)
 
 */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
