@@ -286,11 +286,6 @@
   }
   function showResultPanel(stats, listId) {
     var $panel = $("#wpec-import-result");
-    var listName =
-      window.WPEC && WPEC.currentUploadListName
-        ? WPEC.currentUploadListName
-        : "";
-
     var dupesUrlAll = new URL(
       location.origin +
         location.pathname +
@@ -301,8 +296,6 @@
     dupesUrlList.searchParams.set("focus_list", String(listId));
     var html = "";
     html += '<h3 style="margin-top:0;">Import Summary</h3>';
-    html +=
-      "<p><strong>List:</strong> " + $("<div>").text(listName).html() + "</p>";
     html += '<ul class="wpec-stats">';
     html +=
       "<li><strong>Now uploaded (this file):</strong> " +
@@ -635,10 +628,6 @@
 
     // collect mapping
     var map = {};
-    var listName =
-      window.WPEC && WPEC.currentUploadListName
-        ? WPEC.currentUploadListName
-        : "";
     $("#wpec-map-table .wpec-map-sel").each(function () {
       var key = $(this).data("key");
       var v = $(this).val();
@@ -660,9 +649,7 @@
 
       // summary view
       var s =
-        "<p><strong>List:</strong> " +
-        $("<div>").text(listName).html() +
-        '</p><table class="widefat striped"><thead><tr><th>Our field</th><th>Mapped column</th></tr></thead><tbody>';
+        '<table class="widefat striped"><thead><tr><th>Our field</th><th>Mapped column</th></tr></thead><tbody>';
       DB_FIELDS.forEach(function (f) {
         var idx = map[f[0]];
         var val =
@@ -711,22 +698,15 @@
 
   // Existing list mode toggle
   $(document).on("change", 'input[name="list_mode"]', function () {
-    // inside the Step-1 handler (right before you send the FormData)
     var mode = $('input[name="list_mode"]:checked').val();
-    fd.append("list_mode", mode);
-
+    $("#wpec-list-target-new").toggle(mode === "new");
+    $("#wpec-list-target-existing").toggle(mode === "existing");
     if (mode === "new") {
-      var newName = ($('input[name="list_name"]').val() || "").trim();
-      fd.append("list_name", newName);
-      window.WPEC = window.WPEC || {};
-      WPEC.currentUploadListName = newName || "(New list)";
+      $('input[name="list_name"]').attr("required", true);
+      $("#wpec-existing-list").removeAttr("required");
     } else {
-      var existingId = $("#wpec-existing-list").val();
-      var existingText = $("#wpec-existing-list option:selected").text() || "";
-      fd.append("existing_list_id", existingId);
-      window.WPEC = window.WPEC || {};
-      // strip trailing counts like "Name (123)"
-      WPEC.currentUploadListName = existingText.replace(/\s*\(\d+\)\s*$/, "");
+      $('input[name="list_name"]').removeAttr("required");
+      $("#wpec-existing-list").attr("required", true);
     }
   });
 
@@ -858,47 +838,43 @@
     jQuery("#wpec-list-bulk-delete").prop("disabled", !any);
     jQuery("#wpec-list-bulk-move").prop("disabled", !(any && hasDest));
   }
-  // enable/disable the Move button when checkboxes change
-  $(document).on(
+  jQuery(document).on(
     "change",
-    "#wpec-list-form input[name='ids[]'], #wpec-list-move-dest",
-    function () {
-      var any = $("#wpec-list-form input[name='ids[]']:checked").length > 0;
-      var dest = parseInt($("#wpec-list-move-dest").val(), 10) || 0;
-      $("#wpec-list-bulk-move").prop("disabled", !(any && dest));
-    }
+    '#wpec-list-form input[type="checkbox"]',
+    wpecToggleListBulk
   );
+  jQuery(document).on("change", "#wpec-list-move-list", wpecToggleListBulk);
+  jQuery(wpecToggleListBulk);
 
-  // on click Move
-  $(document).on("click", "#wpec-list-bulk-move", function (e) {
+  // Move selected (from this list) to another list
+  jQuery(document).on("click", "#wpec-list-bulk-move", function (e) {
     e.preventDefault();
-    var dest = parseInt($("#wpec-list-move-dest").val(), 10) || 0;
-    if (!dest) return;
-
     var ids = [];
-    $("#wpec-list-form input[name='ids[]']:checked").each(function () {
-      var parts = String($(this).val()).split(":");
-      if (parts.length === 2) ids.push(parseInt(parts[1], 10)); // contact_id
+    jQuery('#wpec-list-form input[name="ids[]"]:checked').each(function () {
+      var parts = String(jQuery(this).val()).split(":"); // value = "{listId}:{contactId}"
+      var cid = parseInt(parts[1], 10) || 0;
+      if (cid) ids.push(cid);
     });
-    if (!ids.length) return;
+    var dest = parseInt(jQuery("#wpec-list-move-list").val(), 10) || 0;
+    if (!ids.length || !dest) return;
 
-    $("#wpec-list-bulk-loader").show();
-    $.post(WPEC.ajaxUrl, {
-      action: "wpec_contacts_bulk_move",
-      nonce: WPEC.nonce,
-      ids: ids,
-      list_id: dest,
-    })
-      .done(function (resp) {
-        if (resp && resp.success) {
-          // refresh table
-          $("#wpec-list-form").trigger("submit"); // or window.location.reload();
+    jQuery("#wpec-list-bulk-loader").show();
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_contacts_bulk_move",
+        nonce: WPEC.nonce,
+        ids: ids,
+        list_id: dest,
+      })
+      .done(function (res) {
+        if (res && res.success) {
+          location.reload(); // stay on the same list and refresh rows
         } else {
-          alert((resp && resp.data && resp.data.message) || "Move failed");
+          alert((res && res.data && res.data.message) || "Move failed.");
         }
       })
       .always(function () {
-        $("#wpec-list-bulk-loader").hide();
+        jQuery("#wpec-list-bulk-loader").hide();
       });
   });
 

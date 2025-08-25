@@ -522,19 +522,6 @@ public function render_status_list( $status_slug ) {
 
         echo '<div class="wpec-dup-toolbar" style="margin:10px 0;">';
         echo '<button id="wpec-list-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected from this list', 'wp-email-campaigns' ) . '</button> ';
-        
-
-  // move to another list
- $all_lists = Helpers::db()->get_results( "SELECT id, name FROM ".Helpers::table('lists')." ORDER BY name ASC", ARRAY_A );
- echo '<span style="margin-left:8px;">'.esc_html__('Move selected to','wp-email-campaigns').'</span> ';
- echo '<select id="wpec-list-move-dest" style="min-width:220px">';
- echo '<option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
- foreach ( (array)$all_lists as $r ) {
-   if ( (int)$r['id'] === (int)$list_id ) continue;
-   printf('<option value="%d">%s</option>', (int)$r['id'], esc_html($r['name']) );
- }
- echo '</select> ';
- echo '<button id="wpec-list-bulk-move" class="button" disabled>'.esc_html__('Move','wp-email-campaigns').'</button> ';
         echo '<span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none;"></span>';
         echo '</div>';
         echo '<div id="wpec-list-bulk-progress" style="display:none;"><div class="wpec-progress"><span id="wpec-list-progress-bar" style="width:0%"></span></div><p id="wpec-list-progress-text"></p></div>';
@@ -563,7 +550,6 @@ echo '<button class="button" id="wpec-list-bulk-move" disabled>'.esc_html__('Mov
 echo '</div>';
 
         echo '<form id="wpec-list-form" method="get">';
-        echo '<input type="hidden" id="wpec-current-list-id" value="' . (int) $list_id . '">';
         echo '<input type="hidden" name="post_type" value="email_campaign" />';
         echo '<input type="hidden" name="page" value="wpec-contacts" />';
         echo '<input type="hidden" name="view" value="list" />';
@@ -1555,14 +1541,14 @@ public function ajax_status_add_by_email() {
                 'file_path'      => $dest,
                 'file_pointer'   => 0,
                 'header_map'     => null,
-                'last_invalid'   => 0,
+                'last_invalid'   => 0, // reset last import invalid count
             ], [ 'id' => (int)$existing_list_id ] );
             \update_option( 'wpec_import_' . (int) $existing_list_id, [
                 'dup'     => 0,
                 'up'      => 0,
                 'started' => Helpers::now(),
             ], false );
-         return [ 'list_id'  => (int)$existing_list_id, 'csv_path' => $dest ];
+
         }
         
 
@@ -2066,7 +2052,6 @@ class WPEC_List_Items_Table extends \WP_List_Table {
             'cb'         => '<input type="checkbox" />',
             'email'      => __( 'Email', 'wp-email-campaigns' ),
             'name'       => __( 'Name', 'wp-email-campaigns' ),
-            'lists'      => __( 'Lists', 'wp-email-campaigns' ),
             'status'     => __( 'Status', 'wp-email-campaigns' ),
             'created_at' => __( 'Imported At', 'wp-email-campaigns' ),
             'actions'    => __( 'Actions', 'wp-email-campaigns' ),
@@ -2080,8 +2065,8 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     public function prepare_items() {
         global $wpdb;
         $li = Helpers::table('list_items'); 
-        $ct = Helpers::table('contacts'); $lists = Helpers::table('lists');
-  
+        $ct = Helpers::table('contacts');
+        
         $per_page = 50; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
         $where = "WHERE li.list_id=%d"; $args  = [ $this->list_id ];
@@ -2092,21 +2077,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $li li INNER JOIN $ct c ON c.id=li.contact_id $where", $args ) );
 
         $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT c.id AS contact_id,
-           c.email,
-           CONCAT_WS(' ', c.first_name, c.last_name) AS name,
-           c.status,
-           li.created_at,
-           li.is_duplicate_import,
-           /* all lists (readable) */
-           (SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li2.created_at DESC SEPARATOR ', ')
-              FROM $li li2 INNER JOIN $lists l ON l.id=li2.list_id
-             WHERE li2.contact_id=c.id) AS lists,
-           /* id::name pairs for links */
-           (SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li2.created_at DESC SEPARATOR '|')
-              FROM $li li2 INNER JOIN $lists l ON l.id=li2.list_id
-             WHERE li2.contact_id=c.id) AS lists_meta
-
+            "SELECT c.id AS contact_id, c.email, CONCAT_WS(' ', c.first_name, c.last_name) AS name, c.status, li.created_at, li.is_duplicate_import
              FROM $li li INNER JOIN $ct c ON c.id=li.contact_id
              $where ORDER BY li.id DESC LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
         $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
@@ -2132,37 +2103,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         ], admin_url('edit.php'));
         return sprintf('<a class="button button-small" href="%s">%s</a>', esc_url($url), esc_html__('View detail','wp-email-campaigns'));
     }
-    public function column_default( $item, $col ) { 
-         if ( $col === 'lists' ) {
-    $meta = $item['lists_meta'] ?? '';
-    if ( ! $meta ) return esc_html( $item['lists'] ?? '' );
-
-    $pairs = explode( '|', $meta );
-    $out = [];
-
-    foreach ( $pairs as $p ) {
-        $ix = strpos( $p, '::' );
-        if ( $ix === false ) {
-            continue;
-        }
-        $id   = (int) substr( $p, 0, $ix );
-        $name = substr( $p, $ix + 2 ); // fix: + 2
-
-        $url = add_query_arg( [
-            'post_type' => 'email_campaign',
-            'page'      => 'wpec-contacts',
-            'view'      => 'list',
-            'list_id'   => $id,
-        ], admin_url( 'edit.php' ) );
-
-        $out[] = '<a href="' . esc_url( $url ) . '">' . esc_html( $name ) . '</a>';
-    }
-
-    return implode( ', ', $out );
-}
-
-        return esc_html( $item[$col] ?? '' ); 
-    }
+    public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
 }
 
 // ---------- Duplicates table (with Duplicate Count) ----------
