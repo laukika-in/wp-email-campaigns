@@ -58,8 +58,6 @@ public function admin_assets( $hook ) {
     wp_add_inline_style( 'wpec-admin', '#wpfooter{display:none !important;}' );
 
     // --- NEW: Select2 URLs (local first, with CDN fallback used in JS) ---
-    $select2_local_css = WPEC_URL . 'admin/vendor/select2/select2.min.css';
-    $select2_local_js  = WPEC_URL . 'admin/vendor/select2/select2.min.js';
     $select2_cdn_css   = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
     $select2_cdn_js    = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js';
 
