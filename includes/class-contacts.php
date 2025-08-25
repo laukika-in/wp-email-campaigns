@@ -655,9 +655,8 @@ echo '</div>';
     echo '    <div class="wpec-head-meta">';
     echo '      <h1 class="wpec-head-name">'.esc_html(trim(($row['first_name']??'').' '.($row['last_name']??''))).' <span class="wpec-status-pill '.$pill_class.'" id="wpec-status-pill">'.esc_html($status_label).'</span></h1>';
     echo '      <div class="wpec-head-email">'.esc_html($row['email']).'</div>';
-    echo '      <div class="wpec-head-lists"><strong>'.esc_html__('Lists','wp-email-campaigns').':</strong> <span id="wpec-list-chips">'.$chip_html.'</span></div>';
-    echo '    </div>';
-    echo '  </div>';
+    echo '      <div class="wpec-head-lists">';
+     
 echo '<h2 style="margin-top:20px">'.esc_html__('Lists','wp-email-campaigns').'</h2>';
 echo '<div id="wpec-contact-memberships" class="wpec-chipset" style="margin:8px 0 12px 0">';
 foreach ( $memberships as $m ) {
@@ -680,6 +679,10 @@ foreach ( $memberships as $m ) {
     );
 }
 echo '</div>';
+    echo '</div>';
+    echo '    </div>';
+    echo '  </div>';
+   
 // fetch lists for the dropdown (you likely already have $db)
 $lists_table = Helpers::table('lists');
 $all_lists = $db->get_results("SELECT id, name FROM $lists_table ORDER BY name ASC LIMIT 1000", ARRAY_A);
