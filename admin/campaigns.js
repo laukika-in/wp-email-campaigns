@@ -13,27 +13,45 @@
   // Send test
   $(document).on("click", "#wpec-send-test", function (e) {
     e.preventDefault();
+
+    var to = ($("#wpec-test-to").val() || "").trim();
+    var subject = ($("#wpec-subject").val() || "").trim();
+    var fromName = ($("#wpec-from-name").val() || "").trim();
+    var fromEmail = ($("#wpec-from-email").val() || "").trim();
+    var body = getCampaignHtml();
+
+    if (!to || !subject || !body) {
+      alert("Test needs To, Subject and Body.");
+      return;
+    }
+
+    var $btn = $(this);
+    $btn.prop("disabled", true);
     $("#wpec-test-loader").show();
 
-    $.post(WPECCAMPAIGN.ajaxUrl, {
-      action: "wpec_send_test",
-      nonce: WPECCAMPAIGN.nonce,
-      to: val("#wpec-test-to"),
-      subject: val("#wpec-subject"),
-      body: val("#wpec-body"),
-      from_name: val("#wpec-from-name"),
-      from_email: val("#wpec-from-email"),
-    })
-      .done(function (res) {
-        alert(
-          res && res.success
-            ? "Test sent."
-            : (res && res.data && res.data.message) || "Failed."
-        );
-      })
-      .always(function () {
-        $("#wpec-test-loader").hide();
-      });
+    $.post(
+      WPECCAMPAIGN.ajaxUrl,
+      {
+        action: "wpec_send_test",
+        nonce: WPECCAMPAIGN.nonce,
+        to: to,
+        subject: subject,
+        from_name: fromName,
+        from_email: fromEmail,
+        body: body, // IMPORTANT: key must be "body"
+      },
+      function (res) {
+        if (res && res.success) {
+          alert("Test email sent.");
+        } else {
+          alert((res && res.data && res.data.message) || "Test failed.");
+        }
+      },
+      "json"
+    ).always(function () {
+      $btn.prop("disabled", false);
+      $("#wpec-test-loader").hide();
+    });
   });
 
   // Queue campaign
@@ -68,38 +86,68 @@
       });
     }, 4000);
   }
+  // Reads HTML from the WP editor used on the Send screen
+  function getCampaignHtml() {
+    try {
+      if (
+        window.tinyMCE &&
+        tinyMCE.get("wpec_camp_html") &&
+        !tinyMCE.get("wpec_camp_html").isHidden()
+      ) {
+        return tinyMCE.get("wpec_camp_html").getContent() || "";
+      }
+    } catch (e) {}
+    // Fallback to the textarea if TinyMCE is off
+    var el = document.getElementById("wpec_camp_html");
+    return el ? el.value || "" : "";
+  }
 
   $(document).on("click", "#wpec-queue-campaign", function (e) {
     e.preventDefault();
-    const listIds = $("#wpec-list-ids").val() || [];
-    if (!listIds.length) {
-      alert("Pick at least one list");
+
+    var subject = ($("#wpec-subject").val() || "").trim();
+    var fromName = ($("#wpec-from-name").val() || "").trim();
+    var fromEmail = ($("#wpec-from-email").val() || "").trim();
+    var body = getCampaignHtml();
+    var listIds = $("#wpec-list-ids").val() || []; // array
+
+    if (!subject || !body || listIds.length === 0) {
+      alert("Subject, Body, and at least one list are required.");
       return;
     }
 
-    $("#wpec-send-status").text("Queuing...");
-    $.post(WPECCAMPAIGN.ajaxUrl, {
-      action: "wpec_campaign_queue",
-      nonce: WPECCAMPAIGN.nonce,
-      subject: val("#wpec-subject"),
-      body: val("#wpec-body"),
-      from_name: val("#wpec-from-name"),
-      from_email: val("#wpec-from-email"),
-      list_ids: listIds,
-    }).done(function (res) {
-      if (!res || !res.success) {
-        alert((res && res.data && res.data.message) || "Queue failed");
-        $("#wpec-send-status").text("");
-        return;
-      }
-      currentCampaignId = res.data.campaign_id;
-      $("#wpec-send-status").text(
-        "Queued " +
-          (res.data.queued || 0) +
-          " recipients. Sending in background…"
-      );
-      $("#wpec-cancel-campaign").prop("disabled", false);
-      startPolling(currentCampaignId);
+    var $btn = $(this);
+    $btn.prop("disabled", true);
+
+    $.post(
+      WPECCAMPAIGN.ajaxUrl,
+      {
+        action: "wpec_campaign_queue",
+        nonce: WPECCAMPAIGN.nonce,
+        subject: subject,
+        from_name: fromName,
+        from_email: fromEmail,
+        body: body, // IMPORTANT: key must be "body"
+        list_ids: listIds, // IMPORTANT: key must be "list_ids"
+      },
+      function (res) {
+        if (!res || !res.success) {
+          alert((res && res.data && res.data.message) || "Failed to queue.");
+          $btn.prop("disabled", false);
+          return;
+        }
+        // show a simple status and let cron take over
+        alert(
+          "Queued " +
+            (res.data.queued || 0) +
+            " recipients for background sending."
+        );
+        $btn.prop("disabled", false);
+      },
+      "json"
+    ).fail(function () {
+      alert("Request failed.");
+      $btn.prop("disabled", false);
     });
   });
 
