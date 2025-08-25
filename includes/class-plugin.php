@@ -22,82 +22,80 @@ class Plugin {
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
     }
     
-    public function admin_assets( $hook ) {
-        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+public function admin_assets( $hook ) {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
 
-        $is_campaign_edit  = false; // post.php / post-new.php for email_campaign
-        $is_campaign_tool  = false; // our extra campaign tools pages (wpec-send, later scheduler, etc.)
-        $is_contacts_suite = false; // Lists/Contacts/Import/Duplicates
+    $is_campaign_edit  = false; // post.php / post-new.php for email_campaign
+    $is_campaign_tool  = false; // our “Send” screen
+    $is_contacts_suite = false; // Lists/Contacts/Import/Duplicates
 
-        $pg = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
-        $pt = ($screen && isset($screen->post_type)) ? (string) $screen->post_type : '';
-        $id = $screen ? (string) $screen->id : '';
+    $pg = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
+    $pt = ($screen && isset($screen->post_type)) ? (string) $screen->post_type : '';
+    $id = $screen ? (string) $screen->id : '';
 
-        // Campaign post editor screens
-        if ( $pt === 'email_campaign' && in_array($hook, ['post.php','post-new.php'], true) ) {
-            $is_campaign_edit = true;
-        }
+    if ( $pt === 'email_campaign' && in_array($hook, ['post.php','post-new.php'], true) ) {
+        $is_campaign_edit = true;
+    }
+    if ( in_array($pg, ['wpec-send'], true) ) {
+        $is_campaign_tool = true;
+    }
+    if (
+        in_array($pg, ['wpec-lists','wpec-contacts','wpec-import','wpec-duplicates'], true) ||
+        strpos($id, 'wpec-lists')      !== false ||
+        strpos($id, 'wpec-contacts')   !== false ||
+        strpos($id, 'wpec-import')     !== false ||
+        strpos($id, 'wpec-duplicates') !== false
+    ) {
+        $is_contacts_suite = true;
+    }
 
-        // Our campaign tools (include the new Send page)
-        if ( in_array($pg, ['wpec-send'], true) ) {
-            $is_campaign_tool = true;
-        }
+    if ( ! ($is_campaign_edit || $is_campaign_tool || $is_contacts_suite) ) {
+        return;
+    }
 
-        // Lists / All Contacts / Import / Duplicates
-        if (
-            in_array($pg, ['wpec-lists','wpec-contacts','wpec-import','wpec-duplicates'], true) ||
-            strpos($id, 'wpec-lists')      !== false ||
-            strpos($id, 'wpec-contacts')   !== false ||
-            strpos($id, 'wpec-import')     !== false ||
-            strpos($id, 'wpec-duplicates') !== false
-        ) {
-            $is_contacts_suite = true;
-        }
+    // Styles (shared) + hide WP footer on our pages
+    wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], WPEC_VER );
+    wp_add_inline_style( 'wpec-admin', '#wpfooter{display:none !important;}' );
 
-        // If none of our screens, bail.
-        if ( ! ($is_campaign_edit || $is_campaign_tool || $is_contacts_suite) ) {
-            return;
-        }
+    // --- NEW: Select2 URLs (local first, with CDN fallback used in JS) ---
+    $select2_local_css = WPEC_URL . 'admin/vendor/select2/select2.min.css';
+    $select2_local_js  = WPEC_URL . 'admin/vendor/select2/select2.min.js';
+    $select2_cdn_css   = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
+    $select2_cdn_js    = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js';
 
-        // Shared CSS + hide WP footer on our pages
-        wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], WPEC_VER );
-        wp_add_inline_style( 'wpec-admin', '#wpfooter{display:none !important;}' );
+    $common = [
+        'nonce'        => wp_create_nonce( 'wpec_admin' ),
+        'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+        'adminBase'    => admin_url( 'edit.php' ),
+        'listViewBase' => add_query_arg(
+            ['post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>''],
+            admin_url('edit.php')
+        ),
+        // expose local + CDN to JS
+        'select2LocalCss' => $select2_local_css,
+        'select2LocalJs'  => $select2_local_js,
+        'select2CdnCss'   => $select2_cdn_css,
+        'select2CdnJs'    => $select2_cdn_js,
+    ];
 
-        $common = [
-            'nonce'        => wp_create_nonce( 'wpec_admin' ),
-            'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-            'adminBase'    => admin_url( 'edit.php' ),
-            'listViewBase' => add_query_arg(
-                ['post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>''],
-                admin_url('edit.php'),
-                
-                
-            ),
-        ];
+    // Contacts suite → admin.js (uses WPEC + ensureSelect2)
+    if ( $is_contacts_suite ) {
+        wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VER, true );
+        wp_localize_script( 'wpec-admin', 'WPEC', array_merge( $common, [
+            'rest'        => esc_url_raw( rest_url( 'email-campaigns/v1' ) ),
+            'startImport' => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
+        ] ) );
+    }
 
-        // Contacts suite uses admin.js (Lists / All Contacts / Import / Duplicates)
-        if ( $is_contacts_suite ) {
-            wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VER, true );
-            wp_localize_script( 'wpec-admin', 'WPEC', $common + [
-                'rest'        => esc_url_raw( rest_url( 'email-campaigns/v1' ) ),
-                'startImport' => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
-            ] );
-        }
-
-       if ( $is_campaign_edit || $is_campaign_tool ) {
-    wp_enqueue_script( 'wpec-campaigns', WPEC_URL . 'admin/campaigns.js', [ 'jquery' ], WPEC_VER, true );
-    wp_localize_script( 'wpec-campaigns', 'WPECCAMPAIGN', [
-        'nonce'           => wp_create_nonce( 'wpec_admin' ),
-        'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
-        // Select2 local (if you ship files) + CDN fallback
-        'select2LocalCss' => WPEC_URL . 'admin/vendor/select2/select2.min.css',
-        'select2LocalJs'  => WPEC_URL . 'admin/vendor/select2/select2.min.js',
-        'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-        'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
-    ] );
+    // Campaign tools (Send screen) → campaigns.js (uses WPECCAMPAIGN + ensureSelect2)
+    if ( $is_campaign_edit || $is_campaign_tool ) {
+        wp_enqueue_script( 'wpec-campaigns', WPEC_URL . 'admin/campaigns.js', [ 'jquery' ], WPEC_VER, true );
+        wp_localize_script( 'wpec-campaigns', 'WPECCAMPAIGN', array_merge( $common, [
+            // keep any extras specific to this screen here
+        ] ) );
+    }
 }
 
-    }
 
 
 }
