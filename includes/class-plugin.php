@@ -88,6 +88,8 @@ public function admin_assets( $hook ) {
         wp_enqueue_script( 'wpec-campaigns', WPEC_URL . 'admin/campaigns.js', [ 'jquery' ], WPEC_VER, true );
         wp_localize_script( 'wpec-campaigns', 'WPECCAMPAIGN', array_merge( $common, [
             // keep any extras specific to this screen here
+            'nonce'            => wp_create_nonce( 'wpec_admin' ),
+        'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
         ] ) );
     }
 }

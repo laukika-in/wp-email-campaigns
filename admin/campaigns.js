@@ -118,39 +118,54 @@
       $("#wpec-cancel-campaign").prop("disabled", true);
     });
   });
+  function ensureSelect2(cb) {
+    if ($.fn.select2) {
+      cb && cb();
+      return;
+    }
+    var CFG = window.WPECCAMPAIGN || {};
+    // CSS
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = CFG.select2LocalCss || CFG.select2CdnCss;
+    css.onerror = function () {
+      css.href = CFG.select2CdnCss;
+    };
+    document.head.appendChild(css);
+    // JS
+    var s = document.createElement("script");
+    s.src = CFG.select2LocalJs || CFG.select2CdnJs;
+    s.onload = function () {
+      cb && cb();
+    };
+    s.onerror = function () {
+      this.src = CFG.select2CdnJs;
+      this.onerror = null;
+    };
+    document.head.appendChild(s);
+  }
 
+  function initSendSelects() {
+    var $lists = $("#wpec-list-ids");
+    if ($lists.length) {
+      $lists.select2({
+        width: "resolve",
+        placeholder: "Select recipient lists…",
+        allowClear: true,
+      });
+    }
+  }
+
+  $(function () {
+    // Only on Send page (?page=wpec-send)
+    var page = new URL(location.href).searchParams.get("page");
+    if (page === "wpec-send") {
+      ensureSelect2(initSendSelects);
+    }
+  });
   $(function () {
     if (!onSendPage()) return;
     // Load Select2 (local → CDN), then run cb
-    function ensureSelect2(cb) {
-      if ($.fn.select2) {
-        cb && cb();
-        return;
-      }
-
-      var css = document.createElement("link");
-      css.rel = "stylesheet";
-      css.href =
-        (WPECCAMPAIGN && WPECCAMPAIGN.select2LocalCss) ||
-        WPECCAMPAIGN.select2CdnCss;
-      css.onerror = function () {
-        this.href = WPECCAMPAIGN.select2CdnCss;
-      };
-      document.head.appendChild(css);
-
-      var s = document.createElement("script");
-      s.src =
-        (WPECCAMPAIGN && WPECCAMPAIGN.select2LocalJs) ||
-        WPECCAMPAIGN.select2CdnJs;
-      s.onload = function () {
-        cb && cb();
-      };
-      s.onerror = function () {
-        this.onerror = null;
-        this.src = WPECCAMPAIGN.select2CdnJs;
-      };
-      document.head.appendChild(s);
-    }
 
     // Get HTML from WP editor (falls back to textarea)
     function getEditorHtml() {
