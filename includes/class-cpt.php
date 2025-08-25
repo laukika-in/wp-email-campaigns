@@ -35,7 +35,7 @@ class CPT {
             __( 'Lists', 'wp-email-campaigns' ),
             __( 'Lists', 'wp-email-campaigns' ),
             'manage_options',
-            'wpec-contacts',
+            'wpec-lists',
             [ $this, 'render_contacts_page' ]
         );
     }

@@ -26,7 +26,7 @@ class Plugin {
 
         // Load our assets on:
         // - any email_campaign CPT screen
-        // - the contacts/Lists submenu (page=wpec-contacts) under email_campaign
+        // - the contacts/Lists submenu (page=wpec-lists) under email_campaign
         $should = false;
 
         if ( $screen ) {
@@ -35,11 +35,11 @@ class Plugin {
             }
             // Some WP builds use underscores in screen->id, others hyphens; also check 'page' param.
             $id = (string) $screen->id;
-            if ( strpos( $id, 'wpec-contacts' ) !== false ) {
+            if ( strpos( $id, 'wpec-lists' ) !== false ) {
                 $should = true;
             }
         }
-        if ( isset($_GET['post_type'], $_GET['page']) && $_GET['post_type'] === 'email_campaign' && $_GET['page'] === 'wpec-contacts' ) {
+        if ( isset($_GET['post_type'], $_GET['page']) && $_GET['post_type'] === 'email_campaign' && $_GET['page'] === 'wpec-lists' ) {
             $should = true;
         }
 

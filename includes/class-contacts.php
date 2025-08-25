@@ -84,13 +84,13 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
     global $submenu;
     $parent = 'edit.php?post_type=email_campaign';
 
-    // Rename 'wpec-contacts' to 'Lists' and move it to the top
+    // Rename 'wpec-lists' to 'Lists' and move it to the top
     if ( isset( $submenu[ $parent ] ) ) {
         $lists_idx = null;
 
         foreach ( $submenu[ $parent ] as $i => $item ) {
             // $item = [menu_title, capability, slug, (optional) page_title]
-            if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
+            if ( isset( $item[2] ) && $item[2] === 'wpec-lists' ) {
                 $lists_idx = $i;
                 break;
             }
@@ -154,14 +154,14 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         if ( $screen ) {
             $ok = (
                 $screen->post_type === 'email_campaign' ||
-                $screen->id === 'email_campaign_page_wpec-contacts' ||
+                $screen->id === 'email_campaign_page_wpec-lists' ||
                 $screen->id === 'email_campaign_page_wpec-all-contacts' ||
                 $screen->id === 'email_campaign_page_wpec-import' ||
                 $screen->id === 'email_campaign_page_wpec-duplicates'
             );
         }
         $page = $_GET['page'] ?? '';
-        $ok = $ok || in_array( $page, ['wpec-contacts','wpec-all-contacts','wpec-import','wpec-duplicates'], true );
+        $ok = $ok || in_array( $page, ['wpec-lists','wpec-all-contacts','wpec-import','wpec-duplicates'], true );
         if ( ! $ok ) return;
 
         $css_path = plugin_dir_path(__FILE__) . '../admin/admin.css';
@@ -178,7 +178,7 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
             'startImport'    => isset($_GET['wpec_start_import']) ? intval($_GET['wpec_start_import']) : 0,
             'select2CdnJs'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
             'select2CdnCss'  => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-            'listViewBase'    => admin_url('edit.php?post_type=email_campaign&page=wpec-contacts&view=list&list_id='),
+            'listViewBase'    => admin_url('edit.php?post_type=email_campaign&page=wpec-lists&view=list&list_id='),
 
         ] );
     }
@@ -206,7 +206,7 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         $table->prepare_items();
         echo '<form method="get">';
         echo '<input type="hidden" name="post_type" value="email_campaign" />';
-        echo '<input type="hidden" name="page" value="wpec-contacts" />';
+        echo '<input type="hidden" name="page" value="wpec-lists" />';
         $table->search_box( __( 'Search Lists', 'wp-email-campaigns' ), 'wpecl' );
         $table->display();
         echo '</form></div>';
@@ -330,7 +330,7 @@ echo '</div>';
              ORDER BY l.name ASC LIMIT 1000", ARRAY_A
         );
 
-        echo '<div class="wrap" id="wpec-contacts-app" data-page="all">';
+        echo '<div class="wrap" id="wpec-lists-app" data-page="all">';
 
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
@@ -361,7 +361,7 @@ echo '<button class="button" id="wpec-preset-delete" disabled>' . esc_html__( 'D
 echo '</div>';
 
         // Controls: columns toggle + filters + export
-        echo '<div id="wpec-contacts-controls" class="wpec-card">';
+        echo '<div id="wpec-lists-controls" class="wpec-card">';
 
         echo '<div class="wpec-controls-top">';
         echo '<div class="wpec-export-wrap"><button class="button" id="wpec-export-contacts">'.esc_html__('Export CSV (filtered)','wp-email-campaigns').'</button></div>';
@@ -435,8 +435,8 @@ echo '</div>';
         echo '</div>'; // card
 
         // Table + pagination
-        echo '<div id="wpec-contacts-table-wrap" class="wpec-card">';
-        echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-contacts-table">';
+        echo '<div id="wpec-lists-table-wrap" class="wpec-card">';
+        echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-lists-table">';
        echo '<thead><tr>';
         echo '<th style="width:24px"><input type="checkbox" id="wpec-master-cb"></th>';
         echo '<th>'.esc_html__('ID','wp-email-campaigns').'</th>';
@@ -466,7 +466,7 @@ public function render_status_list( $status_slug ) {
     $title      = $status_slug === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' ) : __( 'Do Not Send', 'wp-email-campaigns' );
     $status_val = $status_slug === 'bounced' ? 'bounced' : 'unsubscribed';
 
-    echo '<div class="wrap" id="wpec-contacts-app" data-page="special" data-status="'.esc_attr($status_val).'">';
+    echo '<div class="wrap" id="wpec-lists-app" data-page="special" data-status="'.esc_attr($status_val).'">';
     echo '<h1>'.esc_html( $title ).'</h1>';
 
     // Help
@@ -490,8 +490,8 @@ public function render_status_list( $status_slug ) {
     echo '</div></div>';
 
     // Table (checkboxes + View details only — NO delete)
-    echo '<div id="wpec-contacts-table-wrap" class="wpec-card" data-initial="1">';
-    echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-contacts-table">';
+    echo '<div id="wpec-lists-table-wrap" class="wpec-card" data-initial="1">';
+    echo '<div class="wpec-table-scroll"><table class="widefat striped" id="wpec-lists-table">';
     echo '<thead><tr>';
     echo '<th style="width:24px"><input type="checkbox" id="wpec-master-cb"></th>';
     echo '<th>'.esc_html__('ID','wp-email-campaigns').'</th>';
@@ -570,7 +570,7 @@ echo '</div>';
 
         echo '<form id="wpec-list-form" method="get">';
         echo '<input type="hidden" name="post_type" value="email_campaign" />';
-        echo '<input type="hidden" name="page" value="wpec-contacts" />';
+        echo '<input type="hidden" name="page" value="wpec-lists" />';
         echo '<input type="hidden" name="view" value="list" />';
         echo '<input type="hidden" name="list_id" value="' . (int) $list_id . '" />';
         $table->search_box( __( 'Search Contacts', 'wp-email-campaigns' ), 'wpecli' );
@@ -644,7 +644,7 @@ echo '</div>';
         foreach ( $memberships as $m ) {
             $list_url = add_query_arg( [
                 'post_type' => 'email_campaign',
-                'page'      => 'wpec-contacts',
+                'page'      => 'wpec-lists',
                 'view'      => 'list',
                 'list_id'   => (int)$m['id'],
             ], admin_url('edit.php') );
@@ -752,7 +752,7 @@ echo '<div id="wpec-contact-memberships" class="wpec-chipset" style="margin:8px 
 foreach ( $memberships as $m ) {
     $url = add_query_arg([
         'post_type' => 'email_campaign',
-        'page'      => 'wpec-contacts',
+        'page'      => 'wpec-lists',
         'view'      => 'list',
         'list_id'   => (int)$m['id'],
     ], admin_url('edit.php') );
@@ -820,7 +820,7 @@ public function ajax_contact_add_to_list() {
 
     $list_url = add_query_arg( [
         'post_type' => 'email_campaign',
-        'page'      => 'wpec-contacts',
+        'page'      => 'wpec-lists',
         'view'      => 'list',
         'list_id'   => (int)$list_id,
     ], admin_url('edit.php') );
@@ -878,7 +878,7 @@ private function render_duplicates( $list_id = 0 ) {
     $table->prepare_items();
     echo '<form id="wpec-dup-form" method="get">';
     echo '<input type="hidden" name="post_type" value="email_campaign" />';
-    echo '<input type="hidden" name="page" value="wpec-contacts" />';
+    echo '<input type="hidden" name="page" value="wpec-lists" />';
     echo '<input type="hidden" name="view" value="dupes' . ( $list_id ? '_list' : '' ) . '" />';
     if ( $list_id ) { echo '<input type="hidden" name="list_id" value="' . (int) $list_id . '" />'; }
     $table->search_box( __( 'Search email/name', 'wp-email-campaigns' ), 'wpecdup' );
@@ -1460,7 +1460,7 @@ public function ajax_status_add_by_email() {
             $db->query( $db->prepare( "UPDATE $lists SET deleted = COALESCE(deleted,0)+1 WHERE id=%d", $list_id ) );
         }
 
-        wp_safe_redirect( wp_get_referer() ?: admin_url('edit.php?post_type=email_campaign&page=wpec-contacts') ); exit;
+        wp_safe_redirect( wp_get_referer() ?: admin_url('edit.php?post_type=email_campaign&page=wpec-lists') ); exit;
     }
 
     public function ajax_delete_list_mapping() {
@@ -2111,7 +2111,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
     }
     public function column_actions( $item ) {
     $view = add_query_arg( [
-        'post_type' => 'email_campaign', 'page' => 'wpec-contacts', 'view' => 'list', 'list_id' => (int)$item['id'],
+        'post_type' => 'email_campaign', 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => (int)$item['id'],
     ], admin_url('edit.php') );
     $dupes = admin_url('edit.php?post_type=email_campaign&page=wpec-duplicates');
 
@@ -2149,7 +2149,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
             case 'created_at': return esc_html( $item['created_at'] );
             case 'actions':
                 $view = add_query_arg( [
-                    'post_type' => 'email_campaign', 'page' => 'wpec-contacts', 'view' => 'list', 'list_id' => (int)$item['id'],
+                    'post_type' => 'email_campaign', 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => (int)$item['id'],
                 ], admin_url('edit.php') );
                 $dupes = admin_url('edit.php?post_type=email_campaign&page=wpec-duplicates');
                 return sprintf('<a class="button" href="%s">%s</a> <a class="button" href="%s">%s</a>',
@@ -2242,7 +2242,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     public function column_actions( $item ) {
     $view = add_query_arg( [
         'post_type' => 'email_campaign',
-        'page'      => 'wpec-contacts',
+        'page'      => 'wpec-lists',
         'view'      => 'contact',
         'contact_id'=> (int)$item['contact_id']
     ], admin_url('edit.php'));
@@ -2278,7 +2278,7 @@ public function column_lists( $item ) {
         $name = substr( $p, $ix + 2 );
         $url = add_query_arg( [
             'post_type' => 'email_campaign',
-            'page'      => 'wpec-contacts',
+            'page'      => 'wpec-lists',
             'view'      => 'list',
             'list_id'   => $id,
         ], admin_url( 'edit.php' ) );
@@ -2393,7 +2393,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         case 'dup_count':
             return esc_html( (string)($item['dup_count'] ?? '0') );
         case 'current_list':
-            $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
+            $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
             return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
         case 'other_lists': {
     $meta = isset($item['other_lists_meta']) ? (string)$item['other_lists_meta'] : '';
@@ -2410,7 +2410,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
             $url = add_query_arg(
                 [
                     'post_type' => 'email_campaign',
-                    'page'      => 'wpec-contacts',
+                    'page'      => 'wpec-lists',
                     'view'      => 'list',
                     'list_id'   => $lid,
                 ],
@@ -2425,7 +2425,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         case 'imported_at':
             return esc_html( $item['imported_at'] ?? '' );
         case 'actions':
-            $view = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-contacts','view'=>'contact','contact_id'=>(int)$item['contact_id'] ], admin_url('edit.php') );
+            $view = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'contact','contact_id'=>(int)$item['contact_id'] ], admin_url('edit.php') );
             $btn = sprintf(
                 '<button type="button" class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d">%s</button> <a class="button button-small" href="%s">%s</a>',
                 (int)$item['list_id'], (int)$item['contact_id'],

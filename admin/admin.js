@@ -236,7 +236,7 @@
   // Show/hide bulk bar and enable/disable Apply
   function setBulkState() {
     const anyChecked =
-      $("#wpec-contacts-table tbody .wpec-row-cb:checked").length > 0;
+      $("#wpec-lists-table tbody .wpec-row-cb:checked").length > 0;
     const destVal = ($("#wpec-bulk-dest").val() || "").trim();
 
     // show bulk bar only when at least one row is checked
@@ -250,12 +250,12 @@
   // events that affect bulk state
   $(document).on("change", "#wpec-master-cb", function () {
     const checked = $(this).is(":checked");
-    $("#wpec-contacts-table tbody .wpec-row-cb").prop("checked", checked);
+    $("#wpec-lists-table tbody .wpec-row-cb").prop("checked", checked);
     setBulkState();
   });
   $(document).on(
     "change",
-    "#wpec-contacts-table tbody .wpec-row-cb",
+    "#wpec-lists-table tbody .wpec-row-cb",
     setBulkState
   );
   $(document).on("change", "#wpec-bulk-dest", setBulkState);
@@ -332,7 +332,7 @@
     // Link to the just-uploaded list view
     var listUrl = new URL(location.origin + location.pathname, location.origin);
     listUrl.searchParams.set("post_type", "email_campaign");
-    listUrl.searchParams.set("page", "wpec-contacts");
+    listUrl.searchParams.set("page", "wpec-lists");
     listUrl.searchParams.set("view", "list");
     listUrl.searchParams.set("list_id", String(listId));
     html +=
@@ -1223,12 +1223,12 @@
       },
       filters
     );
-    $("#wpec-contacts-table tbody").html(
+    $("#wpec-lists-table tbody").html(
       '<tr><td colspan="999">Loading…</td></tr>'
     );
     return $.post(WPEC.ajaxUrl, data).done(function (resp) {
       if (!resp || !resp.success) {
-        $("#wpec-contacts-table tbody").html(
+        $("#wpec-lists-table tbody").html(
           '<tr><td colspan="999">Failed to load.</td></tr>'
         );
         return;
@@ -1237,7 +1237,7 @@
       var cols = collectCols();
 
       // Build thead
-      var $thead = $("#wpec-contacts-table thead tr");
+      var $thead = $("#wpec-lists-table thead tr");
       var head =
         '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Email</th><th>List(s)</th>';
       cols.forEach(function (c) {
@@ -1247,7 +1247,7 @@
 
       // Build rows
       if (!rows.length) {
-        $("#wpec-contacts-table tbody").html(
+        $("#wpec-lists-table tbody").html(
           '<tr><td colspan="999">No contacts found.</td></tr>'
         );
       } else {
@@ -1255,7 +1255,7 @@
         rows.forEach(function (r) {
           var detailUrl = new URL(location.origin + location.pathname);
           detailUrl.searchParams.set("post_type", "email_campaign");
-          detailUrl.searchParams.set("page", "wpec-contacts");
+          detailUrl.searchParams.set("page", "wpec-lists");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
           html += "<tr>";
@@ -1289,7 +1289,7 @@
           });
           html += "</tr>";
         });
-        $("#wpec-contacts-table tbody").html(html);
+        $("#wpec-lists-table tbody").html(html);
       }
 
       // Pager
@@ -1382,14 +1382,14 @@
   // Master checkbox handler
   $(document).on("change", "#wpec-master-cb", function () {
     var on = $(this).is(":checked");
-    $("#wpec-contacts-table tbody .wpec-row-cb").prop("checked", on);
+    $("#wpec-lists-table tbody .wpec-row-cb").prop("checked", on);
     setBulkState();
   });
 
   // Row checkbox handler
   $(document).on(
     "change",
-    "#wpec-contacts-table tbody .wpec-row-cb",
+    "#wpec-lists-table tbody .wpec-row-cb",
     setBulkState
   );
 
@@ -1397,7 +1397,7 @@
   $("#wpec-bulk-delete").on("click", function (e) {
     e.preventDefault();
     var ids = [];
-    $("#wpec-contacts-table tbody .wpec-row-cb:checked").each(function () {
+    $("#wpec-lists-table tbody .wpec-row-cb:checked").each(function () {
       ids.push(parseInt($(this).data("id"), 10));
     });
     if (!ids.length) return;
@@ -1412,7 +1412,7 @@
       .done(function (resp) {
         if (resp && resp.success) {
           // Remove rows
-          $("#wpec-contacts-table tbody .wpec-row-cb:checked")
+          $("#wpec-lists-table tbody .wpec-row-cb:checked")
             .closest("tr")
             .remove();
           setBulkState();
@@ -1442,7 +1442,7 @@
   $("#wpec-bulk-move").on("click", function (e) {
     e.preventDefault();
     var ids = [];
-    $("#wpec-contacts-table tbody .wpec-row-cb:checked").each(function () {
+    $("#wpec-lists-table tbody .wpec-row-cb:checked").each(function () {
       ids.push(parseInt($(this).data("id"), 10));
     });
     var listId = parseInt($("#wpec-bulk-move-list").val(), 10) || 0;
@@ -1588,7 +1588,7 @@
       var viewUrl = window.ajaxurl
         ? new URLSearchParams({
             post_type: "email_campaign",
-            page: "wpec-contacts",
+            page: "wpec-lists",
             view: "contact",
             contact_id: String(r.id),
           }).toString()
@@ -1622,16 +1622,14 @@
   }
 
   function fetchSpecial(opts) {
-    var $wrap = $('#wpec-contacts-app[data-page="special"]');
+    var $wrap = $('#wpec-lists-app[data-page="special"]');
     if (!$wrap.length) return;
 
     var status = $wrap.data("status") || "";
     var pageSize = parseInt($("#wpec-page-size").val() || "50", 10);
     var page = opts && opts.page ? opts.page : 1;
 
-    $("#wpec-contacts-table tbody").html(
-      '<tr><td colspan="5">Loading…</td></tr>'
-    );
+    $("#wpec-lists-table tbody").html('<tr><td colspan="5">Loading…</td></tr>');
     $.post(WPEC.ajaxUrl, {
       action: "wpec_contacts_query",
       nonce: WPEC.nonce,
@@ -1641,19 +1639,19 @@
       cols: [], // keep table light
     }).done(function (res) {
       if (!res || !res.success || !res.data) {
-        $("#wpec-contacts-table tbody").html(
+        $("#wpec-lists-table tbody").html(
           '<tr><td colspan="5">Error.</td></tr>'
         );
         return;
       }
       var rows = res.data.rows || [];
       if (!rows.length) {
-        $("#wpec-contacts-table tbody").html(
+        $("#wpec-lists-table tbody").html(
           '<tr><td colspan="5">No contacts.</td></tr>'
         );
       } else {
         var html = rows.map(buildRow).join("");
-        $("#wpec-contacts-table tbody").html(html);
+        $("#wpec-lists-table tbody").html(html);
       }
 
       // pager
@@ -1681,7 +1679,7 @@
 
   // Only bind on special list pages
   $(function () {
-    var $special = $('#wpec-contacts-app[data-page="special"]');
+    var $special = $('#wpec-lists-app[data-page="special"]');
     if (!$special.length) return;
 
     // initial load
@@ -1753,12 +1751,12 @@
   });
 
   function isAllPage() {
-    return $('#wpec-contacts-app[data-page="all"]').length > 0;
+    return $('#wpec-lists-app[data-page="all"]').length > 0;
   }
 
   function decorateAllRows() {
     if (!isAllPage()) return;
-    var $tbody = $("#wpec-contacts-table tbody");
+    var $tbody = $("#wpec-lists-table tbody");
     $tbody.find("tr").each(function () {
       var $tr = $(this);
       // add per-row checkbox if missing
@@ -1776,7 +1774,7 @@
   }
 
   function currentSelection() {
-    return $("#wpec-contacts-table tbody .wpec-row-cb:checked")
+    return $("#wpec-lists-table tbody .wpec-row-cb:checked")
       .map(function () {
         return $(this).data("id");
       })
@@ -1803,7 +1801,7 @@
     const base = window.WPEC && WPEC.listViewBase ? WPEC.listViewBase : "";
     if (!base) return;
 
-    const $trs = $("#wpec-contacts-table tbody tr");
+    const $trs = $("#wpec-lists-table tbody tr");
     $trs.each(function (i) {
       const meta = rows[i] && rows[i].lists_meta;
       if (!meta) return;
@@ -1833,14 +1831,14 @@
     // master checkbox (header)
     $(document).on("change", "#wpec-master-cb", function () {
       var on = $(this).is(":checked");
-      $("#wpec-contacts-table tbody .wpec-row-cb").prop("checked", on);
+      $("#wpec-lists-table tbody .wpec-row-cb").prop("checked", on);
       toggleBulkbar();
     });
 
     // row checkboxes
     $(document).on(
       "change",
-      "#wpec-contacts-table tbody .wpec-row-cb",
+      "#wpec-lists-table tbody .wpec-row-cb",
       function () {
         if (!$(this).is(":checked"))
           $("#wpec-master-cb").prop("checked", false);
@@ -1849,7 +1847,7 @@
     );
 
     // observe tbody for re-renders
-    var $tbody = $("#wpec-contacts-table tbody");
+    var $tbody = $("#wpec-lists-table tbody");
     if ($tbody.length && "MutationObserver" in window) {
       new MutationObserver(function () {
         decorateAllRows();
@@ -1866,7 +1864,7 @@
       e.preventDefault();
 
       const dest = $("#wpec-bulk-dest").val() || "";
-      const $checks = $("#wpec-contacts-table tbody .wpec-row-cb:checked");
+      const $checks = $("#wpec-lists-table tbody .wpec-row-cb:checked");
       const ids = $checks
         .map(function () {
           return parseInt($(this).data("id"), 10) || 0;
@@ -2061,7 +2059,7 @@
                 : window.ajaxurl
                 ? window.ajaxurl.replace(
                     "admin-ajax.php",
-                    "edit.php?post_type=email_campaign&page=wpec-contacts&view=list&list_id="
+                    "edit.php?post_type=email_campaign&page=wpec-lists&view=list&list_id="
                   )
                 : "";
             var href = base ? base + String(listId) : "#";
