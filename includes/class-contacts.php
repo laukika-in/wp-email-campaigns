@@ -1519,111 +1519,124 @@ public function ajax_status_add_by_email() {
         wp_send_json_success([ 'list_id'=>$id, 'name'=>$name ]);
     }
 
-    private function handle_upload_to_csv_path( $list_name, $file_arr, $existing_list_id = 0 ) {
-        $tmp_name = $file_arr['tmp_name'];
-        $orig     = sanitize_file_name( $file_arr['name'] );
-        $ext      = strtolower( pathinfo( $orig, PATHINFO_EXTENSION ) );
+   private function handle_upload_to_csv_path( $list_name, $file_arr, $existing_list_id = 0 ) {
+    $tmp_name = $file_arr['tmp_name'];
+    $orig     = sanitize_file_name( $file_arr['name'] );
+    $ext      = strtolower( pathinfo( $orig, PATHINFO_EXTENSION ) );
 
-        $dir = Helpers::ensure_uploads_dir();
-        $dest = $dir . uniqid('wpec_', true) . '.csv';
+    $dir  = Helpers::ensure_uploads_dir();
+    $dest = $dir . uniqid('wpec_', true) . '.csv';
 
-        if ( $ext === 'csv' ) {
-            if ( ! @move_uploaded_file( $tmp_name, $dest ) ) {
-                return new \WP_Error( 'move_failed', 'Failed to move file' );
-            }
-        } else {
-            if ( ! class_exists( IOFactory::class ) ) {
-                return new \WP_Error( 'phpsreadsheet_missing', 'PhpSpreadsheet not installed.' );
-            }
-            try {
-                $spreadsheet = IOFactory::load( $tmp_name );
-                $writer = IOFactory::createWriter( $spreadsheet, 'Csv' );
-                $writer->setSheetIndex(0);
-                $writer->save( $dest );
-            } catch ( \Throwable $e ) {
-                return new \WP_Error( 'xlsx_convert_error', 'XLSX convert error: ' . $e->getMessage() );
-            }
+    if ( $ext === 'csv' ) {
+        if ( ! @move_uploaded_file( $tmp_name, $dest ) ) {
+            return new \WP_Error( 'move_failed', 'Failed to move file' );
         }
+    } else {
+        if ( ! class_exists( \PhpOffice\PhpSpreadsheet\IOFactory::class ) ) {
+            return new \WP_Error( 'phpsreadsheet_missing', 'PhpSpreadsheet not installed.' );
+        }
+        try {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load( $tmp_name );
+            $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter( $spreadsheet, 'Csv' );
+            $writer->setSheetIndex(0);
+            $writer->save( $dest );
+        } catch ( \Throwable $e ) {
+            return new \WP_Error( 'xlsx_convert_error', 'XLSX convert error: ' . $e->getMessage() );
+        }
+    }
 
+    $db    = Helpers::db();
+    $lists = Helpers::table('lists');
+
+    if ( $existing_list_id ) {
+        // ✅ Append into the selected list; do NOT create a new one.
+        $db->update( $lists, [
+            'status'          => 'importing',
+            'updated_at'      => Helpers::now(),
+            'source_filename' => $orig,
+            'file_path'       => $dest,
+            'file_pointer'    => 0,
+            'header_map'      => null,
+            'last_invalid'    => 0,
+        ], [ 'id' => (int) $existing_list_id ] );
+
+        // reset per-run counters (optional, used by your progress widget)
+        \update_option( 'wpec_import_' . (int) $existing_list_id, [
+            'dup'     => 0,
+            'up'      => 0,
+            'started' => Helpers::now(),
+        ], false );
+
+        // 🔙 EARLY RETURN fixes the “new blank list” problem.
+        return [ 'list_id' => (int) $existing_list_id, 'csv_path' => $dest ];
+    }
+
+    // Create a brand new list
+    $db->insert( $lists, [
+        'name'            => $list_name,
+        'status'          => 'importing',
+        'created_at'      => Helpers::now(),
+        'updated_at'      => null,
+        'source_filename' => $orig,
+        'file_path'       => $dest,
+        'file_pointer'    => 0,
+        'header_map'      => null,
+        'total'           => 0,
+        'imported'        => 0,
+        'invalid'         => 0,
+        'duplicates'      => 0,
+        'deleted'         => 0,
+        'manual_added'    => 0,
+        'last_invalid'    => 0,
+    ] );
+    $list_id = (int) $db->insert_id;
+
+    return [ 'list_id' => $list_id, 'csv_path' => $dest ];
+}
+
+public function ajax_list_upload() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) {
+        wp_send_json_error( [ 'message' => 'Denied' ] );
+    }
+
+    $mode = sanitize_text_field( $_POST['list_mode'] ?? 'new' );
+    // read both names used by frontends: existing_list_id OR list_id (fallback)
+    $existing_list_id = absint( $_POST['existing_list_id'] ?? 0 );
+    if ( ! $existing_list_id ) {
+        $existing_list_id = absint( $_POST['list_id'] ?? 0 );
+    }
+
+    $name = sanitize_text_field( $_POST['list_name'] ?? '' );
+    if ( $mode === 'new' && ! $name ) {
+        wp_send_json_error( [ 'message' => 'List name required' ] );
+    }
+    if ( empty( $_FILES['file']['tmp_name'] ) ) {
+        wp_send_json_error( [ 'message' => 'No file' ] );
+    }
+
+    $result = $this->handle_upload_to_csv_path( $name, $_FILES['file'], $existing_list_id );
+    if ( is_wp_error( $result ) ) {
+        wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+    }
+
+    // Return the list name so the UI can show it through the multi-step flow
+    $list_name = '';
+    if ( $existing_list_id ) {
         $db    = Helpers::db();
         $lists = Helpers::table('lists');
-
-        if ( $existing_list_id ) {
-            // Append into existing list: mark importing & reset session counters for last_invalid
-            $db->update( $lists, [
-                'status'         => 'importing',
-                'updated_at'     => Helpers::now(),
-                'source_filename'=> $orig,
-                'file_path'      => $dest,
-                'file_pointer'   => 0,
-                'header_map'     => null,
-                'last_invalid'   => 0, // reset last import invalid count
-            ], [ 'id' => (int)$existing_list_id ] );
-            \update_option( 'wpec_import_' . (int) $existing_list_id, [
-                'dup'     => 0,
-                'up'      => 0,
-                'started' => Helpers::now(),
-            ], false );
-
-        }
-        
-
-        $db->insert( $lists, [
-            'name'           => $list_name,
-            'status'         => 'importing',
-            'created_at'     => Helpers::now(),
-            'updated_at'     => null,
-            'source_filename'=> $orig,
-            'file_path'      => $dest,
-            'file_pointer'   => 0,
-            'header_map'     => null,
-            'total'          => 0,
-            'imported'       => 0,
-            'invalid'        => 0,
-            'duplicates'     => 0,
-            'deleted'        => 0,
-            'manual_added'   => 0,
-            'last_invalid'   => 0,
-        ] );
-        $list_id = (int) $db->insert_id;
-            \update_option( 'wpec_import_' . (int) $existing_list_id, [
-                'dup'     => 0,
-                'up'      => 0,
-                'started' => Helpers::now(),
-            ], false );
-        return [ 'list_id'  => $list_id, 'csv_path' => $dest ];
+        $list_name = (string) $db->get_var(
+            $db->prepare( "SELECT name FROM $lists WHERE id=%d", $existing_list_id )
+        );
+    } else {
+        $list_name = $name;
     }
 
-    public function ajax_list_upload() {
-        check_ajax_referer( 'wpec_admin', 'nonce' );
-        if ( ! Helpers::user_can_manage() ) wp_send_json_error( [ 'message' => 'Denied' ] );
-
-        $mode = sanitize_text_field($_POST['list_mode'] ?? 'new');
-        $existing_list_id = absint($_POST['existing_list_id'] ?? 0);
-        if ( ! $existing_list_id ) {
-            $existing_list_id = absint($_POST['list_id'] ?? 0); // fallback if frontend sends list_id
-        }
-        $name = sanitize_text_field( $_POST['list_name'] ?? '' );
-        if ( $mode === 'new' && ! $name ) wp_send_json_error(['message'=>'List name required']);
-        if ( empty($_FILES['file']['tmp_name']) ) wp_send_json_error( [ 'message' => 'No file' ] );
-
-        $result = $this->handle_upload_to_csv_path( $name, $_FILES['file'], $existing_list_id );
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( [ 'message' => $result->get_error_message() ] );
-        }
-        $list_name = '';
-        if ( $existing_list_id ) {
-            $db = Helpers::db();
-            $lists = Helpers::table('lists');
-            $list_name = (string) $db->get_var( $db->prepare( "SELECT name FROM $lists WHERE id=%d", $existing_list_id ) );
-        } else {
-            $list_name = $name; // the "new list" name from the form
-        }
-        wp_send_json_success( [ 
-            'list_id'   => (int) $result['list_id'],
-            'list_name' => $list_name ?: ('List #'.(int)$result['list_id']),
-        ] );
-    }
+    wp_send_json_success( [
+        'list_id'   => (int) $result['list_id'],
+        'list_name' => $list_name ?: ( 'List #' . (int) $result['list_id'] ),
+    ] );
+}
 
     /** Read CSV header row for a list file (no DB changes) */
 public function ajax_list_probe_headers() {
