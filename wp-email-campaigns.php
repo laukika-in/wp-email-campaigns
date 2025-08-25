@@ -9,7 +9,7 @@
 /*
 UI: detail page, upload Ui, filter ui, 
 features missing: move to other list in list page
-bug: delete button not working, view current list is showing all list
+
 Test features once, detail page move option not working, many places delete button not working
 
 email: save template structure, followup (link to parent mail)

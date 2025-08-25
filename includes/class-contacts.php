@@ -2288,7 +2288,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
             INNER JOIN $lists l ON l.id = d.list_id
             INNER JOIN $ct c ON c.id = d.contact_id
             $where
-            ORDER BY d.id DESC
+            ORDER BY d.email ASC, d.contact_id ASC, d.id DESC
             LIMIT %d OFFSET %d
         ";
 
