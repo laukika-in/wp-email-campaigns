@@ -121,55 +121,106 @@
 
   $(function () {
     if (!onSendPage()) return;
-    // (Optional) enhance selects later with Select2 if you like.
-  });
+    // Load Select2 (local → CDN), then run cb
+    function ensureSelect2(cb) {
+      if ($.fn.select2) {
+        cb && cb();
+        return;
+      }
 
-  function ensureSelect2(cb) {
-    if ($.fn.select2) {
-      cb && cb();
-      return;
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href =
+        (WPECCAMPAIGN && WPECCAMPAIGN.select2LocalCss) ||
+        WPECCAMPAIGN.select2CdnCss;
+      css.onerror = function () {
+        this.href = WPECCAMPAIGN.select2CdnCss;
+      };
+      document.head.appendChild(css);
+
+      var s = document.createElement("script");
+      s.src =
+        (WPECCAMPAIGN && WPECCAMPAIGN.select2LocalJs) ||
+        WPECCAMPAIGN.select2CdnJs;
+      s.onload = function () {
+        cb && cb();
+      };
+      s.onerror = function () {
+        this.onerror = null;
+        this.src = WPECCAMPAIGN.select2CdnJs;
+      };
+      document.head.appendChild(s);
     }
-    var css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = (window.WPECCAMPAIGN && WPECCAMPAIGN.select2LocalCss) || "";
-    css.onerror = function () {
-      this.href = WPECCAMPAIGN.select2CdnCss;
-    };
-    document.head.appendChild(css);
 
-    var s = document.createElement("script");
-    s.src = (window.WPECCAMPAIGN && WPECCAMPAIGN.select2LocalJs) || "";
-    s.onload = function () {
-      cb && cb();
-    };
-    s.onerror = function () {
-      this.onerror = null;
-      this.src = WPECCAMPAIGN.select2CdnJs;
-    };
-    document.head.appendChild(s);
-  }
+    // Get HTML from WP editor (falls back to textarea)
+    function getEditorHtml() {
+      var ed = window.tinyMCE && tinyMCE.get("wpec_camp_html");
+      if (ed && !ed.isHidden()) return ed.getContent();
+      return $("#wpec_camp_html").val() || "";
+    }
 
-  $(function () {
-    // Only run on our Send screen
-    if (!$("#wpec-send-app").length) return;
+    function initSendUI() {
+      // Init Select2 on your IDs/classes
+      $("#wpec-list-ids, #wpec-exclude-lists, select.wpec-s2").each(
+        function () {
+          $(this).select2({
+            width: "resolve",
+            allowClear: true,
+            placeholder: $(this).data("placeholder") || "Select…",
+          });
+        }
+      );
 
-    ensureSelect2(function () {
-      // Single or multi — both become searchable
-      $("#wpec-send-list").addClass("wpec-s2").select2({
-        width: "resolve",
-        placeholder: "Select list…",
-        allowClear: true,
+      // TEST SEND
+      $(document).on("click", "#wpec-send-test", function (e) {
+        e.preventDefault();
+        $("#wpec-test-loader").show();
+        $.post(WPECCAMPAIGN.ajaxUrl, {
+          action: "wpec_send_test",
+          nonce: WPECCAMPAIGN.nonce,
+          to: $("#wpec-test-to").val(),
+          subject: $("#wpec-subject").val(),
+          from_name: $("#wpec-from-name").val(),
+          from_email: $("#wpec-from-email").val(),
+          body: getEditorHtml(),
+        })
+          .done(function (res) {
+            alert(
+              res && res.success ? "Test sent." : res?.data?.message || "Failed"
+            );
+          })
+          .always(function () {
+            $("#wpec-test-loader").hide();
+          });
       });
+
+      // QUEUE SEND
+      $(document).on("click", "#wpec-queue-campaign", function (e) {
+        e.preventDefault();
+        var listIds = $("#wpec-list-ids").val() || [];
+        $.post(WPECCAMPAIGN.ajaxUrl, {
+          action: "wpec_campaign_queue",
+          nonce: WPECCAMPAIGN.nonce,
+          subject: $("#wpec-subject").val(),
+          from_name: $("#wpec-from-name").val(),
+          from_email: $("#wpec-from-email").val(),
+          body: getEditorHtml(),
+          list_ids: listIds,
+        }).done(function (res) {
+          if (res && res.success) {
+            $("#wpec-send-status").text(
+              "Queued " + (res.data?.queued || 0) + " emails."
+            );
+          } else {
+            alert(res?.data?.message || "Queue failed.");
+          }
+        });
+      });
+    }
+
+    $(function () {
+      if (!document.getElementById("wpec-send-app")) return; // only on Send page
+      ensureSelect2(initSendUI);
     });
   });
-  function getHtmlBody() {
-    if (window.tinymce && tinymce.get("wpec_camp_html")) {
-      return tinymce.get("wpec_camp_html").getContent();
-    }
-    return $("#wpec_camp_html").val() || "";
-  }
-
-  // Example usage:
-  var html = getHtmlBody();
-  // send `html` in your AJAX payload as before
 })(jQuery);

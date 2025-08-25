@@ -42,7 +42,7 @@ class Sender {
         global $wpdb;
         $lists = $wpdb->get_results( "SELECT id, name FROM " . Helpers::table('lists') . " ORDER BY name ASC LIMIT 1000", ARRAY_A );
 
-        echo '<div class="wrap"><h1>'.esc_html__('Compose & Send','wp-email-campaigns').'</h1>';
+echo '<div class="wrap" id="wpec-send-app"><h1>'.esc_html__('Compose & Send','wp-email-campaigns').'</h1>';
 
         echo '<div class="wpec-card" style="max-width:980px;padding:16px;">';
 
@@ -78,7 +78,7 @@ echo '</div>';
 
         // Lists select
         echo '<p><label><strong>'.esc_html__('Recipient lists','wp-email-campaigns').'</strong><br>';
-        echo '<select id="wpec-list-ids" multiple style="min-width:420px;height:140px">';
+echo '<select id="wpec-list-ids" class="wpec-s2" multiple style="min-width:420px;height:140px" data-placeholder="Select list…">';
         foreach ( (array)$lists as $l ) {
             printf('<option value="%d">%s</option>', (int)$l['id'], esc_html($l['name']));
         }
