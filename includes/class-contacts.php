@@ -1173,29 +1173,45 @@ public function ajax_status_add_by_email() {
     check_ajax_referer( 'wpec_admin', 'nonce' );
     if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
 
-    $ids     = isset($_POST['ids']) && is_array($_POST['ids']) ? array_map('absint', $_POST['ids']) : [];
-    $list_id = absint($_POST['list_id'] ?? 0);
-    if ( empty($ids) || ! $list_id ) wp_send_json_error(['message'=>'Bad params']);
-
-    $db = Helpers::db();
+    global $wpdb;
     $li = Helpers::table('list_items');
-    $now = Helpers::now();
 
-    $mapped = 0;
-    foreach ( $ids as $cid ) {
-        $exists = $db->get_var( $db->prepare( "SELECT id FROM $li WHERE list_id=%d AND contact_id=%d", $list_id, $cid ) );
-        if ( ! $exists ) {
-            $db->insert( $li, [
-                'list_id' => $list_id,
-                'contact_id' => $cid,
-                'is_duplicate_import' => 0,
-                'created_at' => $now,
-            ] );
-            $mapped++;
-        }
+    // Accept either ids[] or contact_ids[] from JS
+    $ids = $_POST['ids'] ?? $_POST['contact_ids'] ?? [];
+    if ( ! is_array($ids) ) $ids = [$ids];
+    $ids = array_values(array_filter(array_map('absint', $ids)));
+
+    $dest_list_id   = absint($_POST['list_id'] ?? 0);
+    $source_list_id = absint($_POST['source_list_id'] ?? 0); // optional
+
+    if ( ! $dest_list_id || empty($ids) ) {
+        wp_send_json_error(['message' => 'Bad params']);
     }
-    wp_send_json_success([ 'mapped' => $mapped ]);
+
+    // Add to destination (ignore if already there)
+    $values = [];
+    foreach ( $ids as $cid ) {
+        $values[] = $wpdb->prepare('(%d,%d,NOW())', $dest_list_id, $cid);
+    }
+    if ( $values ) {
+        $sql = "INSERT IGNORE INTO $li (list_id, contact_id, created_at) VALUES " . implode(',', $values);
+        $wpdb->query($sql);
+    }
+
+    // If we're "moving" from a specific list page, remove from that source list
+    if ( $source_list_id && $source_list_id !== $dest_list_id ) {
+        $ph = implode(',', array_fill(0, count($ids), '%d'));
+        $params = array_merge([ $source_list_id ], $ids);
+        $wpdb->query( $wpdb->prepare("DELETE FROM $li WHERE list_id=%d AND contact_id IN ($ph)", $params) );
+    }
+
+    wp_send_json_success([
+        'moved'  => count($ids),
+        'dest'   => $dest_list_id,
+        'source' => $source_list_id,
+    ]);
 }
+
 
     // ===================== AJAX Contacts directory query =====================
     public function ajax_contacts_query() {
