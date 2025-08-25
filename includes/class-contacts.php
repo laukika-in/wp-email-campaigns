@@ -521,7 +521,7 @@ public function render_status_list( $status_slug ) {
         echo '<a class="button" href="' . esc_url( $dupes_url ) . '">' . esc_html__( 'View Duplicates (All Lists)', 'wp-email-campaigns' ) . '</a></p>';
 
         echo '<div class="wpec-dup-toolbar" style="margin:10px 0;">';
-        echo '<button id="wpec-dup-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected from this list', 'wp-email-campaigns' ) . '</button> ';
+        echo '<button id="wpec-list-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected from this list', 'wp-email-campaigns' ) . '</button> ';
         echo '<span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none;"></span>';
         echo '</div>';
         echo '<div id="wpec-list-bulk-progress" style="display:none;"><div class="wpec-progress"><span id="wpec-list-progress-bar" style="width:0%"></span></div><p id="wpec-list-progress-text"></p></div>';

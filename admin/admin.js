@@ -837,6 +837,7 @@
   }
   bulkDelete(
     "#wpec-dup-bulk-delete",
+    "#wpec-list-bulk-delete",
     "#wpec-dup-form",
     "#wpec-dup-progress-bar",
     "#wpec-dup-progress-text",
