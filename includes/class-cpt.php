@@ -29,10 +29,10 @@ class CPT {
             'capability_type' => 'post',
         ] );
 
-        // Contacts/Lists page under Campaigns
+        // contacts/Lists page under Campaigns
         add_submenu_page(
             'edit.php?post_type=' . self::POST_TYPE,
-            __( 'Contacts & Lists', 'wp-email-campaigns' ),
+            __( 'Lists', 'wp-email-campaigns' ),
             __( 'Lists', 'wp-email-campaigns' ),
             'manage_options',
             'wpec-contacts',
@@ -41,7 +41,7 @@ class CPT {
     }
 
     public function render_contacts_page() {
-        echo '<div class="wrap"><h1>' . esc_html__( 'Contacts & Lists', 'wp-email-campaigns' ) . '</h1>';
+   
         do_action( 'wpec_render_contacts_table' ); // Implemented in class-contacts.php (now List manager)
         echo '</div>';
     }
