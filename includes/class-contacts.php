@@ -71,10 +71,18 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
     }
 
     /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
-    public function admin_menu_adjustments() {
+   public function admin_menu_adjustments() {
+     $cap = 'manage_options';
+        if ( class_exists(__NAMESPACE__ . '\\Helpers') ) {
+            if ( method_exists( Helpers::class, 'manage_cap' ) ) {
+                $cap = Helpers::manage_cap();
+            } elseif ( method_exists( Helpers::class, 'cap' ) ) {
+                $cap = Helpers::cap();
+            }
+        }
     global $submenu;
     $parent = 'edit.php?post_type=email_campaign';
-
+  
     // 1) Rename the existing router screen (slug: wpec-contacts) to "Lists"
     $lists_idx = null;
     if ( isset( $submenu[ $parent ] ) ) {
@@ -100,7 +108,7 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         $parent,
         __( 'Contacts', 'wp-email-campaigns' ),   // page title
         __( 'Contacts', 'wp-email-campaigns' ),   // menu title (All Contacts directory)
-        Helpers::manage_cap(),
+        $cap,
         'wpec-all-contacts',
         [ $this, 'render_all_contacts' ],
         9
@@ -111,7 +119,7 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
             $parent,
             __( 'Import', 'wp-email-campaigns' ),
             __( 'Import', 'wp-email-campaigns' ),
-            Helpers::manage_cap(),
+            $cap,
             'wpec-import',
             [ $this, 'render_import_stub' ],
             10
@@ -122,12 +130,13 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         $parent,
         __( 'Duplicates', 'wp-email-campaigns' ),
         __( 'Duplicates', 'wp-email-campaigns' ),
-        Helpers::manage_cap(),
+        $cap,
         'wpec-duplicates',
         [ $this, 'render_duplicates_page' ],
         11
     );
 }
+
 
     /** Ensure CSS/JS on all our admin pages; also expose Select2 sources */
     public function enqueue_admin_assets( $hook ) {
