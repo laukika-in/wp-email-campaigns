@@ -815,10 +815,10 @@ public function ajax_contact_add_to_list() {
 
 
     // ===================== DUPLICATES =====================
-   private function render_duplicates( $list_id = 0 ) {
+private function render_duplicates( $list_id = 0 ) {
     if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
 
-    // ── NEW: derive a canonical focus email (prefer focus_contact) ─────────
+    // NEW: resolve focus email (prefer focus_contact ID, else focus_email)
     global $wpdb;
     $ct = Helpers::table('contacts');
     $focus_email = '';
@@ -834,14 +834,12 @@ public function ajax_contact_add_to_list() {
     if ( ! $focus_email && isset($_GET['focus_email']) ) {
         $focus_email = sanitize_email( wp_unslash( (string) $_GET['focus_email'] ) );
     }
-    // ───────────────────────────────────────────────────────────────────────
 
     $title = $list_id ? sprintf( __( 'Duplicates — List #%d', 'wp-email-campaigns' ), $list_id )
                       : __( 'Duplicates — All Lists', 'wp-email-campaigns' );
 
     echo '<div class="wrap"><h1>' . esc_html( $title ) . '</h1>';
 
-    // Optional: small hint showing the filter
     if ( $focus_email ) {
         printf(
             '<div class="notice notice-info"><p>%s <code>%s</code></p></div>',
@@ -856,18 +854,19 @@ public function ajax_contact_add_to_list() {
     echo '</div>';
     echo '<div id="wpec-dup-bulk-progress" style="display:none;"><div class="wpec-progress"><span id="wpec-dup-progress-bar" style="width:0%"></span></div><p id="wpec-dup-bulk-progress-text"></p></div>';
 
-    // ── CHANGED: pass $focus_email into the table ──────────────────────────
+    // PASS the resolved email into the table (2nd arg)
     $table = new WPEC_Duplicates_Table( $list_id, $focus_email );
     $table->prepare_items();
     echo '<form id="wpec-dup-form" method="get">';
     echo '<input type="hidden" name="post_type" value="email_campaign" />';
-    echo '<input type="hidden" name="page" value="wpec-contacts" />'; // legacy in-table actions reuse
+    echo '<input type="hidden" name="page" value="wpec-contacts" />';
     echo '<input type="hidden" name="view" value="dupes' . ( $list_id ? '_list' : '' ) . '" />';
     if ( $list_id ) { echo '<input type="hidden" name="list_id" value="' . (int) $list_id . '" />'; }
     $table->search_box( __( 'Search email/name', 'wp-email-campaigns' ), 'wpecdup' );
     $table->display();
     echo '</form></div>';
 }
+
 public function render_duplicates_page() { $this->render_duplicates(0); }
 
 /** ===== Saved Views (Presets) — user-scoped ===== */
@@ -2276,7 +2275,8 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     protected $list_id;
     protected $focus_email = '';
 
-    public function __construct( $list_id = 0 ) { parent::__construct( [ 'plural' => 'duplicates', 'singular' => 'duplicate' ] ); 
+    public function __construct( $list_id = 0, $focus_email ='' ) { 
+        parent::__construct( [ 'plural' => 'duplicates', 'singular' => 'duplicate' ] ); 
         $this->list_id = (int) $list_id;     
         $this->focus_email = trim( (string) $focus_email );
     }
