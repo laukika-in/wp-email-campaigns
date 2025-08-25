@@ -713,7 +713,7 @@ echo '</div>';
 $dupes_url = add_query_arg([
     'post_type'    => 'email_campaign',
     'page'         => 'wpec-duplicates',
-    'focus_email'  => (int)$contact_id, // new param used by Duplicates screen
+    'focus_email'  => (string)$row['email'], // new param used by Duplicates screen
 ], admin_url('edit.php'));
 echo '      <li><a class="button" href="'.esc_url($dupes_url).'">'.esc_html__('View duplicates for this email','wp-email-campaigns').'</a></li>';
 
