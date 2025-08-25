@@ -49,6 +49,8 @@ class Plugin {
         wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VER, true );
 
         $start_import = isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0;
+ // 🔒 Hide WP admin footer only on our pages
+    wp_add_inline_style( 'wpec-admin', '#wpfooter{display:none !important;}' );
 
         wp_localize_script( 'wpec-admin', 'WPEC', [
             'nonce'       => wp_create_nonce( 'wpec_admin' ),
