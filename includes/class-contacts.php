@@ -663,20 +663,21 @@ $lists_table = Helpers::table('lists');
 $all_lists = $db->get_results("SELECT id, name FROM $lists_table ORDER BY name ASC LIMIT 1000", ARRAY_A);
 
 echo '<div class="wpec-inline" style="display:flex;gap:8px;align-items:center;margin:8px 0 16px 0">';
+$existing_ids = array_map('intval', array_column((array)$memberships, 'id'));
+
 echo '<label for="wpec-contact-addlist-select" style="margin-right:6px">'.esc_html__('Add to list','wp-email-campaigns').'</label>';
 echo '<select id="wpec-contact-addlist-select" style="min-width:260px"><option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
 foreach ( (array)$all_lists as $l ) {
+    if ( in_array( (int)$l['id'], $existing_ids, true ) ) { continue; } // skip lists the contact already has
     printf('<option value="%d">%s</option>', (int)$l['id'], esc_html($l['name']));
 }
+
+
 echo '</select>';
 echo '<button class="button" id="wpec-contact-addlist-apply">'.esc_html__('Add','wp-email-campaigns').'</button> ';
 echo '<span class="wpec-inline-loader" id="wpec-contact-addlist-loader" style="display:none"></span>';
 echo '</div>';
-
-    // Header actions
-   echo '<div class="wpec-card" style=" margin-top:16px">';
-
-echo '</div>';
+ 
 
 
     echo '</div>'; // /header card
@@ -708,15 +709,14 @@ echo '</div>';
     echo '    <h3>'.esc_html__('Quick actions','wp-email-campaigns').'</h3>';
     echo '    <ul class="wpec-quick-actions">';
     // View duplicates (all lists)
-    $dupes_url = add_query_arg([
-        'post_type' => 'email_campaign',
-        'page'      => 'wpec-duplicates',
-        'focus_contact' => (int)$contact_id,
-    ], admin_url('edit.php'));
-    echo '      <li><a class="button" href="'.esc_url($dupes_url).'">'.esc_html__('View duplicates (all lists)','wp-email-campaigns').'</a></li>';
-    // Link to All Contacts filtered by this email
-    $all_url = $contacts_url('search', (string)$row['email']);
-    echo '      <li><a class="button" href="'.esc_url($all_url).'">'.esc_html__('Find in All Contacts','wp-email-campaigns').'</a></li>';
+   // View duplicates for this email only
+$dupes_url = add_query_arg([
+    'post_type'    => 'email_campaign',
+    'page'         => 'wpec-duplicates',
+    'focus_email'  => (string)$row['email'], // new param used by Duplicates screen
+], admin_url('edit.php'));
+echo '      <li><a class="button" href="'.esc_url($dupes_url).'">'.esc_html__('View duplicates for this email','wp-email-campaigns').'</a></li>';
+
     echo '    </ul>';
 echo '<h2 style="margin-top:0">'.esc_html__('Status','wp-email-campaigns').'</h2>';
 echo '<select id="wpec-contact-status-select">';
@@ -820,6 +820,11 @@ public function ajax_contact_add_to_list() {
 
         $title = $list_id ? sprintf( __( 'Duplicates — List #%d', 'wp-email-campaigns' ), $list_id )
                           : __( 'Duplicates — All Lists', 'wp-email-campaigns' );
+$focus_email = isset($_GET['focus_email']) ? sanitize_email( (string) $_GET['focus_email'] ) : '';
+if ( $focus_email ) {
+    $where[] = 'c.email = %s';   // adjust alias if your contacts table alias differs
+    $args[]  = $focus_email;
+}
 
         echo '<div class="wrap"><h1>' . esc_html( $title ) . '</h1>';
 

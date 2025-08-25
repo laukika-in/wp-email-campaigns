@@ -2035,26 +2035,26 @@
     // 2) Change status (Active / Unsubscribed / Bounced)
     $(document).on("click", "#wpec-contact-status-apply", function (e) {
       e.preventDefault();
-      var contactId = currentContactId();
+      var $btn = $(this);
+      var contactId =
+        parseInt($("#wpec-contact-detail").data("contactId"), 10) || 0;
       var status = ($("#wpec-contact-status-select").val() || "").trim();
       if (!contactId || !status) return;
 
-      // 'active' means remove from DND/Bounced -> mode=remove
-      var mode = status === "active" ? "remove" : "add";
-      $("#wpec-contact-status-apply").prop("disabled", true);
+      $btn.prop("disabled", true);
       $("#wpec-contact-status-loader").show();
 
       $.post(WPEC.ajaxUrl, {
         action: "wpec_status_bulk_update",
         nonce: WPEC.nonce,
         ids: [contactId],
-        mode: mode,
-        status: status, // used when mode=add
+        mode: status === "active" ? "remove" : "add",
+        status: status,
       })
         .done(function (resp) {
           if (resp && resp.success) {
-            // quick visual confirmation (if you show a badge somewhere)
-            $(".wpec-status-badge").text(niceStatus(status));
+            // Hard refresh so the header pill (#wpec-status-pill) always matches DB.
+            location.reload();
           } else {
             alert(
               (resp && resp.data && resp.data.message) ||
@@ -2064,18 +2064,22 @@
         })
         .always(function () {
           $("#wpec-contact-status-loader").hide();
-          $("#wpec-contact-status-apply").prop("disabled", false);
+          $btn.prop("disabled", false);
         });
     });
 
     // 3) Add to list (dropdown + Add)
+    // Add to list
     $(document).on("click", "#wpec-contact-addlist-apply", function (e) {
       e.preventDefault();
-      var contactId = currentContactId();
-      var listId = parseInt($("#wpec-contact-addlist-select").val(), 10) || 0;
+      var $btn = $(this);
+      var contactId =
+        parseInt($("#wpec-contact-detail").data("contactId"), 10) || 0;
+      var $sel = $("#wpec-contact-addlist-select");
+      var listId = parseInt($sel.val(), 10) || 0;
       if (!contactId || !listId) return;
 
-      $("#wpec-contact-addlist-apply").prop("disabled", true);
+      $btn.prop("disabled", true);
       $("#wpec-contact-addlist-loader").show();
 
       $.post(WPEC.ajaxUrl, {
@@ -2086,11 +2090,7 @@
       })
         .done(function (resp) {
           if (resp && resp.success) {
-            // Append a fresh chip for the new list (with working close button)
-            var listName = $(
-              "#wpec-contact-addlist-select option:selected"
-            ).text();
-            // Build a link to the list (uses localized base if provided)
+            var listName = $sel.find("option:selected").text();
             var base =
               WPEC && WPEC.listViewBase
                 ? WPEC.listViewBase
@@ -2109,15 +2109,18 @@
               href +
               '">' +
               $("<div>").text(listName).html() +
-              "</a>" +
-              ' <button type="button" class="wpec-chip-close" aria-label="Remove" data-list-id="' +
+              "</a> " +
+              '<button type="button" class="wpec-chip-close" aria-label="Remove" data-list-id="' +
               listId +
               '" data-contact-id="' +
               contactId +
               '">&times;</button>' +
               "</span>";
             $("#wpec-contact-memberships").append(chip);
-            $("#wpec-contact-addlist-select").val("").trigger("change");
+
+            // prevent adding the same list again
+            $sel.find('option[value="' + listId + '"]').remove();
+            $sel.val("").trigger("change");
           } else {
             alert(
               (resp && resp.data && resp.data.message) ||
@@ -2127,7 +2130,59 @@
         })
         .always(function () {
           $("#wpec-contact-addlist-loader").hide();
-          $("#wpec-contact-addlist-apply").prop("disabled", false);
+          $btn.prop("disabled", false);
+        });
+    });
+
+    // Chip close: after removing mapping, put that list back into the dropdown
+    $(document).on("click", ".wpec-chip-close", function (e) {
+      e.preventDefault();
+      var $btn = $(this);
+      var listId = parseInt($btn.data("listId"), 10) || 0;
+      var contactId = parseInt($btn.data("contactId"), 10) || 0;
+      if (!listId || !contactId) return;
+      if (!confirm("Remove this contact from this list?")) return;
+
+      $btn.prop("disabled", true);
+      $.post(WPEC.ajaxUrl, {
+        action: "wpec_delete_list_mapping",
+        nonce: WPEC.nonce,
+        list_id: listId,
+        contact_id: contactId,
+      })
+        .done(function (resp) {
+          if (resp && resp.success) {
+            // grab name before removing the chip
+            var listName = (
+              $btn.siblings(".wpec-chip-link").text() || ""
+            ).trim();
+            $btn.closest(".wpec-chip").remove();
+            if (listName) {
+              // reinsert option so it can be added again later
+              var $sel = $("#wpec-contact-addlist-select");
+              var opt = $("<option>", { value: listId, text: listName });
+              // keep options alphabetic-ish
+              var inserted = false;
+              $sel.find("option").each(function () {
+                if ($(this).text().toLowerCase() > listName.toLowerCase()) {
+                  opt.insertBefore($(this));
+                  inserted = true;
+                  return false;
+                }
+              });
+              if (!inserted) $sel.append(opt);
+            }
+          } else {
+            alert(
+              (resp && resp.data && resp.data.message) ||
+                "Failed to remove from list."
+            );
+            $btn.prop("disabled", false);
+          }
+        })
+        .fail(function () {
+          alert("Request failed.");
+          $btn.prop("disabled", false);
         });
     });
 
