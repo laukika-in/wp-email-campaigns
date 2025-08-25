@@ -69,9 +69,7 @@ public function admin_assets( $hook ) {
             ['post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>''],
             admin_url('edit.php')
         ),
-        // expose local + CDN to JS
-        'select2LocalCss' => $select2_local_css,
-        'select2LocalJs'  => $select2_local_js,
+        // expose local + CDN to JS 
         'select2CdnCss'   => $select2_cdn_css,
         'select2CdnJs'    => $select2_cdn_js,
     ];
