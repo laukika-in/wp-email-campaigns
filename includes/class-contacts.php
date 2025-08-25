@@ -641,7 +641,8 @@ echo '</div>';
         }
     }
 
-    echo '<div class="wrap wpec-detail" id="wpec-contact-detail" data-contact-id="'.(int)$contact_id.'">';
+    echo '<div class="wrap" id="wpec-contact-detail" data-contact-id="'.(int)$contact_id.'">';
+
     echo '<div class="wpec-detail-grid">';
 
     // ===== Main column =====
@@ -657,31 +658,55 @@ echo '</div>';
     echo '      <div class="wpec-head-lists"><strong>'.esc_html__('Lists','wp-email-campaigns').':</strong> <span id="wpec-list-chips">'.$chip_html.'</span></div>';
     echo '    </div>';
     echo '  </div>';
+echo '<h2 style="margin-top:20px">'.esc_html__('Lists','wp-email-campaigns').'</h2>';
+echo '<div id="wpec-contact-memberships" class="wpec-chipset" style="margin:8px 0 12px 0">';
+foreach ( $memberships as $m ) {
+    $url = add_query_arg([
+        'post_type' => 'email_campaign',
+        'page'      => 'wpec-contacts',
+        'view'      => 'list',
+        'list_id'   => (int)$m['id'],
+    ], admin_url('edit.php') );
+
+    printf(
+        '<span class="wpec-chip" data-list-id="%d"><a class="wpec-chip-link" href="%s">%s</a> '.
+        '<button type="button" class="wpec-chip-close" aria-label="%s" data-list-id="%d" data-contact-id="%d">&times;</button></span>',
+        (int)$m['id'],
+        esc_url($url),
+        esc_html($m['name'].' (#'.$m['id'].')'),
+        esc_attr__('Remove from this list','wp-email-campaigns'),
+        (int)$m['id'],
+        (int)$contact_id
+    );
+}
+echo '</div>';
+// fetch lists for the dropdown (you likely already have $db)
+$lists_table = Helpers::table('lists');
+$all_lists = $db->get_results("SELECT id, name FROM $lists_table ORDER BY name ASC LIMIT 1000", ARRAY_A);
+
+echo '<div class="wpec-inline" style="display:flex;gap:8px;align-items:center;margin:8px 0 16px 0">';
+echo '<label for="wpec-contact-addlist-select" style="margin-right:6px">'.esc_html__('Add to list','wp-email-campaigns').'</label>';
+echo '<select id="wpec-contact-addlist-select" style="min-width:260px"><option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
+foreach ( (array)$all_lists as $l ) {
+    printf('<option value="%d">%s</option>', (int)$l['id'], esc_html($l['name']));
+}
+echo '</select>';
+echo '<button class="button" id="wpec-contact-addlist-apply">'.esc_html__('Add','wp-email-campaigns').'</button> ';
+echo '<span class="wpec-inline-loader" id="wpec-contact-addlist-loader" style="display:none"></span>';
+echo '</div>';
 
     // Header actions
-    echo '  <div class="wpec-header-actions">';
-    echo '    <label>'.esc_html__('Status','wp-email-campaigns').'<br>';
-    echo '      <select id="wpec-contact-status">';
-    foreach ( ['active','unsubscribed','bounced'] as $opt ) {
-        printf('<option value="%s"%s>%s</option>',
-            esc_attr($opt),
-            selected($opt, $status, false),
-            esc_html($opt)
-        );
-    }
-    echo '      </select>';
-    echo '    </label>';
+   echo '<div class="wpec-card" style=" margin-top:16px">';
+echo '<h2 style="margin-top:0">'.esc_html__('Status','wp-email-campaigns').'</h2>';
+echo '<select id="wpec-contact-status-select">';
+echo '<option value="active" '.selected($row['status'],'active',false).'>'.esc_html__('Active','wp-email-campaigns').'</option>';
+echo '<option value="unsubscribed" '.selected($row['status'],'unsubscribed',false).'>'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
+echo '<option value="bounced" '.selected($row['status'],'bounced',false).'>'.esc_html__('Bounced','wp-email-campaigns').'</option>';
+echo '</select> ';
+echo '<button class="button" id="wpec-contact-status-apply">'.esc_html__('Apply','wp-email-campaigns').'</button> ';
+echo '<span class="wpec-inline-loader" id="wpec-contact-status-loader" style="display:none"></span>';
+echo '</div>';
 
-    echo '    <label>'.esc_html__('Add to list','wp-email-campaigns').'<br>';
-    echo '      <select id="wpec-contact-add-list"><option value="">'.esc_html__('— Select —','wp-email-campaigns').'</option>';
-    foreach ( $all_lists as $l ) {
-        printf('<option value="%d">%s (%d)</option>', (int)$l['id'], esc_html($l['name']), (int)$l['cnt']);
-    }
-    echo '      </select>';
-    echo '    </label>';
-    echo '    <button class="button" id="wpec-contact-add-btn">'.esc_html__('Add','wp-email-campaigns').'</button>';
-    echo '    <span class="wpec-loader" id="wpec-contact-loader" style="display:none"></span>';
-    echo '  </div>';
 
     echo '</div>'; // /header card
 
@@ -795,7 +820,7 @@ public function ajax_contact_add_to_list() {
         echo '<div class="wrap"><h1>' . esc_html( $title ) . '</h1>';
 
         echo '<div class="wpec-dup-toolbar" style="margin:10px 0;">';
-        echo '<button id="wpec-dup-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected from current lists', 'wp-email-campaigns' ) . '</button> ';
+        echo '<button id="wpec-dup-bulk-delete" class="button" disabled>' . esc_html__( 'Delete selected', 'wp-email-campaigns' ) . '</button> ';
         echo '<span class="wpec-loader" id="wpec-dup-bulk-loader" style="display:none;"></span>';
         echo '</div>';
         echo '<div id="wpec-dup-bulk-progress" style="display:none;"><div class="wpec-progress"><span id="wpec-dup-progress-bar" style="width:0%"></span></div><p id="wpec-dup-progress-text"></p></div>';
@@ -2224,7 +2249,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         'first_name'    => __( 'First name', 'wp-email-campaigns' ),
         'last_name'     => __( 'Last name', 'wp-email-campaigns' ),
         'dup_count'     => __( 'Duplicate count', 'wp-email-campaigns' ),
-        'current_list'  => __( 'Current list', 'wp-email-campaigns' ),
+        'current_list'  => __( 'List', 'wp-email-campaigns' ),
         'imported_at'   => __( 'Last imported date', 'wp-email-campaigns' ),
         'other_lists'   => __( 'Duplicated lists', 'wp-email-campaigns' ), // <-- renamed + new data
         'actions'       => __( 'Actions', 'wp-email-campaigns' ),
@@ -2341,7 +2366,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
             $btn = sprintf(
                 '<button type="button" class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d">%s</button> <a class="button button-small" href="%s">%s</a>',
                 (int)$item['list_id'], (int)$item['contact_id'],
-                esc_html__('Delete from current list', 'wp-email-campaigns'),
+                esc_html__('Delete', 'wp-email-campaigns'),
                 esc_url($view), esc_html__('View detail','wp-email-campaigns')
             );
             return $btn;

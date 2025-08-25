@@ -1982,6 +1982,175 @@
   }
 
   $(wireAllPage);
+
+  /* ==== CONTACT DETAIL: chips, status, add-to-list, quick actions ==== */
+  (function () {
+    // Helper: get the contact id from the page root
+    function currentContactId() {
+      var $root = $("#wpec-contact-detail");
+      return $root.length ? parseInt($root.data("contactId"), 10) || 0 : 0;
+    }
+    // Helper: title-case a status for small inline badge refresh
+    function niceStatus(s) {
+      if (!s) return "";
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+
+    // 1) Remove from list chip (X button on each chip)
+    $(document).on("click", ".wpec-chip-close", function (e) {
+      e.preventDefault();
+      var $btn = $(this);
+      var listId = parseInt($btn.data("listId"), 10) || 0;
+      var contactId =
+        parseInt($btn.data("ContactId"), 10) || currentContactId();
+      if (!listId || !contactId) return;
+
+      if (!confirm("Remove this contact from this list?")) return;
+      $btn.prop("disabled", true);
+
+      $.post(WPEC.ajaxUrl, {
+        action: "wpec_delete_list_mapping",
+        nonce: WPEC.nonce,
+        list_id: listId,
+        contact_id: contactId,
+      })
+        .done(function (resp) {
+          if (resp && resp.success) {
+            // remove the chip from UI
+            $btn.closest(".wpec-chip").remove();
+          } else {
+            alert(
+              (resp && resp.data && resp.data.message) ||
+                "Failed to remove from list."
+            );
+            $btn.prop("disabled", false);
+          }
+        })
+        .fail(function () {
+          alert("Request failed.");
+          $btn.prop("disabled", false);
+        });
+    });
+
+    // 2) Change status (Active / Unsubscribed / Bounced)
+    $(document).on("click", "#wpec-contact-status-apply", function (e) {
+      e.preventDefault();
+      var contactId = currentContactId();
+      var status = ($("#wpec-contact-status-select").val() || "").trim();
+      if (!contactId || !status) return;
+
+      // 'active' means remove from DND/Bounced -> mode=remove
+      var mode = status === "active" ? "remove" : "add";
+      $("#wpec-contact-status-apply").prop("disabled", true);
+      $("#wpec-contact-status-loader").show();
+
+      $.post(WPEC.ajaxUrl, {
+        action: "wpec_status_bulk_update",
+        nonce: WPEC.nonce,
+        ids: [contactId],
+        mode: mode,
+        status: status, // used when mode=add
+      })
+        .done(function (resp) {
+          if (resp && resp.success) {
+            // quick visual confirmation (if you show a badge somewhere)
+            $(".wpec-status-badge").text(niceStatus(status));
+          } else {
+            alert(
+              (resp && resp.data && resp.data.message) ||
+                "Failed to update status."
+            );
+          }
+        })
+        .always(function () {
+          $("#wpec-contact-status-loader").hide();
+          $("#wpec-contact-status-apply").prop("disabled", false);
+        });
+    });
+
+    // 3) Add to list (dropdown + Add)
+    $(document).on("click", "#wpec-contact-addlist-apply", function (e) {
+      e.preventDefault();
+      var contactId = currentContactId();
+      var listId = parseInt($("#wpec-contact-addlist-select").val(), 10) || 0;
+      if (!contactId || !listId) return;
+
+      $("#wpec-contact-addlist-apply").prop("disabled", true);
+      $("#wpec-contact-addlist-loader").show();
+
+      $.post(WPEC.ajaxUrl, {
+        action: "wpec_contacts_bulk_move",
+        nonce: WPEC.nonce,
+        ids: [contactId],
+        list_id: listId,
+      })
+        .done(function (resp) {
+          if (resp && resp.success) {
+            // Append a fresh chip for the new list (with working close button)
+            var listName = $(
+              "#wpec-contact-addlist-select option:selected"
+            ).text();
+            // Build a link to the list (uses localized base if provided)
+            var base =
+              WPEC && WPEC.listViewBase
+                ? WPEC.listViewBase
+                : window.ajaxurl
+                ? window.ajaxurl.replace(
+                    "admin-ajax.php",
+                    "edit.php?post_type=email_campaign&page=wpec-contacts&view=list&list_id="
+                  )
+                : "";
+            var href = base ? base + String(listId) : "#";
+            var chip =
+              '<span class="wpec-chip" data-list-id="' +
+              listId +
+              '">' +
+              '<a class="wpec-chip-link" href="' +
+              href +
+              '">' +
+              $("<div>").text(listName).html() +
+              "</a>" +
+              ' <button type="button" class="wpec-chip-close" aria-label="Remove" data-list-id="' +
+              listId +
+              '" data-contact-id="' +
+              contactId +
+              '">&times;</button>' +
+              "</span>";
+            $("#wpec-contact-memberships").append(chip);
+            $("#wpec-contact-addlist-select").val("").trigger("change");
+          } else {
+            alert(
+              (resp && resp.data && resp.data.message) ||
+                "Failed to add to list."
+            );
+          }
+        })
+        .always(function () {
+          $("#wpec-contact-addlist-loader").hide();
+          $("#wpec-contact-addlist-apply").prop("disabled", false);
+        });
+    });
+
+    // 4) Quick actions (status shortcuts)
+    $(document).on("click", "#wpec-contact-set-active", function (e) {
+      e.preventDefault();
+      $("#wpec-contact-status-select").val("active");
+      $("#wpec-contact-status-apply").trigger("click");
+    });
+    $(document).on("click", "#wpec-contact-mark-dnd", function (e) {
+      e.preventDefault();
+      $("#wpec-contact-status-select").val("unsubscribed");
+      $("#wpec-contact-status-apply").trigger("click");
+    });
+    $(document).on("click", "#wpec-contact-mark-bounced", function (e) {
+      e.preventDefault();
+      $("#wpec-contact-status-select").val("bounced");
+      $("#wpec-contact-status-apply").trigger("click");
+    });
+
+    // Optional: if you had “Quick Send / Log Activity” placeholder buttons, hide them for now
+    $(".wpec-quick-send, .wpec-quick-log").hide();
+  })();
 })(jQuery);
 // === Contact detail actions (sidebar) ===
 jQuery(function () {
