@@ -296,6 +296,12 @@
     dupesUrlList.searchParams.set("focus_list", String(listId));
     var html = "";
     html += '<h3 style="margin-top:0;">Import Summary</h3>';
+    if (WPEC.__upload && WPEC.__upload.listName) {
+      html += '<p class="description" style="margin:0 0 8px 0">';
+      html += "Target list: <strong>" + WPEC.__upload.listName + "</strong>";
+      html += "</p>";
+    }
+
     html += '<ul class="wpec-stats">';
     html +=
       "<li><strong>Now uploaded (this file):</strong> " +
@@ -580,6 +586,14 @@
           $(".wpec-loader").hide();
           return;
         }
+        // keep selected list info for later steps (mapping/review/summary)
+        if (resp && resp.data) {
+          window.WPEC = window.WPEC || {};
+          WPEC.__upload = WPEC.__upload || {};
+          WPEC.__upload.listId = resp.data.list_id || 0;
+          WPEC.__upload.listName = resp.data.list_name || "";
+        }
+
         WPEC_UPLOAD.listId = parseInt(resp.data.list_id, 10);
 
         // probe headers of the uploaded CSV
@@ -648,6 +662,14 @@
         return;
       }
       // summary view
+      if (WPEC.__upload && WPEC.__upload.listName) {
+        $("#wpec-step-mapping .wpec-step-header").append(
+          '<p class="description">Target list: <strong>' +
+            WPEC.__upload.listName +
+            "</strong></p>"
+        );
+      }
+
       var s =
         '<table class="widefat striped"><thead><tr><th>Our field</th><th>Mapped column</th></tr></thead><tbody>';
       DB_FIELDS.forEach(function (f) {
@@ -671,18 +693,6 @@
         behavior: "smooth",
       });
     });
-    // right after you render the "Map fields" step HTML:
-    WPEC._currentListName =
-      resp && resp.data && resp.data.list_name
-        ? resp.data.list_name
-        : "List #" + (resp && resp.data && resp.data.list_id);
-
-    // show the target list under the step title
-    jQuery("#wpec-step-map .wpec-step-head").append(
-      '<p class="description">List: <strong>' +
-        (WPEC._currentListName || "") +
-        "</strong></p>"
-    );
   });
 
   // STEP 3: start import -> reuse existing processList()
@@ -742,6 +752,36 @@
           $btn.closest("tr").fadeOut(120, function () {
             $(this).remove();
             setBulkState();
+          });
+        } else {
+          alert((resp && resp.data && resp.data.message) || "Delete failed.");
+          $btn.prop("disabled", false);
+        }
+      })
+      .fail(function () {
+        alert("Delete request failed.");
+        $btn.prop("disabled", false);
+      });
+  });
+  // List page: remove a single contact from THIS list
+  $(document).on("click", ".wpec-del-from-list", function (e) {
+    e.preventDefault();
+    var $btn = $(this),
+      listId = parseInt($btn.data("listId"), 10),
+      contactId = parseInt($btn.data("contactId"), 10);
+    if (!listId || !contactId) return;
+    if (!confirm("Remove this contact from this list?")) return;
+    $btn.prop("disabled", true);
+    $.post(WPEC.ajaxUrl, {
+      action: "wpec_delete_list_mapping",
+      nonce: WPEC.nonce,
+      list_id: listId,
+      contact_id: contactId,
+    })
+      .done(function (resp) {
+        if (resp && resp.success) {
+          $btn.closest("tr").fadeOut(120, function () {
+            $(this).remove();
           });
         } else {
           alert((resp && resp.data && resp.data.message) || "Delete failed.");
@@ -837,15 +877,27 @@
   }
   bulkDelete(
     "#wpec-dup-bulk-delete",
-    "#wpec-list-bulk-delete",
     "#wpec-dup-form",
     "#wpec-dup-progress-bar",
     "#wpec-dup-progress-text",
     "#wpec-dup-bulk-progress",
     "#wpec-dup-bulk-loader"
   );
+  // ADD — List page bulk delete binding (below the dup binding)
+  bulkDelete(
+    "#wpec-list-bulk-delete",
+    "#wpec-list-form",
+    "#wpec-list-progress-bar",
+    "#wpec-list-progress-text",
+    "#wpec-list-bulk-progress",
+    "#wpec-list-bulk-loader"
+  );
+  // Enable/disable the List page bulk delete button when selections change
+  $(document).on("change", '#wpec-list-form input[name="ids[]"]', function () {
+    const any = $('#wpec-list-form input[name="ids[]"]:checked').length > 0;
+    $("#wpec-list-bulk-delete").prop("disabled", !any);
+  });
 
-  // === LIST PAGE: enable/disable bulk buttons & bulk move ===
   // === List page: enable/disable bulk actions by checkbox selection ===
   jQuery(function ($) {
     var $listForm = $("#wpec-list-form");

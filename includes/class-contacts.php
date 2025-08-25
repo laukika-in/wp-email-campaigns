@@ -1584,9 +1584,9 @@ public function ajax_status_add_by_email() {
 
         $mode = sanitize_text_field($_POST['list_mode'] ?? 'new');
         $existing_list_id = absint($_POST['existing_list_id'] ?? 0);
-if ( ! $existing_list_id ) {
-    $existing_list_id = absint($_POST['list_id'] ?? 0); // fallback if frontend sends list_id
-}
+        if ( ! $existing_list_id ) {
+            $existing_list_id = absint($_POST['list_id'] ?? 0); // fallback if frontend sends list_id
+        }
         $name = sanitize_text_field( $_POST['list_name'] ?? '' );
         if ( $mode === 'new' && ! $name ) wp_send_json_error(['message'=>'List name required']);
         if ( empty($_FILES['file']['tmp_name']) ) wp_send_json_error( [ 'message' => 'No file' ] );
@@ -1595,18 +1595,18 @@ if ( ! $existing_list_id ) {
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( [ 'message' => $result->get_error_message() ] );
         }
-$list_name = '';
-if ( $existing_list_id ) {
-    $db = Helpers::db();
-    $lists = Helpers::table('lists');
-    $list_name = (string) $db->get_var( $db->prepare( "SELECT name FROM $lists WHERE id=%d", $existing_list_id ) );
-} else {
-    $list_name = $name; // the "new list" name from the form
-}
-wp_send_json_success( [ 
-    'list_id'   => (int) $result['list_id'],
-    'list_name' => $list_name ?: ('List #'.(int)$result['list_id']),
-] );
+        $list_name = '';
+        if ( $existing_list_id ) {
+            $db = Helpers::db();
+            $lists = Helpers::table('lists');
+            $list_name = (string) $db->get_var( $db->prepare( "SELECT name FROM $lists WHERE id=%d", $existing_list_id ) );
+        } else {
+            $list_name = $name; // the "new list" name from the form
+        }
+        wp_send_json_success( [ 
+            'list_id'   => (int) $result['list_id'],
+            'list_name' => $list_name ?: ('List #'.(int)$result['list_id']),
+        ] );
     }
 
     /** Read CSV header row for a list file (no DB changes) */
@@ -2135,11 +2135,28 @@ class WPEC_List_Items_Table extends \WP_List_Table {
 }
 
     public function column_actions( $item ) {
-        $url = add_query_arg( [
-            'post_type' => 'email_campaign','page'=>'wpec-contacts','view'=>'contact','contact_id'=> (int)$item['contact_id']
-        ], admin_url('edit.php'));
-        return sprintf('<a class="button button-small" href="%s">%s</a>', esc_url($url), esc_html__('View detail','wp-email-campaigns'));
-    }
+    $view = add_query_arg( [
+        'post_type' => 'email_campaign',
+        'page'      => 'wpec-contacts',
+        'view'      => 'contact',
+        'contact_id'=> (int)$item['contact_id']
+    ], admin_url('edit.php'));
+
+    $del = sprintf(
+        '<a href="#" class="button button-small wpec-del-from-list" data-list-id="%d" data-contact-id="%d">%s</a>',
+        (int)$this->list_id,
+        (int)$item['contact_id'],
+        esc_html__('Delete','wp-email-campaigns')
+    );
+
+    return sprintf(
+        '<a class="button button-small" href="%s">%s</a> %s',
+        esc_url($view),
+        esc_html__('View detail','wp-email-campaigns'),
+        $del
+    );
+}
+
     public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
     // ADD this method inside WPEC_List_Items_Table (below other column_* methods)
 public function column_lists( $item ) {
