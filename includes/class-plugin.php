@@ -9,6 +9,7 @@ require_once __DIR__ . '/class-scheduler.php';
 require_once __DIR__ . '/class-sender.php';
 require_once __DIR__ . '/class-webhooks.php';
 require_once __DIR__ . '/class-contacts.php';
+require_once __DIR__ . '/class-composer.php';
 
 class Plugin {
     public function init() {
@@ -18,29 +19,33 @@ class Plugin {
         ( new Sender )->init();
         ( new Webhooks )->init();
         ( new Contacts )->init();
+        ( new Composer )->init();
+
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
     }
 public function admin_assets( $hook ) {
     $screen = function_exists('get_current_screen') ? get_current_screen() : null;
 
-    $is_campaign_edit  = false; // single campaign editor (post.php / post-new.php)
-    $is_contacts_suite = false; // Lists, All Contacts, Import, Duplicates
+    $is_campaign_edit  = false; // post.php / post-new.php for email_campaign
+    $is_campaign_tool  = false; // our extra campaign tools pages (compose, later scheduler, etc.)
+    $is_contacts_suite = false; // Lists/Contacts/Import/Duplicates
 
     if ( $screen ) {
         $pt = isset($screen->post_type) ? (string) $screen->post_type : '';
         $id = (string) $screen->id;
         $pg = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
 
-        // Campaign edit screens only
         if ( $pt === 'email_campaign' && in_array($hook, ['post.php','post-new.php'], true) ) {
             $is_campaign_edit = true;
         }
 
-        // Our router pages (new slugs)
+        if ( in_array($pg, ['wpec-compose'], true) ) {
+            $is_campaign_tool = true;
+        }
+
         if ( in_array($pg, ['wpec-lists','wpec-contacts','wpec-import','wpec-duplicates'], true) ) {
             $is_contacts_suite = true;
         }
-        // Fallback: some builds embed slug in screen->id
         if (
             strpos($id, 'wpec-lists')      !== false ||
             strpos($id, 'wpec-contacts')   !== false ||
@@ -51,20 +56,18 @@ public function admin_assets( $hook ) {
         }
     }
 
-    if ( ! $is_campaign_edit && ! $is_contacts_suite ) {
+    if ( ! $is_campaign_edit && ! $is_campaign_tool && ! $is_contacts_suite ) {
         return;
     }
 
-    // Shared CSS + hide WP footer on our pages
+    // Shared CSS + hide WP footer
     wp_enqueue_style( 'wpec-admin', WPEC_URL . 'admin/admin.css', [], WPEC_VER );
     wp_add_inline_style( 'wpec-admin', '#wpfooter{display:none !important;}' );
 
-    // Shared data
     $common = [
-        'nonce'      => wp_create_nonce( 'wpec_admin' ),
-        'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
-        'adminBase'  => admin_url( 'edit.php' ),
-        // Used by linkification (Lists column)
+        'nonce'        => wp_create_nonce( 'wpec_admin' ),
+        'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+        'adminBase'    => admin_url( 'edit.php' ),
         'listViewBase' => add_query_arg(
             ['post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>''],
             admin_url('edit.php')
@@ -72,17 +75,14 @@ public function admin_assets( $hook ) {
     ];
 
     if ( $is_contacts_suite ) {
-        // Contacts/Lists/etc keep using admin.js
         wp_enqueue_script( 'wpec-admin', WPEC_URL . 'admin/admin.js', [ 'jquery' ], WPEC_VER, true );
-        $contacts_loc = $common + [
+        wp_localize_script( 'wpec-admin', 'WPEC', $common + [
             'rest'        => esc_url_raw( rest_url( 'email-campaigns/v1' ) ),
             'startImport' => isset($_GET['wpec_start_import']) ? (int) $_GET['wpec_start_import'] : 0,
-        ];
-        wp_localize_script( 'wpec-admin', 'WPEC', $contacts_loc );
+        ] );
     }
 
-    if ( $is_campaign_edit ) {
-        // NEW: campaigns-only JS (keep contacts JS off)
+    if ( $is_campaign_edit || $is_campaign_tool ) {
         wp_enqueue_script( 'wpec-campaigns', WPEC_URL . 'admin/campaigns.js', [ 'jquery' ], WPEC_VER, true );
         wp_localize_script( 'wpec-campaigns', 'WPEC', $common );
     }

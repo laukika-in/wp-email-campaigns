@@ -6,8 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 class Sender {
     public function init() {
         // No global hooks
-        add_action( 'wp_ajax_wpec_campaign_test_send', [ $this, 'ajax_campaign_test_send' ] );
-
+  add_action( 'wp_ajax_wpec_send_test', [ $this, 'ajax_send_test' ] );
     }
 
     public function send_single( $campaign_id, $subscriber_id ) {
@@ -84,48 +83,38 @@ class Sender {
                 $wpdb->update( $subs, [ 'status' => 'scheduled' ], [ 'id' => $subscriber_id ] );
             }
         }
-    }
-    public function ajax_campaign_test_send() {
+    } 
+
+public function ajax_send_test() {
     check_ajax_referer( 'wpec_admin', 'nonce' );
-
-    $post_id    = isset($_POST['post_id']) ? absint($_POST['post_id']) : 0;
-    if ( ! $post_id || ! current_user_can('edit_post', $post_id) ) {
-        wp_send_json_error( ['message' => 'Denied'] );
+    if ( ! Helpers::user_can_manage() ) {
+        wp_send_json_error( [ 'message' => 'Denied' ] );
     }
 
-    $to         = isset($_POST['to']) ? sanitize_email( $_POST['to'] ) : '';
+    $to         = sanitize_email( $_POST['to'] ?? '' );
+    $subject    = sanitize_text_field( $_POST['subject'] ?? '' );
+    $body_html  = wp_kses_post( $_POST['body'] ?? '' );
     $from_name  = sanitize_text_field( $_POST['from_name'] ?? '' );
     $from_email = sanitize_email( $_POST['from_email'] ?? '' );
-    $subject    = sanitize_text_field( $_POST['subject'] ?? '' );
-    $body_raw   = (string) ( $_POST['body'] ?? '' );
 
-    if ( ! is_email( $to ) ) {
-        wp_send_json_error( ['message' => 'Enter a valid test email'] );
-    }
-    if ( ! is_email( $from_email ) ) {
-        wp_send_json_error( ['message' => 'Enter a valid From email'] );
-    }
-    if ( $subject === '' ) {
-        $subject = get_the_title( $post_id ) ?: '(no subject)';
-    }
-    $subject = '[TEST] ' . $subject;
-
-    $headers = [];
-    $headers[] = $from_name ? sprintf('From: %s <%s>', $from_name, $from_email)
-                            : sprintf('From: %s', $from_email);
-    $headers[] = 'Content-Type: text/html; charset=UTF-8';
-
-    $body = trim($body_raw);
-    if ( strip_tags($body) === $body ) {
-        $body = nl2br( esc_html( $body ) );
+    if ( ! $to || ! $subject || ! $body_html ) {
+        wp_send_json_error( [ 'message' => 'Missing test fields' ] );
     }
 
-    $ok = wp_mail( $to, $subject, $body, $headers );
+    $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
+    if ( $from_email ) {
+        $from = $from_name ? sprintf( '%s <%s>', $from_name, $from_email ) : $from_email;
+        $headers[] = 'From: ' . $from;
+        $headers[] = 'Reply-To: ' . $from_email;
+    }
 
+    $ok = wp_mail( $to, $subject, $body_html, $headers );
     if ( ! $ok ) {
-        wp_send_json_error( ['message' => 'wp_mail() failed'] );
+        wp_send_json_error( [ 'message' => 'wp_mail failed' ] );
     }
-    wp_send_json_success( ['message' => 'Test email sent'] );
+
+    wp_send_json_success( [ 'sent' => true ] );
 }
+
 
 }
