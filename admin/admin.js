@@ -323,10 +323,17 @@
       "</li>";
     html += "</ul>";
     html += "<p>";
+    // Link to the just-uploaded list view
+    var listUrl = new URL(location.origin + location.pathname, location.origin);
+    listUrl.searchParams.set("post_type", "email_campaign");
+    listUrl.searchParams.set("page", "wpec-contacts");
+    listUrl.searchParams.set("view", "list");
+    listUrl.searchParams.set("list_id", String(listId));
     html +=
-      '<a class="button" href="' +
-      dupesUrlList.toString() +
-      '">View duplicates for this list</a> ';
+      '<a class="button button-primary" href="' +
+      listUrl.toString() +
+      '">View this list</a> ';
+
     html +=
       '<a class="button" href="' +
       dupesUrlAll.toString() +
@@ -805,14 +812,52 @@
     "#wpec-dup-bulk-progress",
     "#wpec-dup-bulk-loader"
   );
-  bulkDelete(
-    "#wpec-list-bulk-delete",
-    "#wpec-list-form",
-    "#wpec-list-progress-bar",
-    "#wpec-list-progress-text",
-    "#wpec-list-bulk-progress",
-    "#wpec-list-bulk-loader"
+  // === LIST PAGE: enable/disable bulk buttons & bulk move ===
+  function wpecToggleListBulk() {
+    var any = jQuery('#wpec-list-form input[name="ids[]"]:checked').length > 0;
+    var hasDest = parseInt(jQuery("#wpec-list-move-list").val() || "0", 10) > 0;
+    jQuery("#wpec-list-bulk-delete").prop("disabled", !any);
+    jQuery("#wpec-list-bulk-move").prop("disabled", !(any && hasDest));
+  }
+  jQuery(document).on(
+    "change",
+    '#wpec-list-form input[type="checkbox"]',
+    wpecToggleListBulk
   );
+  jQuery(document).on("change", "#wpec-list-move-list", wpecToggleListBulk);
+  jQuery(wpecToggleListBulk);
+
+  // Move selected (from this list) to another list
+  jQuery(document).on("click", "#wpec-list-bulk-move", function (e) {
+    e.preventDefault();
+    var ids = [];
+    jQuery('#wpec-list-form input[name="ids[]"]:checked').each(function () {
+      var parts = String(jQuery(this).val()).split(":"); // value = "{listId}:{contactId}"
+      var cid = parseInt(parts[1], 10) || 0;
+      if (cid) ids.push(cid);
+    });
+    var dest = parseInt(jQuery("#wpec-list-move-list").val(), 10) || 0;
+    if (!ids.length || !dest) return;
+
+    jQuery("#wpec-list-bulk-loader").show();
+    jQuery
+      .post(WPEC.ajaxUrl, {
+        action: "wpec_contacts_bulk_move",
+        nonce: WPEC.nonce,
+        contact_ids: ids,
+        list_id: dest,
+      })
+      .done(function (res) {
+        if (res && res.success) {
+          location.reload(); // stay on the same list and refresh rows
+        } else {
+          alert((res && res.data && res.data.message) || "Move failed.");
+        }
+      })
+      .always(function () {
+        jQuery("#wpec-list-bulk-loader").hide();
+      });
+  });
 
   // ── Modals (Add contact / Create list) ────────────────────────────────────
   $(document).on(

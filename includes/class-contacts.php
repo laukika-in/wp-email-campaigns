@@ -528,6 +528,28 @@ public function render_status_list( $status_slug ) {
 
         $table = new WPEC_List_Items_Table( $list_id );
         $table->prepare_items();
+        echo '<div class="wpec-toolbar" style="display:flex;gap:8px;align-items:center;margin:8px 0">';
+echo '<button class="button" id="wpec-list-bulk-delete" disabled>'.esc_html__('Delete selected from this list','wp-email-campaigns').'</button>';
+echo ' <span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none"></span>';
+
+// Move to another list (exclude current list)
+global $wpdb;
+$ls = Helpers::table('lists');
+$list_id = isset($_GET['list_id']) ? absint($_GET['list_id']) : 0;
+$lists = $wpdb->get_results(
+  $wpdb->prepare("SELECT id,name FROM $ls WHERE id <> %d ORDER BY name ASC", $list_id),
+  ARRAY_A
+);
+echo '<span style="margin-left:12px">'.esc_html__('Move selected to','wp-email-campaigns').'</span>';
+echo '<select id="wpec-list-move-list" style="min-width:220px">';
+echo '<option value="">'.esc_html__('— Select a list —','wp-email-campaigns').'</option>';
+foreach ($lists as $l) {
+    printf('<option value="%d">%s</option>', (int)$l['id'], esc_html($l['name']));
+}
+echo '</select> ';
+echo '<button class="button" id="wpec-list-bulk-move" disabled>'.esc_html__('Move','wp-email-campaigns').'</button>';
+echo '</div>';
+
         echo '<form id="wpec-list-form" method="get">';
         echo '<input type="hidden" name="post_type" value="email_campaign" />';
         echo '<input type="hidden" name="page" value="wpec-contacts" />';
@@ -2045,6 +2067,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         global $wpdb;
         $li = Helpers::table('list_items'); 
         $ct = Helpers::table('contacts');
+        
         $per_page = 50; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
         $where = "WHERE li.list_id=%d"; $args  = [ $this->list_id ];
