@@ -123,4 +123,53 @@
     if (!onSendPage()) return;
     // (Optional) enhance selects later with Select2 if you like.
   });
+
+  function ensureSelect2(cb) {
+    if ($.fn.select2) {
+      cb && cb();
+      return;
+    }
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = (window.WPECCAMPAIGN && WPECCAMPAIGN.select2LocalCss) || "";
+    css.onerror = function () {
+      this.href = WPECCAMPAIGN.select2CdnCss;
+    };
+    document.head.appendChild(css);
+
+    var s = document.createElement("script");
+    s.src = (window.WPECCAMPAIGN && WPECCAMPAIGN.select2LocalJs) || "";
+    s.onload = function () {
+      cb && cb();
+    };
+    s.onerror = function () {
+      this.onerror = null;
+      this.src = WPECCAMPAIGN.select2CdnJs;
+    };
+    document.head.appendChild(s);
+  }
+
+  $(function () {
+    // Only run on our Send screen
+    if (!$("#wpec-send-app").length) return;
+
+    ensureSelect2(function () {
+      // Single or multi — both become searchable
+      $("#wpec-send-list").addClass("wpec-s2").select2({
+        width: "resolve",
+        placeholder: "Select list…",
+        allowClear: true,
+      });
+    });
+  });
+  function getHtmlBody() {
+    if (window.tinymce && tinymce.get("wpec_camp_html")) {
+      return tinymce.get("wpec_camp_html").getContent();
+    }
+    return $("#wpec_camp_html").val() || "";
+  }
+
+  // Example usage:
+  var html = getHtmlBody();
+  // send `html` in your AJAX payload as before
 })(jQuery);

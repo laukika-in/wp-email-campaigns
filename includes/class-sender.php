@@ -57,8 +57,24 @@ class Sender {
         echo '  <input type="email" id="wpec-from-email" class="regular-text" style="width:100%"></label></p>';
         echo '</div>';
 
-        echo '<p><label><strong>'.esc_html__('HTML body','wp-email-campaigns').'</strong><br>';
-        echo '<textarea id="wpec-body" rows="12" style="width:100%"></textarea></label></p>';
+      echo '<div class="wpec-field">';
+echo '<label><strong>' . esc_html__('Email body (HTML)', 'wp-email-campaigns') . '</strong></label>';
+
+ob_start();
+wp_editor(
+    '',                                // initial content
+    'wpec_camp_html',                  // editor ID (note underscore)
+    [
+        'textarea_name' => 'wpec_camp_html',
+        'editor_height' => 280,
+        'media_buttons' => true,       // allow adding images etc.
+        'tinymce'       => true,
+        'quicktags'     => true,
+    ]
+);
+echo ob_get_clean();
+
+echo '</div>';
 
         // Lists select
         echo '<p><label><strong>'.esc_html__('Recipient lists','wp-email-campaigns').'</strong><br>';
