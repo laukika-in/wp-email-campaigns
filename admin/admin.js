@@ -932,14 +932,34 @@
   // Move selected (from this list) to another list
   jQuery(document).on("click", "#wpec-list-bulk-move", function (e) {
     e.preventDefault();
+
+    // collect contact IDs and infer the current (source) list id from the first checked row
     var ids = [];
+    var firstRaw = null;
+
     jQuery('#wpec-list-form input[name="ids[]"]:checked').each(function () {
-      var parts = String(jQuery(this).val()).split(":"); // value = "{listId}:{contactId}"
+      var raw = String(jQuery(this).val()); // "{listId}:{contactId}"
+      if (!firstRaw) firstRaw = raw;
+      var parts = raw.split(":");
       var cid = parseInt(parts[1], 10) || 0;
       if (cid) ids.push(cid);
     });
+
     var dest = parseInt(jQuery("#wpec-list-move-list").val(), 10) || 0;
     if (!ids.length || !dest) return;
+
+    // source list id
+    var src = 0;
+    if (firstRaw && firstRaw.indexOf(":") !== -1) {
+      src = parseInt(firstRaw.split(":")[0], 10) || 0;
+    }
+    if (!src) {
+      // fallback to hidden/input if present
+      src =
+        parseInt(jQuery("#wpec-current-list-id").val() || "0", 10) ||
+        parseInt(jQuery("#wpec-list-form").data("listId") || "0", 10) ||
+        0;
+    }
 
     jQuery("#wpec-list-bulk-loader").show();
     jQuery
@@ -948,10 +968,11 @@
         nonce: WPEC.nonce,
         ids: ids,
         list_id: dest,
+        source_list_id: src, // tell the server to remove from current list
       })
       .done(function (res) {
         if (res && res.success) {
-          location.reload(); // stay on the same list and refresh rows
+          location.reload(); // stay on the same list and refresh
         } else {
           alert((res && res.data && res.data.message) || "Move failed.");
         }
