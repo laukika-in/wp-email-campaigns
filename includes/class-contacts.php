@@ -72,61 +72,62 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
 
     /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
     public function admin_menu_adjustments() {
-        // Capability
-        $cap = 'manage_options';
-        if ( class_exists(__NAMESPACE__ . '\\Helpers') ) {
-            if ( method_exists( Helpers::class, 'manage_cap' ) ) {
-                $cap = Helpers::manage_cap();
-            } elseif ( method_exists( Helpers::class, 'cap' ) ) {
-                $cap = Helpers::cap();
+    global $submenu;
+    $parent = 'edit.php?post_type=email_campaign';
+
+    // 1) Rename the existing router screen (slug: wpec-contacts) to "Lists"
+    $lists_idx = null;
+    if ( isset( $submenu[ $parent ] ) ) {
+        foreach ( $submenu[ $parent ] as $i => &$item ) {
+            // $item = [ menu_title, capability, slug, [page_title] ]
+            if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
+                $item[0] = __( 'Lists', 'wp-email-campaigns' );
+                $item[3] = __( 'Lists', 'wp-email-campaigns' );
+                $lists_idx = $i;
             }
         }
-
-        // Rename existing submenu "Contacts" (slug wpec-contacts) under CPT to "Lists"
-        global $submenu;
-        $parent = 'edit.php?post_type=email_campaign';
-        if ( isset( $submenu[ $parent ] ) ) {
-            foreach ( $submenu[ $parent ] as &$item ) {
-                if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
-                    $item[0] = __( 'Lists', 'wp-email-campaigns' );
-                    $item[3] = __( 'Lists', 'wp-email-campaigns' );
-                }
-            }
+        // 2) Move "Lists" to the top of the submenu
+        if ( $lists_idx !== null ) {
+            $lists_item = $submenu[ $parent ][ $lists_idx ];
+            unset( $submenu[ $parent ][ $lists_idx ] );
+            array_unshift( $submenu[ $parent ], $lists_item );
+            $submenu[ $parent ] = array_values( $submenu[ $parent ] );
         }
-
-        // Add new "Import" submenu (moved upload UI here)
-        add_submenu_page(
-            $parent,
-            __( 'Import', 'wp-email-campaigns' ),
-            __( 'Import', 'wp-email-campaigns' ),
-            $cap,
-            'wpec-import',
-            [ $this, 'render_import_screen' ],
-            20
-        );
-
-        // Add new "Contacts" directory page
-        add_submenu_page(
-            $parent,
-            __( 'Contacts', 'wp-email-campaigns' ),
-            __( 'Contacts', 'wp-email-campaigns' ),
-            $cap,
-            'wpec-all-contacts',
-            [ $this, 'render_all_contacts' ],
-            21
-        );
-
-        // Add new "Duplicates" page (all lists)
-        add_submenu_page(
-            $parent,
-            __( 'Duplicates', 'wp-email-campaigns' ),
-            __( 'Duplicates', 'wp-email-campaigns' ),
-            $cap,
-            'wpec-duplicates',
-            [ $this, 'render_duplicates_page' ],
-            22
-        ); 
     }
+
+    // 3) Ensure other submenus exist (positions put them after "Lists")
+    add_submenu_page(
+        $parent,
+        __( 'Contacts', 'wp-email-campaigns' ),   // page title
+        __( 'Contacts', 'wp-email-campaigns' ),   // menu title (All Contacts directory)
+        Helpers::manage_cap(),
+        'wpec-all-contacts',
+        [ $this, 'render_all_contacts' ],
+        9
+    );
+
+    if ( ! has_action( 'wpec_render_import_page' ) ) {
+        add_submenu_page(
+            $parent,
+            __( 'Import', 'wp-email-campaigns' ),
+            __( 'Import', 'wp-email-campaigns' ),
+            Helpers::manage_cap(),
+            'wpec-import',
+            [ $this, 'render_import_stub' ],
+            10
+        );
+    }
+
+    add_submenu_page(
+        $parent,
+        __( 'Duplicates', 'wp-email-campaigns' ),
+        __( 'Duplicates', 'wp-email-campaigns' ),
+        Helpers::manage_cap(),
+        'wpec-duplicates',
+        [ $this, 'render_duplicates_page' ],
+        11
+    );
+}
 
     /** Ensure CSS/JS on all our admin pages; also expose Select2 sources */
     public function enqueue_admin_assets( $hook ) {
