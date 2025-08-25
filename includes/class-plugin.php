@@ -69,7 +69,9 @@ class Plugin {
             'adminBase'    => admin_url( 'edit.php' ),
             'listViewBase' => add_query_arg(
                 ['post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>''],
-                admin_url('edit.php')
+                admin_url('edit.php'),
+                
+                
             ),
         ];
 
@@ -85,17 +87,14 @@ class Plugin {
         // Campaign tools (Send screen) use campaigns.js
         if ( $is_campaign_edit || $is_campaign_tool ) {
             wp_enqueue_script( 'wpec-campaigns', WPEC_URL . 'admin/campaigns.js', [ 'jquery' ], WPEC_VER, true );
+            // IMPORTANT: campaigns.js expects WPECCAMPAIGN (not WPEC)
             wp_localize_script( 'wpec-campaigns', 'WPECCAMPAIGN', [
-                'nonce'           => wp_create_nonce( 'wpec_admin' ),
-                'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
-                // Select2 local + CDN fallback for the Send screen
-                'select2LocalCss' => WPEC_URL . 'admin/vendor/select2/select2.min.css',
-                'select2LocalJs'  => WPEC_URL . 'admin/vendor/select2/select2.min.js',
-                'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-                'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
+                'nonce'   => wp_create_nonce( 'wpec_admin' ),
+                'ajaxUrl' => admin_url( 'admin-ajax.php' ), 
+        'select2CdnCss'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
+        'select2CdnJs'    => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
             ] );
         }
-
     }
 
 
