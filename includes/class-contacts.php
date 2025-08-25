@@ -650,36 +650,11 @@ echo '</div>';
 
     // Header card
     echo '<div class="wpec-card wpec-card-header">';
-    echo '  <div class="wpec-header-left">';
-    echo '    <div class="wpec-avatar" aria-hidden="true">'.esc_html($initials).'</div>';
+    echo '  <div class="wpec-header-left">'; 
     echo '    <div class="wpec-head-meta">';
     echo '      <h1 class="wpec-head-name">'.esc_html(trim(($row['first_name']??'').' '.($row['last_name']??''))).' <span class="wpec-status-pill '.$pill_class.'" id="wpec-status-pill">'.esc_html($status_label).'</span></h1>';
     echo '      <div class="wpec-head-email">'.esc_html($row['email']).'</div>';
-    echo '      <div class="wpec-head-lists">';
-     
-echo '<h2 style="margin-top:20px">'.esc_html__('Lists','wp-email-campaigns').'</h2>';
-echo '<div id="wpec-contact-memberships" class="wpec-chipset" style="margin:8px 0 12px 0">';
-foreach ( $memberships as $m ) {
-    $url = add_query_arg([
-        'post_type' => 'email_campaign',
-        'page'      => 'wpec-contacts',
-        'view'      => 'list',
-        'list_id'   => (int)$m['id'],
-    ], admin_url('edit.php') );
-
-    printf(
-        '<span class="wpec-chip" data-list-id="%d"><a class="wpec-chip-link" href="%s">%s</a> '.
-        '<button type="button" class="wpec-chip-close" aria-label="%s" data-list-id="%d" data-contact-id="%d">&times;</button></span>',
-        (int)$m['id'],
-        esc_url($url),
-        esc_html($m['name'].' (#'.$m['id'].')'),
-        esc_attr__('Remove from this list','wp-email-campaigns'),
-        (int)$m['id'],
-        (int)$contact_id
-    );
-}
-echo '</div>';
-    echo '</div>';
+   
     echo '    </div>';
     echo '  </div>';
    
@@ -750,6 +725,32 @@ echo '</div>';
     $all_url = $contacts_url('search', (string)$row['email']);
     echo '      <li><a class="button" href="'.esc_url($all_url).'">'.esc_html__('Find in All Contacts','wp-email-campaigns').'</a></li>';
     echo '    </ul>';
+
+     echo '      <div class="wpec-head-lists">';
+     
+echo '<h2 style="margin-top:20px">'.esc_html__('Lists','wp-email-campaigns').'</h2>';
+echo '<div id="wpec-contact-memberships" class="wpec-chipset" style="margin:8px 0 12px 0">';
+foreach ( $memberships as $m ) {
+    $url = add_query_arg([
+        'post_type' => 'email_campaign',
+        'page'      => 'wpec-contacts',
+        'view'      => 'list',
+        'list_id'   => (int)$m['id'],
+    ], admin_url('edit.php') );
+
+    printf(
+        '<span class="wpec-chip" data-list-id="%d"><a class="wpec-chip-link" href="%s">%s</a> '.
+        '<button type="button" class="wpec-chip-close" aria-label="%s" data-list-id="%d" data-contact-id="%d">&times;</button></span>',
+        (int)$m['id'],
+        esc_url($url),
+        esc_html($m['name'].' (#'.$m['id'].')'),
+        esc_attr__('Remove from this list','wp-email-campaigns'),
+        (int)$m['id'],
+        (int)$contact_id
+    );
+}
+echo '</div>';
+    echo '</div>';
     echo '  </div>';
     echo '</aside>';
 
