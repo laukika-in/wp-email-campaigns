@@ -528,8 +528,7 @@ public function render_status_list( $status_slug ) {
 
         $table = new WPEC_List_Items_Table( $list_id );
         $table->prepare_items();
-        echo '<div class="wpec-toolbar" style="display:flex;gap:8px;align-items:center;margin:8px 0">';
-echo '<button class="button" id="wpec-list-bulk-delete" disabled>'.esc_html__('Delete selected from this list','wp-email-campaigns').'</button>';
+        echo '<div class="wpec-toolbar" style="display:flex;gap:8px;align-items:center;margin:8px 0">'; 
 echo ' <span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none"></span>';
 
 // Move to another list (exclude current list)

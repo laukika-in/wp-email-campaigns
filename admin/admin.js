@@ -383,18 +383,19 @@
             listCnt
         );
 
-        if (resp.data && resp.data.deleted_empty_list) {
-          $(".wpec-loader").hide();
-          if (resp.data.message) alert(resp.data.message);
-
-          if (WPEC) WPEC.startImport = 0;
-          showResultPanel(s, resp.data.list_id);
-          location.reload();
-          return;
+        if (resp && resp.success) {
+          if (resp.data && resp.data.done) {
+            $(".wpec-loader").hide();
+            if (WPEC) WPEC.startImport = 0;
+            showResultPanel(resp.data.stats || {}, resp.data.list_id);
+          } else {
+            setTimeout(function () {
+              processList(listId);
+            }, 200);
+          }
         } else {
-          setTimeout(function () {
-            processList(listId);
-          }, 200);
+          $(".wpec-loader").hide();
+          alert((resp && resp.data && resp.data.message) || "Import error");
         }
       })
       .fail(function () {
@@ -754,12 +755,30 @@
       if (!confirm("Delete selected contacts?")) return;
       var tasks = [];
       $checks.each(function () {
-        var p = String($(this).val()).split(":");
-        tasks.push({
-          listId: parseInt(p[0], 10),
-          contactId: parseInt(p[1], 10),
-          $row: $(this).closest("tr"),
-        });
+        var $cb = $(this);
+        var raw = String($cb.val() || "");
+        var parts = raw.indexOf(":") !== -1 ? raw.split(":") : [];
+        var listId =
+          parseInt($cb.data("listId"), 10) ||
+          parseInt(
+            $cb.closest("form").data("listId") ||
+              $("#wpec-current-list-id").val() ||
+              parts[0] ||
+              0,
+            10
+          ) ||
+          0;
+        var contactId =
+          parseInt($cb.data("contactId"), 10) ||
+          parseInt(parts[1] || raw, 10) ||
+          0;
+        if (listId && contactId) {
+          tasks.push({
+            listId: listId,
+            contactId: contactId,
+            $row: $cb.closest("tr"),
+          });
+        }
       });
       var total = tasks.length,
         done = 0;
@@ -844,7 +863,7 @@
       .post(WPEC.ajaxUrl, {
         action: "wpec_contacts_bulk_move",
         nonce: WPEC.nonce,
-        contact_ids: ids,
+        ids: ids,
         list_id: dest,
       })
       .done(function (res) {
@@ -1830,7 +1849,7 @@
       $.post(WPEC.ajaxUrl, {
         action: "wpec_contacts_bulk_delete",
         nonce: WPEC.nonce,
-        ids: ids,
+        contact_ids: ids,
       }).always(function () {
         $("#wpec-bulk-loader").hide();
         $("#wpec-master-cb").prop("checked", false);
