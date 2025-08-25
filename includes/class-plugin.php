@@ -26,7 +26,7 @@ class Plugin {
 
         // Load our assets on:
         // - any email_campaign CPT screen
-        // - the Contacts/Lists submenu (page=wpec-contacts) under email_campaign
+        // - the contacts/Lists submenu (page=wpec-contacts) under email_campaign
         $should = false;
 
         if ( $screen ) {

@@ -33,7 +33,7 @@ class CPT {
         add_submenu_page(
             'edit.php?post_type=' . self::POST_TYPE,
             __( 'Contacts & Lists', 'wp-email-campaigns' ),
-            __( 'Contacts', 'wp-email-campaigns' ),
+            __( 'Lists', 'wp-email-campaigns' ),
             'manage_options',
             'wpec-contacts',
             [ $this, 'render_contacts_page' ]
