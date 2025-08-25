@@ -120,30 +120,30 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         $cap,
         'wpec-contacts',
         [ $this, 'render_all_contacts' ],
-        9
+       20
     );
-
-    if ( ! has_action( 'wpec_render_import_page' ) ) {
-        add_submenu_page(
+ 
+         add_submenu_page(
             $parent,
             __( 'Import', 'wp-email-campaigns' ),
             __( 'Import', 'wp-email-campaigns' ),
             $cap,
             'wpec-import',
-            [ $this, 'render_import_stub' ],
-            10
+            [ $this, 'render_import_screen' ],
+            21
         );
-    }
 
-    add_submenu_page(
-        $parent,
-        __( 'Duplicates', 'wp-email-campaigns' ),
-        __( 'Duplicates', 'wp-email-campaigns' ),
-        $cap,
-        'wpec-duplicates',
-        [ $this, 'render_duplicates_page' ],
-        11
-    );
+ 
+
+   add_submenu_page(
+            $parent,
+            __( 'Duplicates', 'wp-email-campaigns' ),
+            __( 'Duplicates', 'wp-email-campaigns' ),
+            $cap,
+            'wpec-duplicates',
+            [ $this, 'render_duplicates_page' ],
+            22
+        ); 
 }
 
 
