@@ -675,14 +675,7 @@ echo '</div>';
 
     // Header actions
    echo '<div class="wpec-card" style=" margin-top:16px">';
-echo '<h2 style="margin-top:0">'.esc_html__('Status','wp-email-campaigns').'</h2>';
-echo '<select id="wpec-contact-status-select">';
-echo '<option value="active" '.selected($row['status'],'active',false).'>'.esc_html__('Active','wp-email-campaigns').'</option>';
-echo '<option value="unsubscribed" '.selected($row['status'],'unsubscribed',false).'>'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
-echo '<option value="bounced" '.selected($row['status'],'bounced',false).'>'.esc_html__('Bounced','wp-email-campaigns').'</option>';
-echo '</select> ';
-echo '<button class="button" id="wpec-contact-status-apply">'.esc_html__('Apply','wp-email-campaigns').'</button> ';
-echo '<span class="wpec-inline-loader" id="wpec-contact-status-loader" style="display:none"></span>';
+
 echo '</div>';
 
 
@@ -725,7 +718,14 @@ echo '</div>';
     $all_url = $contacts_url('search', (string)$row['email']);
     echo '      <li><a class="button" href="'.esc_url($all_url).'">'.esc_html__('Find in All Contacts','wp-email-campaigns').'</a></li>';
     echo '    </ul>';
-
+echo '<h2 style="margin-top:0">'.esc_html__('Status','wp-email-campaigns').'</h2>';
+echo '<select id="wpec-contact-status-select">';
+echo '<option value="active" '.selected($row['status'],'active',false).'>'.esc_html__('Active','wp-email-campaigns').'</option>';
+echo '<option value="unsubscribed" '.selected($row['status'],'unsubscribed',false).'>'.esc_html__('Do Not Send','wp-email-campaigns').'</option>';
+echo '<option value="bounced" '.selected($row['status'],'bounced',false).'>'.esc_html__('Bounced','wp-email-campaigns').'</option>';
+echo '</select> ';
+echo '<button class="button" id="wpec-contact-status-apply">'.esc_html__('Apply','wp-email-campaigns').'</button> ';
+echo '<span class="wpec-inline-loader" id="wpec-contact-status-loader" style="display:none"></span>';
      echo '      <div class="wpec-head-lists">';
      
 echo '<h2 style="margin-top:20px">'.esc_html__('Lists','wp-email-campaigns').'</h2>';
