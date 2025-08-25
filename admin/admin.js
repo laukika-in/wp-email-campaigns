@@ -1996,42 +1996,6 @@
       return s.charAt(0).toUpperCase() + s.slice(1);
     }
 
-    // 1) Remove from list chip (X button on each chip)
-    $(document).on("click", ".wpec-chip-close", function (e) {
-      e.preventDefault();
-      var $btn = $(this);
-      var listId = parseInt($btn.data("listId"), 10) || 0;
-      var contactId =
-        parseInt($btn.data("ContactId"), 10) || currentContactId();
-      if (!listId || !contactId) return;
-
-      if (!confirm("Remove this contact from this list?")) return;
-      $btn.prop("disabled", true);
-
-      $.post(WPEC.ajaxUrl, {
-        action: "wpec_delete_list_mapping",
-        nonce: WPEC.nonce,
-        list_id: listId,
-        contact_id: contactId,
-      })
-        .done(function (resp) {
-          if (resp && resp.success) {
-            // remove the chip from UI
-            $btn.closest(".wpec-chip").remove();
-          } else {
-            alert(
-              (resp && resp.data && resp.data.message) ||
-                "Failed to remove from list."
-            );
-            $btn.prop("disabled", false);
-          }
-        })
-        .fail(function () {
-          alert("Request failed.");
-          $btn.prop("disabled", false);
-        });
-    });
-
     // 2) Change status (Active / Unsubscribed / Bounced)
     $(document).on("click", "#wpec-contact-status-apply", function (e) {
       e.preventDefault();
