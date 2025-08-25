@@ -1584,6 +1584,9 @@ public function ajax_status_add_by_email() {
 
         $mode = sanitize_text_field($_POST['list_mode'] ?? 'new');
         $existing_list_id = absint($_POST['existing_list_id'] ?? 0);
+if ( ! $existing_list_id ) {
+    $existing_list_id = absint($_POST['list_id'] ?? 0); // fallback if frontend sends list_id
+}
         $name = sanitize_text_field( $_POST['list_name'] ?? '' );
         if ( $mode === 'new' && ! $name ) wp_send_json_error(['message'=>'List name required']);
         if ( empty($_FILES['file']['tmp_name']) ) wp_send_json_error( [ 'message' => 'No file' ] );
@@ -1592,7 +1595,18 @@ public function ajax_status_add_by_email() {
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( [ 'message' => $result->get_error_message() ] );
         }
-        wp_send_json_success( [ 'list_id' => (int) $result['list_id'] ] );
+$list_name = '';
+if ( $existing_list_id ) {
+    $db = Helpers::db();
+    $lists = Helpers::table('lists');
+    $list_name = (string) $db->get_var( $db->prepare( "SELECT name FROM $lists WHERE id=%d", $existing_list_id ) );
+} else {
+    $list_name = $name; // the "new list" name from the form
+}
+wp_send_json_success( [ 
+    'list_id'   => (int) $result['list_id'],
+    'list_name' => $list_name ?: ('List #'.(int)$result['list_id']),
+] );
     }
 
     /** Read CSV header row for a list file (no DB changes) */
@@ -2054,6 +2068,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
             'name'       => __( 'Name', 'wp-email-campaigns' ),
             'status'     => __( 'Status', 'wp-email-campaigns' ),
             'created_at' => __( 'Imported At', 'wp-email-campaigns' ),
+        'lists'      => __( 'Lists', 'wp-email-campaigns' ),
             'actions'    => __( 'Actions', 'wp-email-campaigns' ),
         ];
     }
@@ -2066,6 +2081,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         global $wpdb;
         $li = Helpers::table('list_items'); 
         $ct = Helpers::table('contacts');
+    $lists = Helpers::table('lists');
         
         $per_page = 50; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
@@ -2076,10 +2092,31 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         }
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $li li INNER JOIN $ct c ON c.id=li.contact_id $where", $args ) );
 
-        $rows = $wpdb->get_results( $wpdb->prepare(
-            "SELECT c.id AS contact_id, c.email, CONCAT_WS(' ', c.first_name, c.last_name) AS name, c.status, li.created_at, li.is_duplicate_import
-             FROM $li li INNER JOIN $ct c ON c.id=li.contact_id
-             $where ORDER BY li.id DESC LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
+       $rows = $wpdb->get_results( $wpdb->prepare(
+    "SELECT 
+        c.id AS contact_id,
+        c.email,
+        CONCAT_WS(' ', c.first_name, c.last_name) AS name,
+        c.status,
+        li.created_at,
+        li.is_duplicate_import,
+        (
+          SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li2.created_at DESC SEPARATOR ', ')
+          FROM $li li2 
+          INNER JOIN $lists l ON l.id = li2.list_id
+          WHERE li2.contact_id = c.id
+        ) AS lists,
+        (
+          SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li2.created_at DESC SEPARATOR '|')
+          FROM $li li2 
+          INNER JOIN $lists l ON l.id = li2.list_id
+          WHERE li2.contact_id = c.id
+        ) AS lists_meta
+     FROM $li li 
+     INNER JOIN $ct c ON c.id=li.contact_id
+     $where
+     ORDER BY li.id DESC
+     LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
         $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
         $this->set_pagination_args( [ 'total_items'=>$total, 'per_page'=>$per_page, 'total_pages'=>ceil( $total / $per_page ) ] );
     }
@@ -2104,6 +2141,30 @@ class WPEC_List_Items_Table extends \WP_List_Table {
         return sprintf('<a class="button button-small" href="%s">%s</a>', esc_url($url), esc_html__('View detail','wp-email-campaigns'));
     }
     public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
+    // ADD this method inside WPEC_List_Items_Table (below other column_* methods)
+public function column_lists( $item ) {
+    $meta = $item['lists_meta'] ?? '';
+    if ( ! $meta ) {
+        return esc_html( $item['lists'] ?? '' );
+    }
+    $parts = array_filter( array_map( 'trim', explode( '|', $meta ) ) );
+    $links = [];
+    foreach ( $parts as $p ) {
+        $ix = strpos( $p, '::' );
+        if ( $ix === false ) continue;
+        $id = (int) substr( $p, 0, $ix );
+        $name = substr( $p, $ix + 2 );
+        $url = add_query_arg( [
+            'post_type' => 'email_campaign',
+            'page'      => 'wpec-contacts',
+            'view'      => 'list',
+            'list_id'   => $id,
+        ], admin_url( 'edit.php' ) );
+        $links[] = sprintf( '<a href="%s">%s</a>', esc_url( $url ), esc_html( $name ) );
+    }
+    return $links ? implode( ', ', $links ) : '<em>-</em>';
+}
+
 }
 
 // ---------- Duplicates table (with Duplicate Count) ----------

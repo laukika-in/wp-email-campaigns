@@ -628,6 +628,7 @@
 
     // collect mapping
     var map = {};
+
     $("#wpec-map-table .wpec-map-sel").each(function () {
       var key = $(this).data("key");
       var v = $(this).val();
@@ -646,7 +647,6 @@
         );
         return;
       }
-
       // summary view
       var s =
         '<table class="widefat striped"><thead><tr><th>Our field</th><th>Mapped column</th></tr></thead><tbody>';
@@ -671,6 +671,18 @@
         behavior: "smooth",
       });
     });
+    // right after you render the "Map fields" step HTML:
+    WPEC._currentListName =
+      resp && resp.data && resp.data.list_name
+        ? resp.data.list_name
+        : "List #" + (resp && resp.data && resp.data.list_id);
+
+    // show the target list under the step title
+    jQuery("#wpec-step-map .wpec-step-head").append(
+      '<p class="description">List: <strong>' +
+        (WPEC._currentListName || "") +
+        "</strong></p>"
+    );
   });
 
   // STEP 3: start import -> reuse existing processList()
@@ -831,7 +843,25 @@
     "#wpec-dup-bulk-progress",
     "#wpec-dup-bulk-loader"
   );
+
   // === LIST PAGE: enable/disable bulk buttons & bulk move ===
+  // === List page: enable/disable bulk actions by checkbox selection ===
+  jQuery(function ($) {
+    var $listForm = $("#wpec-list-form");
+    if (!$listForm.length) return;
+
+    function toggleListBulk() {
+      var any = $listForm.find('input[name="ids[]"]:checked').length > 0;
+      $("#wpec-list-bulk-delete, #wpec-list-bulk-move").prop("disabled", !any);
+    }
+    $(document).on(
+      "change",
+      "#wpec-list-form input[type=checkbox]",
+      toggleListBulk
+    );
+    toggleListBulk(); // initial
+  });
+
   function wpecToggleListBulk() {
     var any = jQuery('#wpec-list-form input[name="ids[]"]:checked').length > 0;
     var hasDest = parseInt(jQuery("#wpec-list-move-list").val() || "0", 10) > 0;
