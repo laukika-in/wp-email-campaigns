@@ -34,8 +34,7 @@ class Contacts {
 
         // AJAX: list metrics dropdown (Lists page)
         add_action( 'wp_ajax_wpec_list_metrics', [ $this, 'ajax_list_metrics' ] );
-
-        // NEW: AJAX for Contacts directory (filters + pagination + bulk ops + export)
+ 
         add_action( 'wp_ajax_wpec_contacts_query',        [ $this, 'ajax_contacts_query' ] );
         add_action( 'wp_ajax_wpec_contacts_bulk_delete',  [ $this, 'ajax_contacts_bulk_delete' ] );
         add_action( 'wp_ajax_wpec_contacts_bulk_move',    [ $this, 'ajax_contacts_bulk_move' ] );
@@ -68,46 +67,56 @@ add_action( 'wp_ajax_wpec_list_delete', [ $this, 'ajax_list_delete' ] );
 add_action( 'wp_ajax_wpec_contact_update_status', [ $this, 'ajax_contact_update_status' ] );
 add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_list' ] );
 
+ add_action( 'admin_menu', [ $this, 'admin_menu_adjustments' ], 999 );
     }
 
-    /** Register submenus; rename old "Contacts" to "Lists"; add "Import" and "Duplicates" */
-   public function admin_menu_adjustments() {
-     $cap = 'manage_options';
-        if ( class_exists(__NAMESPACE__ . '\\Helpers') ) {
-            if ( method_exists( Helpers::class, 'manage_cap' ) ) {
-                $cap = Helpers::manage_cap();
-            } elseif ( method_exists( Helpers::class, 'cap' ) ) {
-                $cap = Helpers::cap();
-            }
+ public function admin_menu_adjustments() {
+    // Resolve capability safely
+    $cap = 'manage_options';
+    if ( class_exists(__NAMESPACE__ . '\\Helpers') ) {
+        if ( method_exists( Helpers::class, 'manage_cap' ) ) {
+            $cap = Helpers::manage_cap();
+        } elseif ( method_exists( Helpers::class, 'cap' ) ) {
+            $cap = Helpers::cap();
         }
+    }
+
     global $submenu;
     $parent = 'edit.php?post_type=email_campaign';
-  
-    // 1) Rename the existing router screen (slug: wpec-contacts) to "Lists"
-    $lists_idx = null;
+
+    // Rename 'wpec-contacts' to 'Lists' and move it to the top
     if ( isset( $submenu[ $parent ] ) ) {
-        foreach ( $submenu[ $parent ] as $i => &$item ) {
-            // $item = [ menu_title, capability, slug, [page_title] ]
+        $lists_idx = null;
+
+        foreach ( $submenu[ $parent ] as $i => $item ) {
+            // $item = [menu_title, capability, slug, (optional) page_title]
             if ( isset( $item[2] ) && $item[2] === 'wpec-contacts' ) {
-                $item[0] = __( 'Lists', 'wp-email-campaigns' );
-                $item[3] = __( 'Lists', 'wp-email-campaigns' );
                 $lists_idx = $i;
+                break;
             }
         }
-        // 2) Move "Lists" to the top of the submenu
+
         if ( $lists_idx !== null ) {
             $lists_item = $submenu[ $parent ][ $lists_idx ];
+
+            // Rename the menu title (index 0) and page title (index 3 if present)
+            $lists_item[0] = __( 'Lists', 'wp-email-campaigns' );
+            if ( isset( $lists_item[3] ) ) {
+                $lists_item[3] = __( 'Lists', 'wp-email-campaigns' );
+            }
+
+            // Move it to index 0 so clicking the parent opens "Lists"
             unset( $submenu[ $parent ][ $lists_idx ] );
             array_unshift( $submenu[ $parent ], $lists_item );
             $submenu[ $parent ] = array_values( $submenu[ $parent ] );
         }
     }
 
-    // 3) Ensure other submenus exist (positions put them after "Lists")
+    // Ensure other submenus exist (come after "Lists")
     add_submenu_page(
         $parent,
-        __( 'Contacts', 'wp-email-campaigns' ),   // page title
-        __( 'Contacts', 'wp-email-campaigns' ),   // menu title (All Contacts directory)
+        __( 'Contacts', 'wp-email-campaigns' ),
+        __( 'Contacts', 'wp-email-campaigns' ),
         $cap,
         'wpec-all-contacts',
         [ $this, 'render_all_contacts' ],
@@ -503,7 +512,7 @@ public function render_status_list( $status_slug ) {
 }
 
     private function render_multi_select( $id, $values ) {
-        // (no longer used for All Contacts – kept for compatibility elsewhere if needed)
+        // (no longer used for All contacts – kept for compatibility elsewhere if needed)
         $html  = '<input type="search" class="wpec-ms-search" data-target="#'.$id.'" placeholder="'.esc_attr__('Type to filter…','wp-email-campaigns').'" />';
         $html .= '<select id="'.$id.'" multiple size="5" style="min-width:220px;max-width:100%;">';
         foreach ( (array)$values as $val ) { $html .= '<option value="'.esc_attr($val).'">'.esc_html($val).'</option>'; }
@@ -1065,7 +1074,7 @@ public function ajax_presets_set_default() {
         fclose($out); exit;
     }
 
-    /** Export All Contacts (filtered) via AJAX */
+    /** Export All contacts (filtered) via AJAX */
     public function ajax_contacts_export() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_die( 'Denied' );
@@ -1207,7 +1216,7 @@ public function ajax_status_add_by_email() {
     ]);
 }
 
-    // ===================== BULK OPS (All Contacts) =====================
+    // ===================== BULK OPS (All contacts) =====================
     public function ajax_contacts_bulk_delete() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
@@ -1280,7 +1289,7 @@ public function ajax_status_add_by_email() {
 }
 
 
-    // ===================== AJAX Contacts directory query =====================
+    // ===================== AJAX contacts directory query =====================
     public function ajax_contacts_query() {
         check_ajax_referer( 'wpec_admin', 'nonce' );
         if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
@@ -1986,7 +1995,7 @@ $done = $eof;
             // NEW (scoped + overall)
             'uploaded_this_import'   => (int) $uploaded_this_import,  // Now uploaded (this file)
             'duplicates_this_import' => (int) $dup_this_import,       // Duplicates (this file)
-            'list_contacts'          => (int) $list_contacts_now,     // Contacts in this list (after upload)
+            'list_contacts'          => (int) $list_contacts_now,     // contacts in this list (after upload)
             'list_duplicates'        => (int) $list_dupes_now,        // Duplicates in this list (total)
             'contacts_overall'       => (int) $contacts_overall,      // All contacts (global)
             'duplicates_overall'     => (int) $dupes_overall,         // All duplicates (global)
