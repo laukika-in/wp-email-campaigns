@@ -1137,9 +1137,7 @@
 
   // ── CONTACTS DIRECTORY (AJAX filters + pagination + export + bulk ops) ───
   function onContactsPage() {
-    return (
-      new URL(location.href).searchParams.get("page") === "wpec-all-contacts"
-    );
+    return new URL(location.href).searchParams.get("page") === "wpec-contacts";
   }
 
   function collectCols() {
@@ -2271,10 +2269,9 @@ jQuery(function () {
         if (resp && resp.success) {
           window.location =
             WPEC && WPEC.adminBase
-              ? WPEC.adminBase +
-                "?post_type=email_campaign&page=wpec-all-contacts"
+              ? WPEC.adminBase + "?post_type=email_campaign&page=wpec-contacts"
               : window.location.origin +
-                "/wp-admin/edit.php?post_type=email_campaign&page=wpec-all-contacts";
+                "/wp-admin/edit.php?post_type=email_campaign&page=wpec-contacts";
         } else {
           alert((resp && resp.data && resp.data.message) || "Delete failed.");
         }

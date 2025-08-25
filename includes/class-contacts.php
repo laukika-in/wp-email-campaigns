@@ -118,7 +118,7 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         __( 'Contacts', 'wp-email-campaigns' ),
         __( 'Contacts', 'wp-email-campaigns' ),
         $cap,
-        'wpec-all-contacts',
+        'wpec-contacts',
         [ $this, 'render_all_contacts' ],
         9
     );
@@ -155,13 +155,13 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
             $ok = (
                 $screen->post_type === 'email_campaign' ||
                 $screen->id === 'email_campaign_page_wpec-lists' ||
-                $screen->id === 'email_campaign_page_wpec-all-contacts' ||
+                $screen->id === 'email_campaign_page_wpec-contacts' ||
                 $screen->id === 'email_campaign_page_wpec-import' ||
                 $screen->id === 'email_campaign_page_wpec-duplicates'
             );
         }
         $page = $_GET['page'] ?? '';
-        $ok = $ok || in_array( $page, ['wpec-lists','wpec-all-contacts','wpec-import','wpec-duplicates'], true );
+        $ok = $ok || in_array( $page, ['wpec-lists','wpec-contacts','wpec-import','wpec-duplicates'], true );
         if ( ! $ok ) return;
 
         $css_path = plugin_dir_path(__FILE__) . '../admin/admin.css';
@@ -619,7 +619,7 @@ echo '</div>';
     $contacts_url = function($param, $value){
         $url = add_query_arg( [
             'post_type' => 'email_campaign',
-            'page'      => 'wpec-all-contacts',
+            'page'      => 'wpec-contacts',
         ], admin_url('edit.php') );
         $url = add_query_arg( [ $param => $value ], $url );
         return $url;
