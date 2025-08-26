@@ -102,10 +102,10 @@ public function admin_assets( $hook ) {
     }
     if ( $is_history ) {
     wp_enqueue_script('wpec-history', WPEC_URL.'admin/history.js', ['jquery'], WPEC_VER, true);
-    wp_localize_script('wpec-history', 'WPECHISTORY', [
+    wp_localize_script('wpec-history', 'WPECHISTORY', array_merge( $common, [
         'nonce'   => wp_create_nonce('wpec_admin'),
         'ajaxUrl' => admin_url('admin-ajax.php'),
-    ]);
+    ] ) );
     }
 
     if ( $is_queue ) {
