@@ -157,6 +157,7 @@ class Activator {
         self::ensure_column( $contacts, 'state', "VARCHAR(191) NULL" );
         self::ensure_column( $contacts, 'city', "VARCHAR(191) NULL" );
         self::ensure_column( $contacts, 'postal_code', "VARCHAR(32) NULL" );
+          self::maybe_create_campaign_tables();
     }
 
     private static function column_exists( $table, $column ) {
@@ -173,4 +174,43 @@ class Activator {
             $wpdb->query( "ALTER TABLE `$table` ADD COLUMN `$col` $definition" );
         }
     }
+    public static function maybe_create_campaign_tables() {
+    global $wpdb;
+    $charset = $wpdb->get_charset_collate();
+
+    $campaigns = $wpdb->prefix . 'wpec_campaigns';
+    $maps      = $wpdb->prefix . 'wpec_campaign_lists';
+
+    $sql1 = "CREATE TABLE IF NOT EXISTS $campaigns (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(190) NOT NULL DEFAULT '',
+        subject VARCHAR(255) NOT NULL DEFAULT '',
+        from_name VARCHAR(190) NULL,
+        from_email VARCHAR(190) NULL,
+        body_html LONGTEXT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        queued_count INT UNSIGNED NOT NULL DEFAULT 0,
+        sent_count INT UNSIGNED NOT NULL DEFAULT 0,
+        failed_count INT UNSIGNED NOT NULL DEFAULT 0,
+        options_json LONGTEXT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        published_at DATETIME NULL,
+        PRIMARY KEY (id),
+        KEY status_idx (status),
+        KEY published_idx (published_at)
+    ) $charset;";
+
+    $sql2 = "CREATE TABLE IF NOT EXISTS $maps (
+        campaign_id BIGINT UNSIGNED NOT NULL,
+        list_id BIGINT UNSIGNED NOT NULL,
+        PRIMARY KEY (campaign_id, list_id),
+        KEY list_idx (list_id)
+    ) $charset;";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql1);
+    dbDelta($sql2);
+}
+
 }

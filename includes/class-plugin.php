@@ -9,6 +9,8 @@ require_once __DIR__ . '/class-scheduler.php';
 require_once __DIR__ . '/class-sender.php';
 require_once __DIR__ . '/class-webhooks.php';
 require_once __DIR__ . '/class-contacts.php'; 
+require_once __DIR__ . '/class-campaigns.php';
+require_once __DIR__ . '/class-queue.php';
 
 class Plugin {
     public function init() {
@@ -18,6 +20,8 @@ class Plugin {
         ( new Sender )->init();
         ( new Webhooks )->init();
         ( new Contacts )->init(); 
+        (new Campaigns)->init();
+        (new Queue)->init();
 
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
     }
@@ -32,6 +36,10 @@ public function admin_assets( $hook ) {
     $pg = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
     $pt = ($screen && isset($screen->post_type)) ? (string) $screen->post_type : '';
     $id = $screen ? (string) $screen->id : '';
+
+    $is_history = in_array($pg, ['wpec-campaigns'], true);
+    $is_queue   = in_array($pg, ['wpec-queue'], true);
+
 
     if ( $pt === 'email_campaign' && in_array($hook, ['post.php','post-new.php'], true) ) {
         $is_campaign_edit = true;
@@ -92,6 +100,22 @@ public function admin_assets( $hook ) {
         'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
         ] ) );
     }
+    if ( $is_history ) {
+    wp_enqueue_script('wpec-history', WPEC_URL.'admin/history.js', ['jquery'], WPEC_VER, true);
+    wp_localize_script('wpec-history', 'WPECHISTORY', [
+        'nonce'   => wp_create_nonce('wpec_admin'),
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+    ]);
+    }
+
+    if ( $is_queue ) {
+        wp_enqueue_script('wpec-queue', WPEC_URL.'admin/queue.js', ['jquery'], WPEC_VER, true);
+        wp_localize_script('wpec-queue', 'WPECQUEUE', array_merge( $common, [
+            'nonce'   => wp_create_nonce('wpec_admin'),
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+    ] ) );
+    }
+
 }
 
 

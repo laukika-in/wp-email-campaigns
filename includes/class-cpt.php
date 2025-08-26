@@ -14,8 +14,13 @@ class CPT {
         add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', [ $this, 'column_content' ], 10, 2 );
         add_filter( 'post_updated_messages', [ $this, 'messages' ] );
         // ADD inside CPT->init() (or your constructor) — once. 
-add_action( 'save_post_email_campaign', [ $this, 'save_campaign_meta' ] );
+        add_action( 'save_post_email_campaign', [ $this, 'save_campaign_meta' ] );
 
+        add_action('admin_menu', function () {
+            $parent = 'edit.php?post_type=email_campaign';
+            remove_submenu_page($parent, 'edit.php?post_type=email_campaign');
+            remove_submenu_page($parent, 'post-new.php?post_type=email_campaign');
+        }, 99);
 
     }
 
@@ -158,24 +163,22 @@ add_action( 'save_post_email_campaign', [ $this, 'save_campaign_meta' ] );
 
         // Do NOT queue sending here yet. We’ll do this in the scheduler phase.
     }
-     
- 
 
-public function save_campaign_meta( $post_id ) {
-    if ( ! isset($_POST['wpec_campaign_meta_nonce']) ) return;
-    if ( ! wp_verify_nonce( $_POST['wpec_campaign_meta_nonce'], 'wpec_campaign_meta' ) ) return;
-    if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
-    if ( ! current_user_can( 'edit_post', $post_id ) ) return;
+    public function save_campaign_meta( $post_id ) {
+        if ( ! isset($_POST['wpec_campaign_meta_nonce']) ) return;
+        if ( ! wp_verify_nonce( $_POST['wpec_campaign_meta_nonce'], 'wpec_campaign_meta' ) ) return;
+        if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
+        if ( ! current_user_can( 'edit_post', $post_id ) ) return;
 
-    $from_name  = isset($_POST['wpec_from_name']) ? sanitize_text_field( $_POST['wpec_from_name'] ) : '';
-    $from_email = isset($_POST['wpec_from_email']) ? sanitize_email( $_POST['wpec_from_email'] ) : '';
-    $subject    = isset($_POST['wpec_subject']) ? sanitize_text_field( $_POST['wpec_subject'] ) : '';
-    $body_raw   = isset($_POST['wpec_body']) ? (string) $_POST['wpec_body'] : '';
+        $from_name  = isset($_POST['wpec_from_name']) ? sanitize_text_field( $_POST['wpec_from_name'] ) : '';
+        $from_email = isset($_POST['wpec_from_email']) ? sanitize_email( $_POST['wpec_from_email'] ) : '';
+        $subject    = isset($_POST['wpec_subject']) ? sanitize_text_field( $_POST['wpec_subject'] ) : '';
+        $body_raw   = isset($_POST['wpec_body']) ? (string) $_POST['wpec_body'] : '';
 
-    update_post_meta( $post_id, '_wpec_from_name',  $from_name );
-    update_post_meta( $post_id, '_wpec_from_email', $from_email );
-    update_post_meta( $post_id, '_wpec_subject',    $subject );
-    update_post_meta( $post_id, '_wpec_body_html',  wp_kses_post( $body_raw ) );
-}
+        update_post_meta( $post_id, '_wpec_from_name',  $from_name );
+        update_post_meta( $post_id, '_wpec_from_email', $from_email );
+        update_post_meta( $post_id, '_wpec_subject',    $subject );
+        update_post_meta( $post_id, '_wpec_body_html',  wp_kses_post( $body_raw ) );
+    } 
 
 }
