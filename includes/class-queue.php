@@ -79,36 +79,33 @@ $canCancel = (!$finished) && in_array($status, ['queued','sending','paused'], tr
             echo '  <td>'.(int)$queued.'</td>';
             echo '  <td>'.(int)$r['sent'].'</td>';
                 echo '  <td>'.(int)$r['failed'].'</td>';
-                echo '  <td>';
-                if ( $finished ) {
-                    // Show a friendly label for the end state
-                    if ($queued === 0 && in_array($status, ['queued','sending','paused'], true)) {
-                        // queue is empty but status may not have flipped yet
-                        echo '<em>'.esc_html__('All sent','wp-email-campaigns').'</em>';
-                    } elseif ($status === 'sent') {
-                        echo '<em>'.esc_html__('All sent','wp-email-campaigns').'</em>';
-                    } elseif ($status === 'failed') {
-                        echo '<em>'.esc_html__('Completed with errors','wp-email-campaigns').'</em>';
-                    } elseif ($status === 'cancelled') {
-                        echo '<em>'.esc_html__('Cancelled','wp-email-campaigns').'</em>';
-                    } else {
-                        echo '<em>—</em>';
-                    }
-                } else {
-                    if ( $canPause ) {
-                        echo '<button class="button wpec-q-pause" data-id="'.(int)$r['id'].'">'.esc_html__('Pause','wp-email-campaigns').'</button> ';
-                    }
-                    if ( $canResume ) {
-                        echo '<button class="button wpec-q-resume" data-id="'.(int)$r['id'].'">'.esc_html__('Resume','wp-email-campaigns').'</button> ';
-                    }
-                    if ( $canCancel ) {
-                        echo '<button class="button wpec-q-cancel" data-id="'.(int)$r['id'].'">'.esc_html__('Cancel','wp-email-campaigns').'</button>';
-                    }
-                    if ( !$canPause && !$canResume && !$canCancel ) {
-                        echo '<em>—</em>';
-                    }
-                }
-                echo '  </td>';
+                echo '<td>';
+$queued = (int)$r['queued'];
+$status = (string)$r['status'];
+
+$finished = ($queued === 0) && in_array($status, ['sent','failed','cancelled'], true);
+
+if ( $finished ) {
+    if ( $status === 'sent' ) {
+        echo '<em>'.esc_html__('All sent','wp-email-campaigns').'</em>';
+    } elseif ( $status === 'failed' ) {
+        echo '<em>'.esc_html__('Completed with errors','wp-email-campaigns').'</em>';
+    } else {
+        echo '<em>'.esc_html__('Cancelled','wp-email-campaigns').'</em>';
+    }
+} else {
+    if ( in_array($status, ['queued','sending'], true) ) {
+        echo '<button class="button wpec-q-pause" data-id="'.(int)$r['id'].'">'.esc_html__('Pause','wp-email-campaigns').'</button> ';
+        echo '<button class="button wpec-q-cancel" data-id="'.(int)$r['id'].'">'.esc_html__('Cancel','wp-email-campaigns').'</button>';
+    } elseif ( $status === 'paused' ) {
+        echo '<button class="button wpec-q-resume" data-id="'.(int)$r['id'].'">'.esc_html__('Resume','wp-email-campaigns').'</button> ';
+        echo '<button class="button wpec-q-cancel" data-id="'.(int)$r['id'].'">'.esc_html__('Cancel','wp-email-campaigns').'</button>';
+    } else {
+        echo '<em>—</em>';
+    }
+}
+echo '</td>';
+
 
                 echo '</tr>';
             }

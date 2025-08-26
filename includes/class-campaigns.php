@@ -213,105 +213,68 @@ class Campaigns {
     }
 
 private function render_campaign_detail( int $cid ) {
-    if ( ! Helpers::user_can_manage() ) { wp_die('Denied'); }
+    if ( ! \WPEC\Helpers::user_can_manage() ) { wp_die('Denied'); }
+
     global $wpdb;
-
-    if ( ! $cid ) {
-        echo '<div class="wrap"><h1>Campaign</h1><div class="notice notice-error"><p>Invalid campaign.</p></div></div>';
-        return;
-    }
-
-    $tbl = $wpdb->prefix.'wpec_campaigns';
-    $map = $wpdb->prefix.'wpec_campaign_lists';
-    $ls  = Helpers::table('lists');
+    $cam = $wpdb->prefix.'wpec_campaigns';
     $q   = $wpdb->prefix.'wpec_send_queue';
+    $map = $wpdb->prefix.'wpec_campaign_lists';
+    $ls  = \WPEC\Helpers::table('lists');
 
-    // Campaign row from custom table
-    $c = $wpdb->get_row( $wpdb->prepare("SELECT * FROM $tbl WHERE id=%d", $cid), ARRAY_A );
-    if ( ! $c ) {
-        echo '<div class="wrap"><h1>Campaign</h1><div class="notice notice-error"><p>Campaign not found.</p></div></div>';
+    $row = $wpdb->get_row( $wpdb->prepare("SELECT * FROM $cam WHERE id=%d", $cid), ARRAY_A );
+    if ( ! $row ) {
+        echo '<div class="wrap"><h1>Campaign</h1><div class="notice notice-error"><p>Not found.</p></div></div>';
         return;
     }
 
-    // Lists mapped to this campaign
-    $lists = $wpdb->get_results( $wpdb->prepare(
-        "SELECT l.id, l.name
-         FROM $map m INNER JOIN $ls l ON l.id=m.list_id
-         WHERE m.campaign_id=%d
-         ORDER BY l.name ASC", $cid
-    ), ARRAY_A );
+    // live counts (don’t rely on stale columns)
+    $stats = $wpdb->get_row( $wpdb->prepare("
+        SELECT
+          SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
+          SUM(CASE WHEN status='sent'   THEN 1 ELSE 0 END) AS sent,
+          SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+        FROM $q WHERE campaign_id=%d
+    ", $cid), ARRAY_A );
 
-    // Progress (prefer stored counters if present; fallback to live queue counts)
-    $hasStored = isset($c['sent_count']) && isset($c['failed_count']) && isset($c['queued_count']);
-    if ( $hasStored ) {
-        $sent   = (int)$c['sent_count'];
-        $failed = (int)$c['failed_count'];
-        $queued = (int)$c['queued_count'];
-    } else {
-        $tot    = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d", $cid) );
-        $sent   = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='sent'",   $cid) );
-        $failed = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='failed'", $cid) );
-        $queued = max(0, $tot - $sent - $failed);
-    }
+    $lists = $wpdb->get_col( $wpdb->prepare("
+        SELECT l.name
+        FROM $map m INNER JOIN $ls l ON l.id=m.list_id
+        WHERE m.campaign_id=%d
+        ORDER BY l.name
+    ", $cid) );
 
     $back = add_query_arg(['post_type'=>'email_campaign','page'=>'wpec-campaigns'], admin_url('edit.php'));
 
     echo '<div class="wrap">';
-    echo '  <h1>'.esc_html__('Campaign','wp-email-campaigns').'</h1>';
-    echo '  <p><a class="button" href="'.esc_url($back).'">'.esc_html__('← Back to Campaigns','wp-email-campaigns').'</a></p>';
+    echo '<h1>'.esc_html__('Campaign','wp-email-campaigns').'</h1>';
+    echo '<p><a class="button" href="'.esc_url($back).'">'.esc_html__('← Back to Campaigns','wp-email-campaigns').'</a></p>';
 
-    echo '  <div class="wpec-card" style="max-width:1080px;padding:16px;">';
-    echo '    <table class="widefat striped"><tbody>';
+    echo '<div class="wpec-card" style="max-width:1080px;padding:16px;">';
+    echo '<table class="widefat striped"><tbody>';
     printf('<tr><th style="width:220px">%s</th><td>%s</td></tr>',
-        esc_html__('Name','wp-email-campaigns'),   esc_html($c['name'] ?: '—'));
+        esc_html__('Name','wp-email-campaigns'), esc_html($row['name'] ?: '—'));
     printf('<tr><th>%s</th><td>%s</td></tr>',
-        esc_html__('Subject','wp-email-campaigns'), esc_html($c['subject'] ?: '—'));
+        esc_html__('Subject','wp-email-campaigns'), esc_html($row['subject'] ?: '—'));
     printf('<tr><th>%s</th><td>%s</td></tr>',
         esc_html__('From','wp-email-campaigns'),
-        esc_html( trim(($c['from_name']?:'').' <'.$c['from_email'].'>') )
-    );
+        esc_html(trim(($row['from_name'] ?: '').' <'.$row['from_email'].'>')));
     printf('<tr><th>%s</th><td><span class="wpec-status-pill">%s</span></td></tr>',
-        esc_html__('Status','wp-email-campaigns'), esc_html($c['status'] ?: '—'));
+        esc_html__('Status','wp-email-campaigns'), esc_html($row['status']));
     printf('<tr><th>%s</th><td>%s</td></tr>',
-        esc_html__('Published','wp-email-campaigns'),
-        esc_html( $c['published_at'] ?: '—' )
-    );
-
-    // Lists
-    $listHtml = '—';
-    if ( !empty($lists) ) {
-        $links = [];
-        foreach ($lists as $l) {
-            $url = add_query_arg([
-                'post_type' => 'email_campaign',
-                'page'      => 'wpec-lists',
-                'view'      => 'list',
-                'list_id'   => (int)$l['id'],
-            ], admin_url('edit.php'));
-            $links[] = '<a href="'.esc_url($url).'">'.esc_html($l['name']).'</a>';
-        }
-        $listHtml = implode(', ', $links);
-    }
+        esc_html__('Lists','wp-email-campaigns'), esc_html( $lists ? implode(', ', $lists) : '—' ));
     printf('<tr><th>%s</th><td>%s</td></tr>',
-        esc_html__('Lists','wp-email-campaigns'), $listHtml);
-
-    // Progress
-    printf('<tr><th>%s</th><td>%d %s / %d %s / %d %s</td></tr>',
+        esc_html__('Published','wp-email-campaigns'), esc_html($row['published_at'] ?: '—'));
+    printf('<tr><th>%s</th><td>%d sent / %d failed / %d queued</td></tr>',
         esc_html__('Progress','wp-email-campaigns'),
-        $sent,   esc_html__('sent','wp-email-campaigns'),
-        $failed, esc_html__('failed','wp-email-campaigns'),
-        $queued, esc_html__('queued','wp-email-campaigns')
-    );
+        (int)($stats['sent'] ?? 0), (int)($stats['failed'] ?? 0), (int)($stats['queued'] ?? 0));
+    echo '</tbody></table>';
 
-    echo '    </tbody></table>';
-
-    echo '    <h2 style="margin-top:18px">'.esc_html__('Preview','wp-email-campaigns').'</h2>';
-    echo '    <div class="wpec-campaign-preview" style="background:#fff;border:1px solid #ccd0d4;padding:12px;max-width:1080px;overflow:auto">';
-    echo          (string)$c['body_html']; // already your saved HTML
-    echo '    </div>';
-
-    echo '  </div>';
+    echo '<h2 style="margin-top:18px">'.esc_html__('Preview','wp-email-campaigns').'</h2>';
+    echo '<div class="wpec-campaign-preview" style="background:#fff;border:1px solid #ccd0d4;padding:12px;max-width:1080px;overflow:auto">';
+    echo wp_kses_post( $row['body_html'] ?? '' );
     echo '</div>';
+
+    echo '</div></div>';
 }
 
 

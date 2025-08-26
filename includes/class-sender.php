@@ -346,70 +346,98 @@ class Sender {
 
     // ===== CRON =====
 
-    public function cron_process_queue() {
-        if ( get_transient('wpec_send_lock') ) return;
-        set_transient('wpec_send_lock', 1, 55);
+   public function cron_process_queue() {
+    // Prevent overlap
+    if ( get_transient('wpec_send_lock') ) return;
+    set_transient('wpec_send_lock', 1, 55);
 
-        global $wpdb;
-        $q   = $wpdb->prefix.'wpec_send_queue';
-        $cam = $wpdb->prefix.'wpec_campaigns';
+    global $wpdb;
+    $q   = $wpdb->prefix.'wpec_send_queue';
+    $cam = $wpdb->prefix.'wpec_campaigns';
 
-        // ~30/minute (≈1 email / 2s)
-        $batch = (int)apply_filters('wpec_send_batch_per_minute', 30);
+    // Throttle (~30/minute ≈ 1 email / 2s)
+    $batch = (int) apply_filters('wpec_send_batch_per_minute', 30);
 
-        // pick next queued rows for campaigns not paused/cancelled/failed/sent
-        $rows = $wpdb->get_results("
-            SELECT q.*
-            FROM $q q
-            INNER JOIN $cam c ON c.id=q.campaign_id
-            WHERE q.status='queued'
-            AND c.status IN ('queued','sending')
-            AND q.scheduled_at <= NOW()
-            ORDER BY q.id ASC
-            LIMIT {$batch}
-        ", ARRAY_A);
+    // Pick next queued rows for active campaigns
+    $rows = $wpdb->get_results("
+        SELECT q.*
+        FROM $q q
+        INNER JOIN $cam c ON c.id = q.campaign_id
+        WHERE q.status='queued'
+          AND c.status IN ('queued','sending')   /* paused/cancelled/failed/sent are excluded */
+          AND q.scheduled_at <= NOW()
+        ORDER BY q.id ASC
+        LIMIT {$batch}
+    ", ARRAY_A);
 
-        if (empty($rows)) { delete_transient('wpec_send_lock'); return; }
-
+    if ( ! empty($rows) ) {
         foreach ($rows as $r) {
             $ok = $this->deliver_row($r);
-            if ($ok) {
+            if ( $ok ) {
                 $wpdb->update($q, ['status'=>'sent','last_error'=>null], ['id'=>$r['id']], ['%s','%s'], ['%d']);
             } else {
                 $wpdb->update($q, ['status'=>'failed','last_error'=>'wp_mail failed'], ['id'=>$r['id']], ['%s','%s'], ['%d']);
             }
-            $state_now = $wpdb->get_var( $wpdb->prepare("SELECT status FROM $cam WHERE id=%d", (int)$r['campaign_id']) );
-            if ( ! in_array($state_now, ['queued','sending'], true) ) {
-                continue;
-            }
-        $sent  = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='sent'",   $cid) );
-        $fail  = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='failed'", $cid) );
-        $queued_left = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='queued'", $cid) );
-
-        $state = $queued_left > 0 ? 'sending' : ( $fail > 0 ? 'failed' : 'sent' );
-
-        $wpdb->update(
-            $cam,
-            [ 'sent_count' => $sent, 'failed_count' => $fail, 'status' => $state ],
-            [ 'id' => $cid ],
-            [ '%d', '%d', '%s' ],
-            [ '%d' ]
-        );
         }
-  
-                // set campaign status to 'sending' if still has queue 
-        $ids = array_unique(array_map(fn($r) => (int)$r['campaign_id'], $rows));
-        if ($ids) {
-            $in = implode(',', array_fill(0, count($ids), '%d'));
-            // Set to 'sending' only if still 'queued'
-            $wpdb->query( $wpdb->prepare("UPDATE $cam SET status='sending' WHERE status='queued' AND id IN ($in)", $ids) );
-            // Ensure first-send time exists
-            $wpdb->query( $wpdb->prepare("UPDATE $cam SET published_at = IFNULL(published_at, NOW()) WHERE id IN ($in)", $ids) );
-        }
-
-
-        delete_transient('wpec_send_lock');
     }
+
+    /* RECONCILE: always roll-up counts and fix statuses even if no rows were sent this tick */
+    // Touch all campaigns that are "in flight"
+    $active_ids = $wpdb->get_col("SELECT id FROM $cam WHERE status IN ('queued','sending','paused')");
+    if ( $active_ids ) {
+        $place = implode(',', array_fill(0, count($active_ids), '%d'));
+
+        // Pull live counts from queue
+        $stats = $wpdb->get_results(
+            $wpdb->prepare("
+                SELECT campaign_id,
+                       SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
+                       SUM(CASE WHEN status='sent'   THEN 1 ELSE 0 END) AS sent,
+                       SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+                FROM $q
+                WHERE campaign_id IN ($place)
+                GROUP BY campaign_id
+            ", $active_ids),
+            ARRAY_A
+        );
+        $by = [];
+        foreach ($stats as $s) { $by[(int)$s['campaign_id']] = $s; }
+
+        foreach ($active_ids as $cid) {
+            $queued = (int)($by[$cid]['queued'] ?? 0);
+            $sent   = (int)($by[$cid]['sent']   ?? 0);
+            $failed = (int)($by[$cid]['failed'] ?? 0);
+
+            // persist roll-ups so Campaigns & Queue screens show real numbers
+            $wpdb->update($cam, [
+                'queued_count' => $queued,
+                'sent_count'   => $sent,
+                'failed_count' => $failed,
+            ], ['id'=>$cid], ['%d','%d','%d'], ['%d']);
+
+            // status transitions
+            $cur = (string) $wpdb->get_var( $wpdb->prepare("SELECT status FROM $cam WHERE id=%d", $cid) );
+
+            if ( $cur !== 'paused' ) {
+                if ( $queued > 0 && $cur !== 'sending' ) {
+                    // if it has work left, mark as sending
+                    $wpdb->update($cam, ['status'=>'sending'], ['id'=>$cid], ['%s'], ['%d']);
+                } elseif ( $queued === 0 ) {
+                    // nothing left → terminal state
+                    $wpdb->update(
+                        $cam,
+                        ['status' => ($failed > 0 ? 'failed' : 'sent')],
+                        ['id'=>$cid],
+                        ['%s'],
+                        ['%d']
+                    );
+                }
+            }
+        }
+    }
+
+    delete_transient('wpec_send_lock');
+}
 
     private function deliver_row(array $row): bool {
         global $wpdb;
