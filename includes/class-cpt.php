@@ -31,10 +31,10 @@ class CPT {
                 'singular_name' => __( 'Email Campaign', 'wp-email-campaigns' ),
             ],
             'public'       => false,
-            'show_ui'      => true,
-            'show_in_menu' => true,
+            'show_ui'      => false,
+            'show_in_menu' => false,
             'menu_icon'    => 'dashicons-email',
-            'supports'     => [ 'title', 'editor', 'custom-fields' ],
+            'supports'     => [ 'title', 'editor' ],
             'capability_type' => 'post',
         ] );
 
