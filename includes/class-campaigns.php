@@ -54,10 +54,8 @@ class Campaigns {
 
         $sql = "
         SELECT c.*,
-               (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ', '),
-            (SELECT COUNT(*) FROM $q WHERE campaign_id=c.id AND status='sent')   AS sent_count_live,
-            (SELECT COUNT(*) FROM $q WHERE campaign_id=c.id AND status='failed') AS failed_count_live
-
+               (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ', ')
+               
                 FROM $map m INNER JOIN $ls l ON l.id=m.list_id
                 WHERE m.campaign_id=c.id) AS list_names
         FROM $tbl c
@@ -192,13 +190,12 @@ class Campaigns {
             }
         }
 
+        
         wp_safe_redirect( add_query_arg(
         [ 'post_type' => 'email_campaign', 'page' => 'wpec-send', 'load_campaign' => $new_id ],
         admin_url('edit.php')
         ) );
         exit;
-
-
     }
 
 private function render_campaign_detail( int $cid ) {
