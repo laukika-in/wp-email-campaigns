@@ -37,7 +37,7 @@ class Queue {
                 SUM(CASE WHEN q.status='failed' THEN 1 ELSE 0 END) AS failed
             FROM $cam c
             LEFT JOIN $q q ON q.campaign_id=c.id
-            WHERE c.status IN ('draft','queued','sending','paused','sent','cancelled','failed')
+            WHERE c.status IN ('queued','sending','paused','sent','cancelled','failed')
             GROUP BY c.id
             ORDER BY c.id DESC
             LIMIT 200
@@ -63,32 +63,36 @@ class Queue {
                 admin_url('edit.php')
             );
 
-            // Decide which controls to show
-            $queued    = (int)$r['queued'];
-            $status    = (string)$r['status'];
-            $finished  = ($queued === 0) && in_array($status, ['sent','failed','cancelled'], true);
+           $queued   = (int)$r['queued'];
+$status   = (string)$r['status'];
 
-            $canPause  = (!$finished) && in_array($status, ['queued','sending'], true);
-            $canResume = (!$finished) && ($status === 'paused');
-            $canCancel = (!$finished) && in_array($status, ['queued','sending','paused'], true);
+// Consider the job "finished" as soon as the queue is empty OR it's in a final state
+$finished = ($queued === 0) || in_array($status, ['sent','failed','cancelled'], true);
 
-            echo '<tr data-id="'.(int)$r['id'].'" data-status="'.esc_attr($status).'">';
+// Button availability
+$canPause  = (!$finished) && in_array($status, ['queued','sending'], true);
+$canResume = (!$finished) && ($status === 'paused');
+$canCancel = (!$finished) && in_array($status, ['queued','sending','paused'], true);
+   echo '<tr data-id="'.(int)$r['id'].'" data-status="'.esc_attr($status).'">';
             echo '  <td><a href="'.esc_url($vid).'">'.esc_html($r['subject'] ?: ($r['name'] ?: ('#'.$r['id']))).'</a></td>';
             echo '  <td><span class="wpec-status-pill">'.esc_html($status).'</span></td>';
             echo '  <td>'.(int)$queued.'</td>';
             echo '  <td>'.(int)$r['sent'].'</td>';
                 echo '  <td>'.(int)$r['failed'].'</td>';
                 echo '  <td>';
-
                 if ( $finished ) {
-                    if ( $status === 'sent' ) {
+                    // Show a friendly label for the end state
+                    if ($queued === 0 && in_array($status, ['queued','sending','paused'], true)) {
+                        // queue is empty but status may not have flipped yet
                         echo '<em>'.esc_html__('All sent','wp-email-campaigns').'</em>';
-                    } elseif ( $status === 'failed' ) {
+                    } elseif ($status === 'sent') {
+                        echo '<em>'.esc_html__('All sent','wp-email-campaigns').'</em>';
+                    } elseif ($status === 'failed') {
                         echo '<em>'.esc_html__('Completed with errors','wp-email-campaigns').'</em>';
-                    } elseif ( $status === 'cancelled' ) {
+                    } elseif ($status === 'cancelled') {
                         echo '<em>'.esc_html__('Cancelled','wp-email-campaigns').'</em>';
                     } else {
-                        echo '<em>'.esc_html__('Completed','wp-email-campaigns').'</em>';
+                        echo '<em>—</em>';
                     }
                 } else {
                     if ( $canPause ) {
@@ -100,12 +104,12 @@ class Queue {
                     if ( $canCancel ) {
                         echo '<button class="button wpec-q-cancel" data-id="'.(int)$r['id'].'">'.esc_html__('Cancel','wp-email-campaigns').'</button>';
                     }
-                    if ( ! $canPause && ! $canResume && ! $canCancel ) {
+                    if ( !$canPause && !$canResume && !$canCancel ) {
                         echo '<em>—</em>';
                     }
                 }
-
                 echo '  </td>';
+
                 echo '</tr>';
             }
         }

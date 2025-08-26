@@ -27,6 +27,7 @@ class Campaigns {
     public function render_list() {
         if ( ! Helpers::user_can_manage() ) wp_die('Denied');
         global $wpdb;
+        $q = $wpdb->prefix . 'wpec_send_queue';
         $tbl = $wpdb->prefix.'wpec_campaigns';
         $map = $wpdb->prefix.'wpec_campaign_lists';
         $ls  = Helpers::table('lists');
@@ -53,7 +54,10 @@ class Campaigns {
 
         $sql = "
         SELECT c.*,
-               (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ', ')
+               (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ', '),
+            (SELECT COUNT(*) FROM $q WHERE campaign_id=c.id AND status='sent')   AS sent_count_live,
+            (SELECT COUNT(*) FROM $q WHERE campaign_id=c.id AND status='failed') AS failed_count_live
+
                 FROM $map m INNER JOIN $ls l ON l.id=m.list_id
                 WHERE m.campaign_id=c.id) AS list_names
         FROM $tbl c
@@ -188,13 +192,12 @@ class Campaigns {
             }
         }
 
-        wp_safe_redirect( add_query_arg([
-            'post_type'  => 'email_campaign',
-            'page'       => 'wpec-campaigns',
-            'view'       => 'detail',
-            'campaign_id'=> $new_id
-        ], admin_url('edit.php')) );
+        wp_safe_redirect( add_query_arg(
+        [ 'post_type' => 'email_campaign', 'page' => 'wpec-send', 'load_campaign' => $new_id ],
+        admin_url('edit.php')
+        ) );
         exit;
+
 
     }
 

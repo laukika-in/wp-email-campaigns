@@ -323,9 +323,11 @@ class Sender {
         check_ajax_referer('wpec_admin','nonce');
         if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
         global $wpdb;
+        $cam = $wpdb->prefix . 'wpec_campaigns';
+
         $cid = absint($_POST['campaign_id'] ?? 0);
         if (!$cid) wp_send_json_error(['message'=>'Bad campaign id']);
-        $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'paused'], ['id'=>$cid], ['%s'], ['%d']);
+        $wpdb->update($cam, ['status' => 'paused'], ['id' => $cid], ['%s'], ['%d']);
         wp_send_json_success(['state' => 'paused']);
     }
 
@@ -333,10 +335,12 @@ class Sender {
         check_ajax_referer('wpec_admin','nonce');
         if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
         global $wpdb;
+        $cam = $wpdb->prefix . 'wpec_campaigns';
+
         $cid = absint($_POST['campaign_id'] ?? 0);
         if (!$cid) wp_send_json_error(['message'=>'Bad campaign id']);
         // Back to active queueing; cron will treat it as runnable again
-        $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'queued'], ['id'=>$cid], ['%s'], ['%d']);
+        $wpdb->update($cam, ['status' => 'queued'], ['id' => $cid], ['%s'], ['%d']);
         wp_send_json_success(['state' => 'queued']);
     }
 
@@ -378,9 +382,22 @@ class Sender {
             if ( ! in_array($state_now, ['queued','sending'], true) ) {
                 continue;
             }
-        }
+        $sent  = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='sent'",   $cid) );
+        $fail  = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='failed'", $cid) );
+        $queued_left = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='queued'", $cid) );
 
-        // set campaign status to 'sending' if still has queue 
+        $state = $queued_left > 0 ? 'sending' : ( $fail > 0 ? 'failed' : 'sent' );
+
+        $wpdb->update(
+            $cam,
+            [ 'sent_count' => $sent, 'failed_count' => $fail, 'status' => $state ],
+            [ 'id' => $cid ],
+            [ '%d', '%d', '%s' ],
+            [ '%d' ]
+        );
+        }
+  
+                // set campaign status to 'sending' if still has queue 
         $ids = array_unique(array_map(fn($r) => (int)$r['campaign_id'], $rows));
         if ($ids) {
             $in = implode(',', array_fill(0, count($ids), '%d'));
