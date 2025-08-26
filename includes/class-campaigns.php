@@ -91,7 +91,10 @@ class Campaigns {
             echo '<tr><td colspan="7"><em>'.esc_html__('No campaigns yet.','wp-email-campaigns').'</em></td></tr>';
         } else {
             foreach ($rows as $r) {
-                $view = add_query_arg(['post_type'=>'email_campaign','page'=>'wpec-campaigns','view'=>'detail','id'=>$r['id']], admin_url('edit.php'));
+                $view_url = add_query_arg(
+                    ['post_type'=>'email_campaign','page'=>'wpec-campaign-view','campaign_id'=>(int)$row['id']],
+                    admin_url('edit.php')
+                );
                 $dup  = wp_nonce_url(
                     admin_url('admin-post.php?action=wpec_campaign_duplicate&cid='.$r['id']),
                     'wpec_admin',
@@ -105,7 +108,7 @@ class Campaigns {
                     esc_html($r['status']),
                     (int)$r['sent_count'], (int)$r['failed_count'],
                     $r['published_at'] ? esc_html($r['published_at']) : '—',
-                    esc_url($view), esc_html__('View','wp-email-campaigns'),
+                    esc_url($view_url), esc_html__('View','wp-email-campaigns'),
                     esc_url($dup),  esc_html__('Duplicate','wp-email-campaigns')
                 );
             }

@@ -140,19 +140,38 @@
         $btn.prop("disabled", false);
       })
       .done(function (r) {
-        if (r && r.success) {
-          alert(
-            "Queued " +
-              (r.data && r.data.queued ? r.data.queued : 0) +
-              " recipients."
-          );
-          $("#wpec-cancel-campaign")
-            .prop("disabled", false)
-            .data("cid", r.data.campaign_id);
-          // optional: redirect to Queue or Campaigns page
-        } else {
-          alert((r && r.data && r.data.message) || "Queue failed");
+        if (!r || !r.success) {
+          alert((r && r.data && r.data.message) || "Failed to queue.");
+          return;
         }
+
+        // store id, hide buttons to prevent re-queue, show quick status
+        currentCampaignId = r.data.campaign_id || currentCampaignId;
+        $("#wpec-queue-campaign, #wpec-save-draft")
+          .prop("disabled", true)
+          .hide();
+        $("#wpec-send-status").text(
+          "Queued " +
+            (r.data.queued || 0) +
+            " recipients for background sending."
+        );
+
+        // brief pause, then go to Queue page
+        var dest = (window.WPECCAMPAIGN && WPECCAMPAIGN.queueUrl) || "";
+        setTimeout(function () {
+          if (dest) {
+            window.location.href = dest;
+          } else {
+            // fallback: build it
+            var u = new URL(
+              (window.WPECCAMPAIGN && WPECCAMPAIGN.adminBase) ||
+                (window.WPEC && WPEC.adminBase)
+            );
+            u.searchParams.set("post_type", "email_campaign");
+            u.searchParams.set("page", "wpec-queue");
+            window.location.href = u.toString();
+          }
+        }, 600);
       });
   });
 })(jQuery);

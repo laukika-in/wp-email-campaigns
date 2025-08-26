@@ -98,6 +98,10 @@ public function admin_assets( $hook ) {
             // keep any extras specific to this screen here
             'nonce'            => wp_create_nonce( 'wpec_admin' ),
         'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+          'adminBase'      => admin_url( 'edit.php' ),
+    'queueUrl'       => add_query_arg(
+        ['post_type' => 'email_campaign', 'page' => 'wpec-queue'],
+        admin_url('edit.php')),
         ] ) );
     }
     if ( $is_history ) {
