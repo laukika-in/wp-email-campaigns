@@ -32,7 +32,7 @@ class CPT {
             ],
             'public'       => false,
             'show_ui'      => false,
-            'show_in_menu' => false,
+            'show_in_menu' => true,
             'menu_icon'    => 'dashicons-email',
             'supports'     => [ 'title', 'editor' ],
             'capability_type' => 'post',
