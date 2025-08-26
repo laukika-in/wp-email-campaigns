@@ -27,7 +27,7 @@ add_action( 'save_post_email_campaign', [ $this, 'save_campaign_meta' ] );
             ],
             'public'       => false,
             'show_ui'      => true,
-            'show_in_menu' => true,
+            'show_in_menu' => false,
             'menu_icon'    => 'dashicons-email',
             'supports'     => [ 'title', 'editor', 'custom-fields' ],
             'capability_type' => 'post',

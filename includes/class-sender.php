@@ -20,29 +20,7 @@ class Sender {
 
         // Make sure queue table exists
         $this->maybe_create_queue_table();
-        // Hide CPT list/add screens and make top-level click go to Send
-add_action('admin_menu', function () {
-    $parent = 'edit.php?post_type=email_campaign';
-    $cap = method_exists(\WPEC\Helpers::class, 'manage_cap') ? \WPEC\Helpers::manage_cap() : 'manage_options';
-
-    // Make the top-level (first submenu) point to our Send page
-    add_submenu_page(
-        $parent,
-        '', '', // no titles
-        $cap,
-        $parent, // IMPORTANT: submenu slug == parent slug
-        function () {
-            wp_safe_redirect( admin_url('admin.php?page=wpec-send') );
-            exit;
-        },
-        0
-    );
-
-    // Hide the default CPT screens from the submenu
-    remove_submenu_page($parent, 'edit.php?post_type=email_campaign');      // “All Email Campaigns”
-    remove_submenu_page($parent, 'post-new.php?post_type=email_campaign');  // “Add New”
-}, 99);
-
+        
     }
     public function add_send_screen() {
         $parent = 'edit.php?post_type=email_campaign';
@@ -50,8 +28,8 @@ add_action('admin_menu', function () {
 
         add_submenu_page(
             $parent,
-            __('Send Email', 'wp-email-campaigns'),
-            __('Send Email', 'wp-email-campaigns'),
+            __('Send', 'wp-email-campaigns'),
+            __('Send', 'wp-email-campaigns'),
             $cap,
             'wpec-send',
             [ $this, 'render_send_screen' ],
