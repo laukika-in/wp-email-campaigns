@@ -16,6 +16,13 @@ class CPT {
         // ADD inside CPT->init() (or your constructor) — once. 
 add_action( 'save_post_email_campaign', [ $this, 'save_campaign_meta' ] );
 
+add_action('admin_menu', function () {
+    $parent = 'edit.php?post_type=email_campaign';
+    // Hide the default CPT list and Add New. Our custom pages remain.
+    remove_submenu_page($parent, 'edit.php?post_type=email_campaign');
+    remove_submenu_page($parent, 'post-new.php?post_type=email_campaign');
+}, 99);
+
     }
 
     public function register() {
