@@ -26,7 +26,7 @@ add_action( 'save_post_email_campaign', [ $this, 'save_campaign_meta' ] );
                 'singular_name' => __( 'Email Campaign', 'wp-email-campaigns' ),
             ],
             'public'       => false,
-            'show_ui'      => true,
+            'show_ui'      => false,
             'show_in_menu' => false,
             'menu_icon'    => 'dashicons-email',
             'supports'     => [ 'title', 'editor', 'custom-fields' ],
