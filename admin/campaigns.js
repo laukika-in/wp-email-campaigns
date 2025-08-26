@@ -1,24 +1,17 @@
 (function ($) {
-  // -------- Page guard -------------------------------------------------------
-  function onSendPage() {
-    const sp = new URLSearchParams(location.search);
-    return (
-      sp.get("post_type") === "email_campaign" && sp.get("page") === "wpec-send"
-    );
+  function val(id) {
+    return $(id).val() || "";
+  }
+  function listVals() {
+    return $("#wpec-list-ids").val() || [];
   }
 
-  // -------- Helpers ----------------------------------------------------------
-  function val(sel) {
-    return $(sel).val() || "";
-  }
-
-  function getEditorHtml() {
-    try {
-      var ed = window.tinyMCE && tinyMCE.get("wpec_camp_html");
-      if (ed && !ed.isHidden()) return ed.getContent() || "";
-    } catch (e) {}
-    var el = document.getElementById("wpec_camp_html");
-    return el ? el.value || "" : "";
+  // Ensure Select2 if you want (you already load it elsewhere)
+  if ($.fn.select2 && $("#wpec-list-ids").length) {
+    $("#wpec-list-ids").select2({
+      width: "resolve",
+      placeholder: "Select lists…",
+    });
   }
 
   function ensureSelect2(cb) {
@@ -27,7 +20,7 @@
       return;
     }
     var CFG = window.WPECCAMPAIGN || {};
-
+    // CSS
     var css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = CFG.select2LocalCss || CFG.select2CdnCss;
@@ -35,7 +28,7 @@
       css.href = CFG.select2CdnCss;
     };
     document.head.appendChild(css);
-
+    // JS
     var s = document.createElement("script");
     s.src = CFG.select2LocalJs || CFG.select2CdnJs;
     s.onload = function () {
@@ -48,59 +41,59 @@
     document.head.appendChild(s);
   }
 
-  function initSelects() {
-    // main lists + any future select2 with class
-    $("#wpec-list-ids, #wpec-exclude-lists, select.wpec-s2").each(function () {
-      $(this).select2({
+  function initSendSelects() {
+    var $lists = $("#wpec-list-ids");
+    if ($lists.length) {
+      $lists.select2({
         width: "resolve",
+        placeholder: "Select recipient lists…",
         allowClear: true,
-        placeholder: $(this).data("placeholder") || "Select…",
       });
-    });
+    }
   }
 
-  function ajax(action, payload) {
-    payload = payload || {};
-    payload.action = action;
-    payload.nonce =
+  ensureSelect2(initSendSelects);
+
+  function post(action, data) {
+    data = data || {};
+    data.action = action;
+    data.nonce =
       (window.WPECCAMPAIGN && WPECCAMPAIGN.nonce) ||
       (window.WPEC && WPEC.nonce);
-    var url =
-      (window.WPECCAMPAIGN && WPECCAMPAIGN.ajaxUrl) ||
-      (window.WPEC && WPEC.ajaxUrl);
-    return $.post(url, payload, null, "json");
+    return $.post(
+      (window.WPECCAMPAIGN && WPECCAMPAIGN.ajaxUrl) || (WPEC && WPEC.ajaxUrl),
+      data,
+      null,
+      "json"
+    );
   }
 
-  // -------- State ------------------------------------------------------------
-  let currentCampaignId = parseInt(val("#wpec-campaign-id"), 10) || 0;
-  let pollTimer = null;
-
-  function startPolling(cid) {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(function () {
-      ajax("wpec_campaign_status", { campaign_id: cid }).done(function (res) {
-        if (!res || !res.success) return;
-        const d = res.data || {};
-        $("#wpec-send-status").text(
-          "Queued: " +
-            (d.queued || 0) +
-            " | Sent: " +
-            (d.sent || 0) +
-            " | Failed: " +
-            (d.failed || 0) +
-            " | Total: " +
-            (d.total || 0) +
-            " | State: " +
-            (d.state || "-")
+  $("#wpec-send-test").on("click", function (e) {
+    e.preventDefault();
+    $(this).prop("disabled", true);
+    $("#wpec-test-loader").show();
+    post("wpec_send_test", {
+      to: val("#wpec-test-to"),
+      subject: val("#wpec-subject"),
+      body:
+        tinyMCE && tinyMCE.get("wpec_camp_html")
+          ? tinyMCE.get("wpec_camp_html").getContent()
+          : val("#wpec_camp_html"),
+      from_name: val("#wpec-from-name"),
+      from_email: val("#wpec-from-email"),
+    })
+      .always(function () {
+        $("#wpec-test-loader").hide();
+        $("#wpec-send-test").prop("disabled", false);
+      })
+      .done(function (resp) {
+        alert(
+          resp && resp.success
+            ? "Test sent"
+            : (resp && resp.data && resp.data.message) || "Failed"
         );
-        if ((d.queued || 0) === 0) {
-          $("#wpec-cancel-campaign").prop("disabled", true);
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
       });
-    }, 4000);
-  }
+  });
 
   function collectPayload(saveOnly) {
     return {
@@ -109,128 +102,57 @@
       subject: val("#wpec-subject"),
       from_name: val("#wpec-from-name"),
       from_email: val("#wpec-from-email"),
-      body: getEditorHtml(), // KEY must be "body"
-      list_ids: $("#wpec-list-ids").val() || [], // KEY must be "list_ids"
+      body:
+        tinyMCE && tinyMCE.get("wpec_camp_html")
+          ? tinyMCE.get("wpec_camp_html").getContent()
+          : val("#wpec_camp_html"),
+      list_ids: listVals(),
       save_only: saveOnly ? "1" : "0",
     };
   }
 
-  // -------- Bindings (only on Send page) ------------------------------------
-  $(function () {
-    if (!onSendPage()) return;
-
-    // Load Select2 (local -> CDN) then init
-    ensureSelect2(initSelects);
-
-    // TEST SEND
-    $(document).on("click", "#wpec-send-test", function (e) {
-      e.preventDefault();
-
-      var to = val("#wpec-test-to").trim();
-      var subject = val("#wpec-subject").trim();
-      var body = getEditorHtml();
-
-      if (!to || !subject || !body) {
-        alert("Test needs To, Subject and Body.");
-        return;
-      }
-
-      var $btn = $(this);
-      $btn.prop("disabled", true);
-      $("#wpec-test-loader").show();
-
-      ajax("wpec_send_test", {
-        to: to,
-        subject: subject,
-        from_name: val("#wpec-from-name"),
-        from_email: val("#wpec-from-email"),
-        body: body,
+  $("#wpec-save-draft").on("click", function (e) {
+    e.preventDefault();
+    var $btn = $(this);
+    $btn.prop("disabled", true);
+    post("wpec_campaign_queue", collectPayload(true))
+      .always(function () {
+        $btn.prop("disabled", false);
       })
-        .always(function () {
-          $btn.prop("disabled", false);
-          $("#wpec-test-loader").hide();
-        })
-        .done(function (res) {
-          alert(
-            res && res.success
-              ? "Test email sent."
-              : res?.data?.message || "Test failed."
+      .done(function (r) {
+        if (r && r.success) {
+          $("#wpec-campaign-id").val(
+            r.data && r.data.campaign_id ? r.data.campaign_id : ""
           );
-        });
-    });
+          alert("Draft saved");
+        } else {
+          alert((r && r.data && r.data.message) || "Failed to save draft");
+        }
+      });
+  });
 
-    // SAVE DRAFT
-    $(document).on("click", "#wpec-save-draft", function (e) {
-      e.preventDefault();
-      var $btn = $(this).prop("disabled", true);
-
-      ajax("wpec_campaign_queue", collectPayload(true))
-        .always(function () {
-          $btn.prop("disabled", false);
-        })
-        .done(function (r) {
-          if (r && r.success) {
-            currentCampaignId =
-              r.data && r.data.campaign_id
-                ? r.data.campaign_id
-                : currentCampaignId;
-            $("#wpec-campaign-id").val(currentCampaignId || "");
-            alert("Draft saved.");
-          } else {
-            alert((r && r.data && r.data.message) || "Failed to save draft.");
-          }
-        });
-    });
-
-    // QUEUE SEND
-    $(document).on("click", "#wpec-queue-campaign", function (e) {
-      e.preventDefault();
-
-      var payload = collectPayload(false);
-      if (
-        !(payload.subject && payload.body && (payload.list_ids || []).length)
-      ) {
-        alert("Subject, Body, and at least one list are required.");
-        return;
-      }
-
-      var $btn = $(this).prop("disabled", true);
-
-      ajax("wpec_campaign_queue", payload)
-        .always(function () {
-          $btn.prop("disabled", false);
-        })
-        .done(function (r) {
-          if (!r || !r.success) {
-            alert((r && r.data && r.data.message) || "Failed to queue.");
-            return;
-          }
-          currentCampaignId = r.data.campaign_id || currentCampaignId;
-          $("#wpec-cancel-campaign").prop("disabled", false);
+  $("#wpec-queue-campaign").on("click", function (e) {
+    e.preventDefault();
+    var $btn = $(this);
+    $btn.prop("disabled", true);
+    post("wpec_campaign_queue", collectPayload(false))
+      .always(function () {
+        $btn.prop("disabled", false);
+      })
+      .done(function (r) {
+        if (r && r.success) {
           alert(
             "Queued " +
-              (r.data.queued || 0) +
-              " recipients for background sending."
+              (r.data && r.data.queued ? r.data.queued : 0) +
+              " recipients."
           );
-          startPolling(currentCampaignId);
-        })
-        .fail(function () {
-          alert("Request failed.");
-        });
-    });
-
-    // CANCEL
-    $(document).on("click", "#wpec-cancel-campaign", function (e) {
-      e.preventDefault();
-      if (!currentCampaignId) return;
-      if (!confirm("Cancel the current job?")) return;
-
-      ajax("wpec_campaign_cancel", { campaign_id: currentCampaignId }).done(
-        function () {
-          $("#wpec-send-status").text("Job cancelled.");
-          $("#wpec-cancel-campaign").prop("disabled", true);
+          $("#wpec-cancel-campaign")
+            .prop("disabled", false)
+            .data("cid", r.data.campaign_id);
+          // optional: redirect to Queue or Campaigns page
+        } else {
+          alert((r && r.data && r.data.message) || "Queue failed");
         }
-      );
-    });
+      });
   });
 })(jQuery);
