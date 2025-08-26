@@ -47,7 +47,7 @@ public function admin_assets( $hook ) {
     if ( $pt === 'email_campaign' && in_array($hook, ['post.php','post-new.php'], true) ) {
         $is_campaign_edit = true;
     }
-    if ( in_array($pg, ['wpec-send'], true) ) {
+    if ( in_array($pg, ['wpec-send','wpec-campaigns','wpec-queue'], true) ) {
         $is_campaign_tool = true;
     }
     if (
