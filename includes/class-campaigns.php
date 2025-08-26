@@ -27,7 +27,7 @@ class Campaigns {
     public function render_list() {
         if ( ! Helpers::user_can_manage() ) wp_die('Denied');
         global $wpdb;
-        $q = $wpdb->prefix . 'wpec_send_queue';
+        $queue_tbl = $wpdb->prefix . 'wpec_send_queue';
         $tbl = $wpdb->prefix.'wpec_campaigns';
         $map = $wpdb->prefix.'wpec_campaign_lists';
         $ls  = Helpers::table('lists');
@@ -37,7 +37,8 @@ class Campaigns {
             return;
         }
         // Filters
-        $q    = isset($_GET['q'])    ? sanitize_text_field($_GET['q']) : '';
+        $q    = isset($_GET['q'])    ? sanitize_text_field($_GET['q']) : '';$q = isset($_GET['q']) ? sanitize_text_field($_GET['q']) : '';
+
         $stat = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
         $d1   = isset($_GET['d1']) ? sanitize_text_field($_GET['d1']) : '';
         $d2   = isset($_GET['d2']) ? sanitize_text_field($_GET['d2']) : '';
@@ -52,16 +53,20 @@ class Campaigns {
         if ($d1 !== '')   { $where[] = "c.published_at >= %s"; $args[] = $d1.' 00:00:00'; }
         if ($d2 !== '')   { $where[] = "c.published_at <= %s"; $args[] = $d2.' 23:59:59'; }
 
-        $sql = "
+        $sql = " 
         SELECT c.*,
-               (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ', ')
-               
-                FROM $map m INNER JOIN $ls l ON l.id=m.list_id
-                WHERE m.campaign_id=c.id) AS list_names
+       (SELECT GROUP_CONCAT(l.name ORDER BY l.name SEPARATOR ', ')
+        FROM $map m INNER JOIN $ls l ON l.id=m.list_id
+        WHERE m.campaign_id=c.id) AS list_names,
+ 
+       (SELECT COUNT(*) FROM $queue_tbl WHERE campaign_id=c.id AND status='sent')   AS sent_count_live,
+       (SELECT COUNT(*) FROM $queue_tbl WHERE campaign_id=c.id AND status='failed') AS failed_count_live,
+       (SELECT COUNT(*) FROM $queue_tbl WHERE campaign_id=c.id AND status='queued') AS queued_count_live
         FROM $tbl c
-        WHERE ".implode(' AND ',$where)."
+        WHERE " . implode(' AND ', $where) . "
         ORDER BY COALESCE(c.published_at, c.updated_at) DESC
         LIMIT 500";
+
         $rows = $wpdb->get_results($wpdb->prepare($sql,$args), ARRAY_A);
 
         echo '<div class="wrap"><h1>'.esc_html__('Campaigns','wp-email-campaigns').'</h1>';
@@ -125,6 +130,14 @@ class Campaigns {
                 if (($r['status'] ?? '') === 'draft') {
                     $actions[] = '<a class="button button-primary" href="'.esc_url($cont_url).'">'.esc_html__('Continue in Send','wp-email-campaigns').'</a>';
                 }
+                $sent_live   = (int)($r['sent_count_live'] ?? 0);
+                $failed_live = (int)($r['failed_count_live'] ?? 0);
+                $queued_live = (int)($r['queued_count_live'] ?? 0);
+                $raw_status  = (string)($r['status'] ?? 'draft');
+                $display_status = $raw_status;
+                if ($queued_live === 0 && in_array($raw_status, ['queued','sending','paused'], true)) {
+                    $display_status = ($failed_live > 0) ? 'failed' : 'sent';
+                }
                 printf(
                     '<tr>
                         <td>%s</td><td>%s</td><td>%s</td>
@@ -133,11 +146,12 @@ class Campaigns {
                         <td>%s</td>
                         <td>%s</td>
                     </tr>',
+                    
                     esc_html($r['name'] ?: '—'),
                     esc_html($r['subject'] ?: '—'),
                     esc_html($r['list_names'] ?: '—'),
-                    esc_html($r['status'] ?: '—'),
-                    (int)$r['sent_count'], (int)$r['failed_count'],
+                    esc_html($display_status),
+(int)$sent_live, (int)$failed_live,
                     $r['published_at'] ? esc_html($r['published_at']) : '—',
                     implode(' ', $actions)
                 );
