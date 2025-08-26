@@ -30,7 +30,11 @@ class Campaigns {
         $tbl = $wpdb->prefix.'wpec_campaigns';
         $map = $wpdb->prefix.'wpec_campaign_lists';
         $ls  = Helpers::table('lists');
-
+        $view = isset($_GET['view']) ? sanitize_text_field($_GET['view']) : '';
+        if ($view === 'detail') {
+            $this->render_campaign_detail( absint($_GET['campaign_id'] ?? 0) );
+            return;
+        }
         // Filters
         $q    = isset($_GET['q'])    ? sanitize_text_field($_GET['q']) : '';
         $stat = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
@@ -91,10 +95,16 @@ class Campaigns {
             echo '<tr><td colspan="7"><em>'.esc_html__('No campaigns yet.','wp-email-campaigns').'</em></td></tr>';
         } else {
             foreach ($rows as $r) {
-                $view_url = add_query_arg(
-                    ['post_type'=>'email_campaign','page'=>'wpec-campaign-view','campaign_id'=>(int)$row['id']],
+               $view_url = add_query_arg(
+                    [
+                        'post_type'   => 'email_campaign',
+                        'page'        => 'wpec-campaigns',
+                        'view'        => 'detail',
+                        'campaign_id' => (int) $row['id'], // or $p->ID if you use WP posts
+                    ],
                     admin_url('edit.php')
                 );
+
                 $dup  = wp_nonce_url(
                     admin_url('admin-post.php?action=wpec_campaign_duplicate&cid='.$r['id']),
                     'wpec_admin',
@@ -182,4 +192,51 @@ class Campaigns {
         ], admin_url('edit.php')) );
         exit;
     }
+
+    private function render_campaign_detail( int $cid ) {
+    if ( ! \WPEC\Helpers::user_can_manage() ) { wp_die('Denied'); }
+
+    if ( ! $cid ) {
+        echo '<div class="wrap"><h1>Campaign</h1><div class="notice notice-error"><p>Invalid campaign.</p></div></div>';
+        return;
+    }
+
+    $post = get_post($cid);
+    if ( ! $post || $post->post_type !== 'email_campaign' ) {
+        echo '<div class="wrap"><h1>Campaign</h1><div class="notice notice-error"><p>Not found.</p></div></div>';
+        return;
+    }
+
+    $from_name  = get_post_meta($cid, '_wpec_from_name', true);
+    $from_email = get_post_meta($cid, '_wpec_from_email', true);
+    $state      = get_post_meta($cid, '_wpec_job_state', true) ?: 'queued';
+    $started_at = get_post_meta($cid, '_wpec_job_started_at', true);
+    $body_html  = get_post_field('post_content', $cid);
+
+    $back = add_query_arg(['post_type' => 'email_campaign', 'page' => 'wpec-campaigns'], admin_url('edit.php'));
+
+    echo '<div class="wrap">';
+    echo '<h1>'.esc_html__('Campaign','wp-email-campaigns').'</h1>';
+    echo '<p><a class="button" href="'.esc_url($back).'">'.esc_html__('← Back to Campaigns','wp-email-campaigns').'</a></p>';
+
+    echo '<div class="wpec-card" style="max-width:1080px;padding:16px;">';
+    echo '<table class="widefat striped"><tbody>';
+    printf('<tr><th style="width:220px">%s</th><td>%s</td></tr>',
+        esc_html__('Subject','wp-email-campaigns'), esc_html(get_the_title($cid)));
+    printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('From','wp-email-campaigns'),
+        esc_html(trim($from_name.' <'.$from_email.'>')));
+    printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('State','wp-email-campaigns'), esc_html($state));
+    printf('<tr><th>%s</th><td>%s</td></tr>', esc_html__('Published','wp-email-campaigns'),
+        esc_html( $started_at ? date_i18n( get_option('date_format').' '.get_option('time_format'), (int)$started_at ) : '-' ));
+    echo '</tbody></table>';
+
+    echo '<h2 style="margin-top:18px">'.esc_html__('Preview','wp-email-campaigns').'</h2>';
+    echo '<div class="wpec-campaign-preview" style="background:#fff;border:1px solid #ccd0d4;padding:12px;max-width:1080px;overflow:auto">';
+    echo wp_kses_post( $body_html );
+    echo '</div>';
+
+    echo '</div></div>';
+}
+
+
 }
