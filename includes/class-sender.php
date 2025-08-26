@@ -21,10 +21,7 @@ class Sender {
 
         // Tables
         $this->maybe_create_queue_table();
-        // hide it from the menu
-add_action('admin_menu', function () {
-    remove_submenu_page('edit.php?post_type=email_campaign', 'wpec-campaign-view');
-}, 99);
+        // hide it from the menu 
     }
 
     public function add_send_screen() {
@@ -66,6 +63,9 @@ add_action('admin_menu', function () {
                 $prefill['from_name']  = (string)$row['from_name'];
                 $prefill['from_email'] = (string)$row['from_email'];
                 $prefill['body_html']  = (string)$row['body_html'];
+                $prefill['status'] = isset($row['status']) ? (string)$row['status'] : 'draft';
+                $prefill['status'] = $prefill['status'] ?? 'draft';
+
                 $prefill['list_ids']   = $wpdb->get_col($wpdb->prepare(
                     "SELECT list_id FROM {$wpdb->prefix}wpec_campaign_lists WHERE campaign_id=%d", $cid
                 ));
@@ -74,8 +74,10 @@ add_action('admin_menu', function () {
 
         echo '<div class="wrap"><h1>'.esc_html__('Compose & Send','wp-email-campaigns').'</h1>';
         echo '<div class="wpec-card" style="max-width:980px;padding:16px;">';
-
+        
         echo '<input type="hidden" id="wpec-campaign-id" value="'.(int)$prefill['id'].'">';
+        echo '<input type="hidden" id="wpec-campaign-status" value="'.esc_attr($prefill['status']).'">';
+
 
         echo '<p><label><strong>'.esc_html__('Internal name (optional)','wp-email-campaigns').'</strong><br>';
         echo '<input type="text" id="wpec-name" class="regular-text" style="width:100%" value="'.esc_attr($prefill['name']).'"></label></p>';
@@ -118,7 +120,9 @@ add_action('admin_menu', function () {
 
         echo '<div style="display:flex;gap:8px;align-items:center;margin:10px 0">';
         echo '  <button class="button" id="wpec-save-draft">'.esc_html__('Save draft','wp-email-campaigns').'</button>';
-        echo '  <button class="button button-primary" id="wpec-queue-campaign">'.esc_html__('Queue Send','wp-email-campaigns').'</button>';
+        $queue_style = ($prefill['id'] && $prefill['status'] !== 'draft') ? ' style="display:none"' : '';
+        echo '  <button class="button button-primary" id="wpec-queue-campaign"'.$queue_style.'>'.esc_html__('Queue Send','wp-email-campaigns').'</button>';
+
         echo '  <button class="button" id="wpec-cancel-campaign" disabled>'.esc_html__('Cancel job','wp-email-campaigns').'</button>';
         echo '  <span id="wpec-send-status" style="margin-left:8px;color:#555"></span>';
         echo '</div>';
@@ -314,23 +318,26 @@ add_action('admin_menu', function () {
         $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'cancelled'], ['id'=>$cid], ['%s'], ['%d']);
         wp_send_json_success(['cancelled'=>true]);
     }
+
     public function ajax_campaign_pause() {
         check_ajax_referer('wpec_admin','nonce');
-        if (!Helpers::user_can_manage()) wp_send_json_error(['message'=>'Denied']);
+        if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
         global $wpdb;
         $cid = absint($_POST['campaign_id'] ?? 0);
         if (!$cid) wp_send_json_error(['message'=>'Bad campaign id']);
-        $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'paused'], ['id'=>$cid]);
-        wp_send_json_success(['paused'=>true]);
+        $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'paused'], ['id'=>$cid], ['%s'], ['%d']);
+        wp_send_json_success(['state' => 'paused']);
     }
+
     public function ajax_campaign_resume() {
         check_ajax_referer('wpec_admin','nonce');
-        if (!Helpers::user_can_manage()) wp_send_json_error(['message'=>'Denied']);
+        if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
         global $wpdb;
         $cid = absint($_POST['campaign_id'] ?? 0);
         if (!$cid) wp_send_json_error(['message'=>'Bad campaign id']);
-        $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'queued'], ['id'=>$cid]);
-        wp_send_json_success(['resumed'=>true]);
+        // Back to active queueing; cron will treat it as runnable again
+        $wpdb->update($wpdb->prefix.'wpec_campaigns', ['status'=>'queued'], ['id'=>$cid], ['%s'], ['%d']);
+        wp_send_json_success(['state' => 'queued']);
     }
 
     // ===== CRON =====
@@ -352,7 +359,8 @@ add_action('admin_menu', function () {
             FROM $q q
             INNER JOIN $cam c ON c.id=q.campaign_id
             WHERE q.status='queued'
-              AND c.status IN ('queued','sending')
+            AND c.status IN ('queued','sending')
+            AND q.scheduled_at <= NOW()
             ORDER BY q.id ASC
             LIMIT {$batch}
         ", ARRAY_A);
@@ -366,20 +374,22 @@ add_action('admin_menu', function () {
             } else {
                 $wpdb->update($q, ['status'=>'failed','last_error'=>'wp_mail failed'], ['id'=>$r['id']], ['%s','%s'], ['%d']);
             }
-        }
-
-        // set campaign status to 'sending' if still has queue
-        $ids = array_unique(array_map(function($r){ return (int)$r['campaign_id']; }, $rows));
-        foreach ($ids as $cid) {
-            $queued_left = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='queued'", $cid));
-            if ($queued_left > 0) {
-                $wpdb->update($cam, ['status'=>'sending'], ['id'=>$cid]);
-            } else {
-                // finished
-                $failed = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $q WHERE campaign_id=%d AND status='failed'", $cid));
-                $wpdb->update($cam, ['status'=> $failed ? 'failed' : 'sent' ], ['id'=>$cid]);
+            $state_now = $wpdb->get_var( $wpdb->prepare("SELECT status FROM $cam WHERE id=%d", (int)$r['campaign_id']) );
+            if ( ! in_array($state_now, ['queued','sending'], true) ) {
+                continue;
             }
         }
+
+        // set campaign status to 'sending' if still has queue 
+        $ids = array_unique(array_map(fn($r) => (int)$r['campaign_id'], $rows));
+        if ($ids) {
+            $in = implode(',', array_fill(0, count($ids), '%d'));
+            // Set to 'sending' only if still 'queued'
+            $wpdb->query( $wpdb->prepare("UPDATE $cam SET status='sending' WHERE status='queued' AND id IN ($in)", $ids) );
+            // Ensure first-send time exists
+            $wpdb->query( $wpdb->prepare("UPDATE $cam SET published_at = IFNULL(published_at, NOW()) WHERE id IN ($in)", $ids) );
+        }
+
 
         delete_transient('wpec_send_lock');
     }
@@ -406,5 +416,6 @@ add_action('admin_menu', function () {
         }
         return (bool) wp_mail($to, $subject, $body_html, $headers);
     }
+
    
 }

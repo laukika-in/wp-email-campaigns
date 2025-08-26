@@ -100,27 +100,44 @@ class Campaigns {
                         'post_type'   => 'email_campaign',
                         'page'        => 'wpec-campaigns',
                         'view'        => 'detail',
-                        'campaign_id' => (int) $r['id'], // correct
+                        'campaign_id' => (int)$r['id'],
                     ],
                     admin_url('edit.php')
                 );
 
-
-                $dup  = wp_nonce_url(
-                    admin_url('admin-post.php?action=wpec_campaign_duplicate&cid='.$r['id']),
-                    'wpec_admin',
-                    'nonce'
+                $dup_url = wp_nonce_url(
+                    admin_url('admin-post.php?action=wpec_campaign_duplicate&cid=' . (int)$r['id']),
+                    'wpec_admin', 'nonce'
                 );
+
+                // Drafts can be continued in Send screen:
+                $cont_url = add_query_arg([
+                    'post_type' => 'email_campaign',
+                    'page'      => 'wpec-send',
+                    'load_campaign' => (int)$r['id'],
+                ], admin_url('edit.php'));
+
+                $actions = [];
+                $actions[] = '<a class="button" href="'.esc_url($view_url).'">'.esc_html__('View','wp-email-campaigns').'</a>';
+                $actions[] = '<a class="button" href="'.esc_url($dup_url).'">'.esc_html__('Duplicate','wp-email-campaigns').'</a>';
+                if (($r['status'] ?? '') === 'draft') {
+                    $actions[] = '<a class="button button-primary" href="'.esc_url($cont_url).'">'.esc_html__('Continue in Send','wp-email-campaigns').'</a>';
+                }
                 printf(
-                    '<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="wpec-status-pill">%s</span></td><td>%d / %d</td><td>%s</td><td><a class="button" href="%s">%s</a> <a class="button" href="%s">%s</a></td></tr>',
+                    '<tr>
+                        <td>%s</td><td>%s</td><td>%s</td>
+                        <td><span class="wpec-status-pill">%s</span></td>
+                        <td>%d / %d</td>
+                        <td>%s</td>
+                        <td>%s</td>
+                    </tr>',
                     esc_html($r['name'] ?: '—'),
-                    esc_html($r['subject']),
+                    esc_html($r['subject'] ?: '—'),
                     esc_html($r['list_names'] ?: '—'),
-                    esc_html($r['status']),
+                    esc_html($r['status'] ?: '—'),
                     (int)$r['sent_count'], (int)$r['failed_count'],
                     $r['published_at'] ? esc_html($r['published_at']) : '—',
-                    esc_url($view_url), esc_html__('View','wp-email-campaigns'),
-                    esc_url($dup),  esc_html__('Duplicate','wp-email-campaigns')
+                    implode(' ', $actions)
                 );
             }
         }

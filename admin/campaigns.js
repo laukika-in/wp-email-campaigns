@@ -130,6 +130,51 @@
         }
       });
   });
+  // Pause
+  $(document).on("click", ".wpec-pause", function (e) {
+    e.preventDefault();
+    var $btn = $(this),
+      id = $btn.data("campaignId");
+    $.post(WPECCAMPAIGN.ajaxUrl, {
+      action: "wpec_campaign_pause",
+      nonce: WPECCAMPAIGN.nonce,
+      campaign_id: id,
+    }).done(function (res) {
+      if (res && res.success) {
+        // swap to Resume button
+        $btn.replaceWith(
+          '<button class="button wpec-resume" data-campaign-id="' +
+            id +
+            '">Resume</button>'
+        );
+      } else {
+        alert(res?.data?.message || "Failed to pause.");
+      }
+    });
+  });
+
+  // Resume
+  $(document).on("click", ".wpec-resume", function (e) {
+    e.preventDefault();
+    var $btn = $(this),
+      id = $btn.data("campaignId");
+    $.post(WPECCAMPAIGN.ajaxUrl, {
+      action: "wpec_campaign_resume",
+      nonce: WPECCAMPAIGN.nonce,
+      campaign_id: id,
+    }).done(function (res) {
+      if (res && res.success) {
+        // swap to Pause button
+        $btn.replaceWith(
+          '<button class="button wpec-pause" data-campaign-id="' +
+            id +
+            '">Pause</button>'
+        );
+      } else {
+        alert(res?.data?.message || "Failed to resume.");
+      }
+    });
+  });
 
   $("#wpec-queue-campaign").on("click", function (e) {
     e.preventDefault();
@@ -142,6 +187,10 @@
       .done(function (r) {
         if (!r || !r.success) {
           alert((r && r.data && r.data.message) || "Failed to queue.");
+          window.location =
+            WPECCAMPAIGN.adminBase +
+            "?post_type=email_campaign&page=wpec-queue";
+
           return;
         }
 
@@ -173,5 +222,37 @@
           }
         }, 600);
       });
+  });
+
+  function applyPrefill(p) {
+    if (!p) return;
+    $("#wpec-subject").val(p.subject || "");
+    $("#wpec-from-name").val(p.from_name || "");
+    $("#wpec-from-email").val(p.from_email || "");
+
+    // Set TinyMCE/textarea
+    try {
+      var ed = window.tinyMCE && tinyMCE.get("wpec_camp_html");
+      if (ed && !ed.isHidden()) ed.setContent(p.body_html || "");
+      else $("#wpec_camp_html").val(p.body_html || "");
+    } catch (e) {}
+
+    // Lists (after Select2 is ready)
+    if (Array.isArray(p.list_ids)) {
+      $("#wpec-list-ids").val(p.list_ids.map(String)).trigger("change");
+    }
+
+    // If not a draft, hide the Queue button to avoid re-sending
+    if ((p.status || "") !== "draft") {
+      $("#wpec-queue-campaign").prop("disabled", true).hide();
+    }
+  }
+
+  $(function () {
+    var page = new URL(location.href).searchParams.get("page");
+    if (page === "wpec-send") {
+      // after your ensureSelect2(...) and initSendUI(...), call:
+      applyPrefill(window.WPECCAMPAIGN && window.WPECCAMPAIGN.prefill);
+    }
   });
 })(jQuery);
