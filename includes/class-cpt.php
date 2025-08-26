@@ -31,7 +31,7 @@ class CPT {
                 'singular_name' => __( 'Email Campaign', 'wp-email-campaigns' ),
             ],
             'public'       => false,
-            'show_ui'      => false,
+            'show_ui'      => true,
             'show_in_menu' => true,
             'menu_icon'    => 'dashicons-email',
             'supports'     => [ 'title', 'editor' ],
