@@ -2232,7 +2232,12 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     }
     public function column_email( $item ) {
         $pill = !empty($item['is_duplicate_import']) ? ' <span class="wpec-pill wpec-pill-dup">'.esc_html__('Duplicate','wp-email-campaigns').'</span>' : '';
-        return esc_html( $item['email'] ) . $pill;
+        return sprintf(
+        '<a href="%s">%s</a>',
+        esc_url($view),
+        esc_html__(esc_html( $item['email'] ) . $pill,'wp-email-campaigns') 
+    ); 
+        
     }
     public function column_status( $item ) {
     $status = isset($item['status']) ? $item['status'] : '';
