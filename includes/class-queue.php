@@ -85,7 +85,13 @@ class Queue {
                 $finished = ($queued === 0) || in_array($status, ['sent','failed','cancelled'], true);
 
                 echo '<tr data-id="'.$campaign_id.'" data-status="'.esc_attr($status).'">';
-                echo '  <td><a href="'.esc_url($detail_url).'">'.esc_html($r['subject'] ?: ($r['name'] ?: ('#'.$campaign_id))).'</a></td>';
+                $detail = add_query_arg(
+    ['post_type'=>'email_campaign','page'=>'wpec-campaigns','view'=>'detail','id'=>(int)$r['id']],
+    admin_url('edit.php')
+);
+$title  = $r['subject'] ?: ($r['name'] ?: ('#'.$r['id']));
+echo '<td><a href="'.esc_url($detail).'">'.esc_html($title).'</a></td>';
+
                 echo '  <td><span class="wpec-status-pill">'.esc_html($status).'</span></td>';
                 echo '  <td>'.$queued.'</td>';
                 echo '  <td>'.$sent.'</td>';
