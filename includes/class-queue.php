@@ -88,7 +88,7 @@ class Queue {
                 
                 // build Campaign Detail URL for this row
 $detail = add_query_arg(
-    ['post_type'=>'email_campaign','page'=>'wpec-campaigns','view'=>'detail','id'=>(int)$r['id']],
+    ['post_type'=>'email_campaign','page'=>'wpec-campaigns','view'=>'detail','campaign_id'=>(int)$r['id']],
     admin_url('edit.php')
 );
 $title  = $r['subject'] ?: ($r['name'] ?: ('#'.$r['id']));
