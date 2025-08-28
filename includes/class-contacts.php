@@ -2080,7 +2080,7 @@ $done = $eof;
 class WPEC_Lists_Table extends \WP_List_Table {
     public function get_columns() {
         return [
-            'name'       => __( 'Namea', 'wp-email-campaigns' ),
+            'name'       => __( 'Name', 'wp-email-campaigns' ),
             'status'     => __( 'Status', 'wp-email-campaigns' ),
             'metrics'    => __( 'Counts', 'wp-email-campaigns' ),
             'created_at' => __( 'Created', 'wp-email-campaigns' ),
@@ -2144,7 +2144,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
     
     public function column_default( $item, $col ) {
         switch ( $col ) {
-            case 'name': return esc_html($item['name']);
+            case 'name': return '<a href="'.esc_url($view).'">'.esc_html($item['name']).'</a>';
             case 'status': return esc_html( ucfirst($item['status']) );
             case 'created_at': return esc_html( $item['created_at'] );
             case 'actions':
