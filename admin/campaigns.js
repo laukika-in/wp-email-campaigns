@@ -312,7 +312,116 @@
       });
     });
   }
+  function onCampaignDetailPage() {
+    const sp = new URLSearchParams(location.search);
+    return (
+      sp.get("post_type") === "email_campaign" &&
+      sp.get("page") === "wpec-campaigns" &&
+      sp.get("view") === "detail"
+    );
+  }
 
+  function updateActions(state, queued) {
+    const $wrap = $("#wpec-campaign-actions");
+    if (!$wrap.length) return;
+    const finished =
+      queued === 0 && ["sent", "failed", "cancelled"].includes(state);
+
+    const $pause = $wrap.find(".wpec-q-pause");
+    const $resume = $wrap.find(".wpec-q-resume");
+    const $cancel = $wrap.find(".wpec-q-cancel");
+
+    if (finished) {
+      $pause.remove();
+      $resume.remove();
+      $cancel.remove();
+      if (!$wrap.find("em").length) {
+        $wrap.append(
+          $("<em>").text(
+            state === "sent"
+              ? "All sent"
+              : state === "failed"
+              ? "Completed with errors"
+              : "Cancelled"
+          )
+        );
+      }
+      return;
+    }
+    if (["queued", "sending"].includes(state)) {
+      $pause.show();
+      $resume.hide();
+      $cancel.show();
+    } else if (state === "paused") {
+      $pause.hide();
+      $resume.show();
+      $cancel.show();
+    } else {
+      $pause.hide();
+      $resume.hide();
+      $cancel.hide();
+    }
+  }
+
+  function bindDetailButtons(cid) {
+    $(document)
+      .off("click.wpecDetailPause", ".wpec-q-pause")
+      .on("click.wpecDetailPause", ".wpec-q-pause", function (e) {
+        e.preventDefault();
+        $.post(WPECCAMPAIGN.ajaxUrl, {
+          action: "wpec_campaign_pause",
+          nonce: WPECCAMPAIGN.nonce,
+          campaign_id: cid,
+        });
+      });
+
+    $(document)
+      .off("click.wpecDetailResume", ".wpec-q-resume")
+      .on("click.wpecDetailResume", ".wpec-q-resume", function (e) {
+        e.preventDefault();
+        $.post(WPECCAMPAIGN.ajaxUrl, {
+          action: "wpec_campaign_resume",
+          nonce: WPECCAMPAIGN.nonce,
+          campaign_id: cid,
+        });
+      });
+
+    $(document)
+      .off("click.wpecDetailCancel", ".wpec-q-cancel")
+      .on("click.wpecDetailCancel", ".wpec-q-cancel", function (e) {
+        e.preventDefault();
+        if (!confirm("Cancel this campaign?")) return;
+        $.post(WPECCAMPAIGN.ajaxUrl, {
+          action: "wpec_campaign_cancel",
+          nonce: WPECCAMPAIGN.nonce,
+          campaign_id: cid,
+        });
+      });
+  }
+
+  function startDetailPolling(cid) {
+    function tick() {
+      $.post(
+        WPECCAMPAIGN.ajaxUrl,
+        {
+          action: "wpec_campaign_status",
+          nonce: WPECCAMPAIGN.nonce,
+          campaign_id: cid,
+        },
+        null,
+        "json"
+      ).done(function (res) {
+        if (!res || !res.success) return;
+        var d = res.data || {};
+        $("#wpec-stat-queued").text(d.queued || 0);
+        $("#wpec-stat-sent").text(d.sent || 0);
+        $("#wpec-stat-failed").text(d.failed || 0);
+        updateActions(d.state || "", parseInt(d.queued || 0, 10));
+      });
+    }
+    tick();
+    return setInterval(tick, 4000);
+  }
   /* ========= boot ========= */
 
   $(function () {
@@ -328,6 +437,20 @@
     // QUEUE page
     if (onPage("wpec-queue")) {
       bindQueueHandlers();
+      return;
+    }
+
+    // CAMPAIGN DETAIL page
+    if (onCampaignDetailPage()) {
+      var cid = parseInt($("#wpec-campaign-detail").data("cid"), 10) || 0;
+      if (!cid) {
+        const sp = new URLSearchParams(location.search);
+        cid = parseInt(sp.get("id") || sp.get("campaign_id") || 0, 10);
+      }
+      if (cid) {
+        bindDetailButtons(cid);
+        startDetailPolling(cid);
+      }
       return;
     }
   });
