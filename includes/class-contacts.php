@@ -2325,6 +2325,26 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
 
     public function get_primary_column_name() { return 'email'; }
     public function column_email( $item ) {
+         
+    $pairs = explode('|', $meta);
+    $links = [];
+    foreach ($pairs as $pair) {
+        $parts = explode('::', $pair, 2);
+        $lid   = isset($parts[0]) ? (int)$parts[0] : 0;
+        $lname = isset($parts[1]) ? $parts[1] : '';
+        if ($lid && $lname !== '') {
+            $url = add_query_arg(
+                [
+                    'post_type' => 'email_campaign',
+                    'page'      => 'wpec-lists',
+                    'view'      => 'list',
+                    'list_id'   => $lid,
+                ],
+                admin_url('edit.php')
+            );
+            $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
+        }
+    }
     $email  = esc_html( $item['email'] ?? '' );
     $status = isset( $item['status'] ) ? strtolower( $item['status'] ) : '';
     $pill   = '';
@@ -2334,8 +2354,12 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     } elseif ( $status === 'bounced' ) {
         $pill = ' <span class="wpec-pill wpec-pill-bounced">' . esc_html__( 'Bounced', 'wp-email-campaigns' ) . '</span>';
     }
-
-    return $email . $pill;
+  return sprintf(
+        '<a href="%s">%s</a>',
+        esc_url($view),
+        esc_html__(esc_html( $email) . $pill,'wp-email-campaigns') 
+    ); 
+         
 }
 
     protected function column_cb( $item ) {
@@ -2418,12 +2442,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     switch ( $col ) {
        // case 'email':
         case 'email':
-            return sprintf(
-        '<a href="%s">%s</a>',
-        esc_url($url),
-        esc_html__(esc_html( $item['email'] ),'wp-email-campaigns') 
-    ); 
-       
+            
         case 'first_name':
         case 'last_name':
             return esc_html( $item[ $col ] ?? '' );
