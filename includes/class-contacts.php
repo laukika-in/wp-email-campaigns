@@ -2349,16 +2349,19 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     $status = isset( $item['status'] ) ? strtolower( $item['status'] ) : '';
     $pill   = '';
 
-    if ( $status === 'unsubscribed' ) {
-        $pill = ' <span class="wpec-pill wpec-pill-dnd">' . esc_html__( 'DND', 'wp-email-campaigns' ) . '</span>';
-    } elseif ( $status === 'bounced' ) {
-        $pill = ' <span class="wpec-pill wpec-pill-bounced">' . esc_html__( 'Bounced', 'wp-email-campaigns' ) . '</span>';
-    }
-  return sprintf(
-        '<a href="%s">%s</a>',
-        esc_url($view),
-        esc_html__(esc_html( $email) . $pill,'wp-email-campaigns') 
-    ); 
+   if ( $status === 'unsubscribed' ) {
+    $pill = ' <span class="wpec-pill wpec-pill-dnd">' . esc_html__( 'DND', 'wp-email-campaigns' ) . '</span>';
+} elseif ( $status === 'bounced' ) {
+    $pill = ' <span class="wpec-pill wpec-pill-bounced">' . esc_html__( 'Bounced', 'wp-email-campaigns' ) . '</span>';
+}
+
+return sprintf(
+    '<a href="%s">%s%s</a>',
+    esc_url($view),
+    esc_html($email),
+    $pill
+);
+
          
 }
 
