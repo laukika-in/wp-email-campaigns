@@ -187,7 +187,6 @@ printf(
         $queue = $wpdb->prefix.'wpec_send_queue';
         $map   = $wpdb->prefix.'wpec_campaign_lists';
         $ls    = Helpers::table('lists');
-
         $row = $wpdb->get_row( $wpdb->prepare("SELECT * FROM $tbl WHERE id=%d", $cid), ARRAY_A );
         if ( ! $row ) {
             echo '<div class="wrap"><h1>'.esc_html__('Campaign','wp-email-campaigns').'</h1><div class="notice notice-error"><p>Not found.</p></div></div>';
@@ -228,8 +227,11 @@ printf(
             esc_html__('Name','wp-email-campaigns'), esc_html($row['name'] ?: '—'));
         printf('<tr><th>%s</th><td>%s</td></tr>',
             esc_html__('Subject','wp-email-campaigns'), esc_html($row['subject'] ?: '—'));
+            
         printf('<tr><th>%s</th><td>%s</td></tr>',
             esc_html__('Lists','wp-email-campaigns'), esc_html($list_names ?: '—'));
+
+
         printf('<tr><th>%s</th><td><span class="wpec-status-pill">%s</span></td></tr>',
             esc_html__('Status','wp-email-campaigns'), esc_html($display_status));
         printf('<tr><th>%s</th><td>%d queued / %d sent / %d failed</td></tr>',
