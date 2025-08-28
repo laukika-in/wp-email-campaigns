@@ -144,11 +144,13 @@ class Campaigns {
 
                 printf(
                     '<tr>
-                        <td>%s</td><td>%s</td><td>%s</td>
-                        <td><span class="wpec-status-pill">%s</span></td>
-                        <td>%d / %d</td>
-                        <td>%s</td>
-                        <td>%s</td>
+                    <td><a href="%s">%s</a></td>
+                    <td><a href="%s">%s</a></td>
+                    <td>%s</td>
+                    <td><span class="wpec-status-pill">%s</span></td>
+                    <td>%d / %d</td>
+                    <td>%s</td>
+                    <td>%s</td>
                     </tr>',
                     esc_html($r['name'] ?: '—'),
                     esc_html($r['subject'] ?: '—'),
