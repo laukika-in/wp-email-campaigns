@@ -2144,8 +2144,11 @@ class WPEC_Lists_Table extends \WP_List_Table {
     
     public function column_default( $item, $col ) {
         switch ( $col ) {
-            case 'name': return '<a href="'.esc_url($view).'">'.esc_html($item['name']).'</a>';
-            case 'status': return esc_html( ucfirst($item['status']) );
+           // case 'name': return '<a href="'.esc_url($view).'">'.esc_html($item['name']).'</a>';
+           case 'name': return sprintf('<a href="%s">%s</a>',
+                    esc_url($view), esc_html__($item['name'])
+                );
+           case 'status': return esc_html( ucfirst($item['status']) );
             case 'created_at': return esc_html( $item['created_at'] );
             case 'actions':
                 $view = add_query_arg( [
