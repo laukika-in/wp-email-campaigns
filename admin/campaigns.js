@@ -1,17 +1,34 @@
 (function ($) {
-  function val(id) {
-    return $(id).val() || "";
-  }
-  function listVals() {
-    return $("#wpec-list-ids").val() || [];
+  /* ========= helpers ========= */
+
+  function onPage(slug) {
+    const sp = new URLSearchParams(location.search);
+    return sp.get("page") === slug;
   }
 
-  // Ensure Select2 if you want (you already load it elsewhere)
-  if ($.fn.select2 && $("#wpec-list-ids").length) {
-    $("#wpec-list-ids").select2({
-      width: "resolve",
-      placeholder: "Select lists…",
-    });
+  function adminEditUrl(params) {
+    // Build /wp-admin/edit.php?post_type=email_campaign&...
+    var base =
+      (window.WPECCAMPAIGN && WPECCAMPAIGN.adminBase) ||
+      (window.ajaxurl
+        ? window.ajaxurl.replace("admin-ajax.php", "edit.php")
+        : "/wp-admin/edit.php");
+    const usp = new URLSearchParams({ post_type: "email_campaign", ...params });
+    return base + "?" + usp.toString();
+  }
+
+  function getEditorHtml() {
+    try {
+      if (
+        window.tinyMCE &&
+        tinyMCE.get("wpec_camp_html") &&
+        !tinyMCE.get("wpec_camp_html").isHidden()
+      ) {
+        return tinyMCE.get("wpec_camp_html").getContent() || "";
+      }
+    } catch (e) {}
+    var el = document.getElementById("wpec_camp_html");
+    return el ? el.value || "" : "";
   }
 
   function ensureSelect2(cb) {
@@ -23,23 +40,35 @@
     // CSS
     var css = document.createElement("link");
     css.rel = "stylesheet";
-    css.href = CFG.select2LocalCss || CFG.select2CdnCss;
+    css.href =
+      CFG.select2LocalCss ||
+      CFG.select2CdnCss ||
+      "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css";
     css.onerror = function () {
-      css.href = CFG.select2CdnCss;
+      css.href =
+        CFG.select2CdnCss ||
+        "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css";
     };
     document.head.appendChild(css);
     // JS
     var s = document.createElement("script");
-    s.src = CFG.select2LocalJs || CFG.select2CdnJs;
+    s.src =
+      CFG.select2LocalJs ||
+      CFG.select2CdnJs ||
+      "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js";
     s.onload = function () {
       cb && cb();
     };
     s.onerror = function () {
-      this.src = CFG.select2CdnJs;
+      this.src =
+        CFG.select2CdnJs ||
+        "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js";
       this.onerror = null;
     };
     document.head.appendChild(s);
   }
+
+  /* ========= SEND page ========= */
 
   function initSendSelects() {
     var $lists = $("#wpec-list-ids");
@@ -52,308 +81,254 @@
     }
   }
 
-  ensureSelect2(initSendSelects);
-
-  function post(action, data) {
-    data = data || {};
-    data.action = action;
-    data.nonce =
-      (window.WPECCAMPAIGN && WPECCAMPAIGN.nonce) ||
-      (window.WPEC && WPEC.nonce);
-    return $.post(
-      (window.WPECCAMPAIGN && WPECCAMPAIGN.ajaxUrl) || (WPEC && WPEC.ajaxUrl),
-      data,
-      null,
-      "json"
-    );
-  }
-
-  $("#wpec-send-test").on("click", function (e) {
-    e.preventDefault();
-    $(this).prop("disabled", true);
-    $("#wpec-test-loader").show();
-    post("wpec_send_test", {
-      to: val("#wpec-test-to"),
-      subject: val("#wpec-subject"),
-      body:
-        tinyMCE && tinyMCE.get("wpec_camp_html")
-          ? tinyMCE.get("wpec_camp_html").getContent()
-          : val("#wpec_camp_html"),
-      from_name: val("#wpec-from-name"),
-      from_email: val("#wpec-from-email"),
-    })
-      .always(function () {
-        $("#wpec-test-loader").hide();
-        $("#wpec-send-test").prop("disabled", false);
-      })
-      .done(function (resp) {
-        alert(
-          resp && resp.success
-            ? "Test sent"
-            : (resp && resp.data && resp.data.message) || "Failed"
-        );
-      });
-  });
-
-  function collectPayload(saveOnly) {
-    return {
-      campaign_id: parseInt(val("#wpec-campaign-id"), 10) || 0,
-      name: val("#wpec-name"),
-      subject: val("#wpec-subject"),
-      from_name: val("#wpec-from-name"),
-      from_email: val("#wpec-from-email"),
-      body:
-        tinyMCE && tinyMCE.get("wpec_camp_html")
-          ? tinyMCE.get("wpec_camp_html").getContent()
-          : val("#wpec_camp_html"),
-      list_ids: listVals(),
-      save_only: saveOnly ? "1" : "0",
-    };
-  }
-
-  $("#wpec-save-draft").on("click", function (e) {
-    e.preventDefault();
-    var $btn = $(this);
-    $btn.prop("disabled", true);
-    post("wpec_campaign_queue", collectPayload(true))
-      .always(function () {
-        $btn.prop("disabled", false);
-      })
-      .done(function (r) {
-        if (r && r.success) {
-          $("#wpec-campaign-id").val(
-            r.data && r.data.campaign_id ? r.data.campaign_id : ""
-          );
-          alert("Draft saved");
-        } else {
-          alert((r && r.data && r.data.message) || "Failed to save draft");
-        }
-      });
-  });
-  // Pause
-  $(document).on("click", ".wpec-pause", function (e) {
-    e.preventDefault();
-    var $btn = $(this),
-      id = $btn.data("campaignId");
-    $.post(WPECCAMPAIGN.ajaxUrl, {
-      action: "wpec_campaign_pause",
-      nonce: WPECCAMPAIGN.nonce,
-      campaign_id: id,
-    }).done(function (res) {
-      if (res && res.success) {
-        // swap to Resume button
-        $btn.replaceWith(
-          '<button class="button wpec-resume" data-campaign-id="' +
-            id +
-            '">Resume</button>'
-        );
-      } else {
-        alert(res?.data?.message || "Failed to pause.");
-      }
-    });
-  });
-
-  // Resume
-  $(document).on("click", ".wpec-resume", function (e) {
-    e.preventDefault();
-    var $btn = $(this),
-      id = $btn.data("campaignId");
-    $.post(WPECCAMPAIGN.ajaxUrl, {
-      action: "wpec_campaign_resume",
-      nonce: WPECCAMPAIGN.nonce,
-      campaign_id: id,
-    }).done(function (res) {
-      if (res && res.success) {
-        // swap to Pause button
-        $btn.replaceWith(
-          '<button class="button wpec-pause" data-campaign-id="' +
-            id +
-            '">Pause</button>'
-        );
-      } else {
-        alert(res?.data?.message || "Failed to resume.");
-      }
-    });
-  });
-
-  $("#wpec-queue-campaign").on("click", function (e) {
-    e.preventDefault();
-    var $btn = $(this);
-    $btn.prop("disabled", true);
-    post("wpec_campaign_queue", collectPayload(false))
-      .always(function () {
-        $btn.prop("disabled", false);
-      })
-      .done(function (r) {
-        if (!r || !r.success) {
-          alert((r && r.data && r.data.message) || "Failed to queue.");
-          window.location =
-            WPECCAMPAIGN.adminBase +
-            "?post_type=email_campaign&page=wpec-queue";
-
-          return;
-        }
-
-        // store id, hide buttons to prevent re-queue, show quick status
-        currentCampaignId = r.data.campaign_id || currentCampaignId;
-        $("#wpec-queue-campaign, #wpec-save-draft")
-          .prop("disabled", true)
-          .hide();
-        $("#wpec-send-status").text(
-          "Queued " +
-            (r.data.queued || 0) +
-            " recipients for background sending."
-        );
-
-        // brief pause, then go to Queue page
-        var dest = (window.WPECCAMPAIGN && WPECCAMPAIGN.queueUrl) || "";
-        setTimeout(function () {
-          if (dest) {
-            window.location.href = dest;
-          } else {
-            // fallback: build it
-            var u = new URL(
-              (window.WPECCAMPAIGN && WPECCAMPAIGN.adminBase) ||
-                (window.WPEC && WPEC.adminBase)
-            );
-            u.searchParams.set("post_type", "email_campaign");
-            u.searchParams.set("page", "wpec-queue");
-            window.location.href = u.toString();
-          }
-        }, 600);
-      });
-  });
-
-  function applyPrefill(p) {
-    if (!p) return;
-    $("#wpec-subject").val(p.subject || "");
-    $("#wpec-from-name").val(p.from_name || "");
-    $("#wpec-from-email").val(p.from_email || "");
-
-    // Set TinyMCE/textarea
-    try {
-      var ed = window.tinyMCE && tinyMCE.get("wpec_camp_html");
-      if (ed && !ed.isHidden()) ed.setContent(p.body_html || "");
-      else $("#wpec_camp_html").val(p.body_html || "");
-    } catch (e) {}
-
-    // Lists (after Select2 is ready)
-    if (Array.isArray(p.list_ids)) {
-      $("#wpec-list-ids").val(p.list_ids.map(String)).trigger("change");
-    }
-
-    // If not a draft, hide the Queue button to avoid re-sending
-    if ((p.status || "") !== "draft") {
-      $("#wpec-queue-campaign").prop("disabled", true).hide();
-    }
-  }
-
-  $(function () {
-    var page = new URL(location.href).searchParams.get("page");
-    if (page === "wpec-send") {
-      // after your ensureSelect2(...) and initSendUI(...), call:
-      applyPrefill(window.WPECCAMPAIGN && window.WPECCAMPAIGN.prefill);
-    }
-  });
-
-  function setRowState($tr, state) {
-    $tr.attr("data-status", state);
-    $tr.find(".wpec-status-pill").text(state);
-    var id = $tr.data("id");
-    var $act = $tr.find("td").last();
-    $act.empty();
-
-    if (state === "paused") {
-      $act.append(
-        '<button class="button wpec-q-resume" data-id="' +
-          id +
-          '">Resume</button> '
-      );
-      $act.append(
-        '<button class="button wpec-q-cancel" data-id="' +
-          id +
-          '">Cancel</button>'
-      );
-    } else if (state === "queued" || state === "sending") {
-      $act.append(
-        '<button class="button wpec-q-pause" data-id="' +
-          id +
-          '">Pause</button> '
-      );
-      $act.append(
-        '<button class="button wpec-q-cancel" data-id="' +
-          id +
-          '">Cancel</button>'
-      );
-    } else if (state === "cancelled") {
-      $act.text("Cancelled");
-    } else if (state === "sent") {
-      $act.text("All sent");
-    } else if (state === "failed") {
-      $act.text("Completed with errors");
+  function bindSendHandlers() {
+    // Hide Queue button if campaign isn't a draft
+    var initialStatus = (
+      $("#wpec-campaign-status").val() || "draft"
+    ).toLowerCase();
+    if (initialStatus && initialStatus !== "draft") {
+      $("#wpec-queue-campaign").hide();
     } else {
-      $act.text("—");
+      $("#wpec-queue-campaign").show();
     }
+
+    // SEND TEST
+    $(document).on("click", "#wpec-send-test", function (e) {
+      e.preventDefault();
+
+      var to = ($("#wpec-test-to").val() || "").trim();
+      var subject = ($("#wpec-subject").val() || "").trim();
+      var fromName = ($("#wpec-from-name").val() || "").trim();
+      var fromEmail = ($("#wpec-from-email").val() || "").trim();
+      var body = getEditorHtml();
+
+      if (!to || !subject || !body) {
+        alert("Test needs To, Subject and Body.");
+        return;
+      }
+
+      var $btn = $(this);
+      $btn.prop("disabled", true);
+      $("#wpec-test-loader").show();
+
+      $.post(
+        WPECCAMPAIGN.ajaxUrl,
+        {
+          action: "wpec_send_test",
+          nonce: WPECCAMPAIGN.nonce,
+          to: to,
+          subject: subject,
+          from_name: fromName,
+          from_email: fromEmail,
+          body: body, // key must be "body"
+        },
+        function (res) {
+          if (res && res.success) {
+            alert("Test email sent.");
+          } else {
+            alert((res && res.data && res.data.message) || "Test failed.");
+          }
+        },
+        "json"
+      ).always(function () {
+        $btn.prop("disabled", false);
+        $("#wpec-test-loader").hide();
+      });
+    });
+
+    // SAVE DRAFT
+    $(document).on("click", "#wpec-save-draft", function (e) {
+      e.preventDefault();
+
+      var cid = parseInt($("#wpec-campaign-id").val() || "0", 10) || 0;
+      var name = ($("#wpec-name").val() || "").trim();
+      var subject = ($("#wpec-subject").val() || "").trim();
+      var fromName = ($("#wpec-from-name").val() || "").trim();
+      var fromEmail = ($("#wpec-from-email").val() || "").trim();
+      var body = getEditorHtml();
+
+      if (!subject || !body) {
+        alert("Subject and Body are required.");
+        return;
+      }
+
+      var $btn = $(this).prop("disabled", true);
+
+      $.post(
+        WPECCAMPAIGN.ajaxUrl,
+        {
+          action: "wpec_campaign_queue",
+          nonce: WPECCAMPAIGN.nonce,
+          campaign_id: cid,
+          name: name,
+          subject: subject,
+          from_name: fromName,
+          from_email: fromEmail,
+          body: body,
+          save_only: "1", // mark as draft
+        },
+        function (res) {
+          if (res && res.success) {
+            // store new campaign_id (in case this was a new draft)
+            if (res.data && res.data.campaign_id) {
+              $("#wpec-campaign-id").val(res.data.campaign_id);
+            }
+            $("#wpec-campaign-status").val("draft");
+            $("#wpec-queue-campaign").show(); // ensure queue button visible for drafts
+            alert("Draft saved.");
+          } else {
+            alert(
+              (res && res.data && res.data.message) || "Failed to save draft."
+            );
+          }
+        },
+        "json"
+      ).always(function () {
+        $btn.prop("disabled", false);
+      });
+    });
+
+    // QUEUE SEND → redirect to Queue page
+    $(document).on("click", "#wpec-queue-campaign", function (e) {
+      e.preventDefault();
+
+      var cid = parseInt($("#wpec-campaign-id").val() || "0", 10) || 0;
+      var name = ($("#wpec-name").val() || "").trim();
+      var subject = ($("#wpec-subject").val() || "").trim();
+      var fromName = ($("#wpec-from-name").val() || "").trim();
+      var fromEmail = ($("#wpec-from-email").val() || "").trim();
+      var body = getEditorHtml();
+      var listIds = $("#wpec-list-ids").val() || [];
+
+      if (!subject || !body || listIds.length === 0) {
+        alert("Subject, Body, and at least one list are required.");
+        return;
+      }
+
+      var $btn = $(this).prop("disabled", true);
+
+      $.post(
+        WPECCAMPAIGN.ajaxUrl,
+        {
+          action: "wpec_campaign_queue",
+          nonce: WPECCAMPAIGN.nonce,
+          campaign_id: cid,
+          name: name,
+          subject: subject,
+          from_name: fromName,
+          from_email: fromEmail,
+          body: body,
+          list_ids: listIds,
+        },
+        function (res) {
+          if (!res || !res.success) {
+            alert((res && res.data && res.data.message) || "Failed to queue.");
+            $btn.prop("disabled", false);
+            return;
+          }
+          // Hide the queue button to avoid double-send
+          $("#wpec-queue-campaign").hide();
+
+          // Redirect to Queue page
+          window.location.href = adminEditUrl({ page: "wpec-queue" });
+        },
+        "json"
+      ).fail(function () {
+        alert("Request failed.");
+        $btn.prop("disabled", false);
+      });
+    });
   }
 
-  // Pause
-  $(document).on("click", ".wpec-q-pause", function (e) {
-    e.preventDefault();
-    var id = $(this).data("id"),
-      $tr = $(this).closest("tr");
-    $.post(
-      WPECCAMPAIGN.ajaxUrl,
-      {
+  /* ========= QUEUE page ========= */
+
+  function bindQueueHandlers() {
+    // Pause
+    $(document).on("click", ".wpec-q-pause", function (e) {
+      e.preventDefault();
+      var id = parseInt($(this).data("id") || "0", 10) || 0;
+      if (!id) return;
+
+      $.post(WPECCAMPAIGN.ajaxUrl, {
         action: "wpec_campaign_pause",
         nonce: WPECCAMPAIGN.nonce,
         campaign_id: id,
-      },
-      function (res) {
-        if (res && res.success) setRowState($tr, "paused");
-        else alert((res && res.data && res.data.message) || "Pause failed.");
-      },
-      "json"
-    );
-  });
+      }).done(function (res) {
+        if (res && res.success) {
+          var $tr = $('tr[data-id="' + id + '"]');
+          $tr.attr("data-status", "paused");
+          $tr.find(".wpec-status-pill").text("paused");
+          $tr.find(".wpec-q-pause").hide();
+          $tr.find(".wpec-q-resume").show();
+        } else {
+          alert(res?.data?.message || "Pause failed.");
+        }
+      });
+    });
 
-  // Resume
-  $(document).on("click", ".wpec-q-resume", function (e) {
-    e.preventDefault();
-    var id = $(this).data("id"),
-      $tr = $(this).closest("tr");
-    $.post(
-      WPECCAMPAIGN.ajaxUrl,
-      {
+    // Resume
+    $(document).on("click", ".wpec-q-resume", function (e) {
+      e.preventDefault();
+      var id = parseInt($(this).data("id") || "0", 10) || 0;
+      if (!id) return;
+
+      $.post(WPECCAMPAIGN.ajaxUrl, {
         action: "wpec_campaign_resume",
         nonce: WPECCAMPAIGN.nonce,
         campaign_id: id,
-      },
-      function (res) {
-        if (res && res.success) setRowState($tr, "queued");
-        else alert((res && res.data && res.data.message) || "Resume failed.");
-      },
-      "json"
-    );
-  });
+      }).done(function (res) {
+        if (res && res.success) {
+          var $tr = $('tr[data-id="' + id + '"]');
+          $tr.attr("data-status", "sending");
+          $tr.find(".wpec-status-pill").text("sending");
+          $tr.find(".wpec-q-resume").hide();
+          $tr.find(".wpec-q-pause").show();
+        } else {
+          alert(res?.data?.message || "Resume failed.");
+        }
+      });
+    });
 
-  // Cancel
-  $(document).on("click", ".wpec-q-cancel", function (e) {
-    e.preventDefault();
-    if (!confirm("Cancel this campaign?")) return;
-    var id = $(this).data("id"),
-      $tr = $(this).closest("tr");
-    $.post(
-      WPECCAMPAIGN.ajaxUrl,
-      {
+    // Cancel
+    $(document).on("click", ".wpec-q-cancel", function (e) {
+      e.preventDefault();
+      var id = parseInt($(this).data("id") || "0", 10) || 0;
+      if (!id) return;
+      if (!confirm("Cancel this job?")) return;
+
+      $.post(WPECCAMPAIGN.ajaxUrl, {
         action: "wpec_campaign_cancel",
         nonce: WPECCAMPAIGN.nonce,
         campaign_id: id,
-      },
-      function (res) {
-        if (res && res.success) setRowState($tr, "cancelled");
-        else alert((res && res.data && res.data.message) || "Cancel failed.");
-      },
-      "json"
-    );
+      }).done(function (res) {
+        if (res && res.success) {
+          var $tr = $('tr[data-id="' + id + '"]');
+          $tr.attr("data-status", "cancelled");
+          $tr.find(".wpec-status-pill").text("cancelled");
+          $tr.find("td:last").html("<em>Cancelled</em>");
+        } else {
+          alert(res?.data?.message || "Cancel failed.");
+        }
+      });
+    });
+  }
+
+  /* ========= boot ========= */
+
+  $(function () {
+    // SEND page
+    if (onPage("wpec-send")) {
+      ensureSelect2(function () {
+        initSendSelects();
+        bindSendHandlers();
+      });
+      return;
+    }
+
+    // QUEUE page
+    if (onPage("wpec-queue")) {
+      bindQueueHandlers();
+      return;
+    }
   });
 })(jQuery);
