@@ -142,24 +142,28 @@ class Campaigns {
                     $actions[] = '<a class="button button-primary" href="'.esc_url($cont_url).'">'.esc_html__('Continue in Send','wp-email-campaigns').'</a>';
                 }
 
-                printf(
-                    '<tr>
-                    <td><a href="%s">%s</a></td>
-                    <td><a href="%s">%s</a></td>
-                    <td>%s</td>
-                    <td><span class="wpec-status-pill">%s</span></td>
-                    <td>%d / %d</td>
-                    <td>%s</td>
-                    <td>%s</td>
-                    </tr>',
-                    esc_html($r['name'] ?: '—'),
-                    esc_html($r['subject'] ?: '—'),
-                    esc_html($r['list_names'] ?: '—'),
-                    esc_html($display_status),
-                    (int)$r['sent'], (int)$r['failed'],
-                    $r['published_at'] ? esc_html($r['published_at']) : '—',
-                    implode(' ', $actions)
-                );
+             $name    = $r['name'] ?: '—';
+$subject = $r['subject'] ?: '—';
+
+printf(
+    '<tr>
+        <td><a href="%s">%s</a></td>
+        <td><a href="%s">%s</a></td>
+        <td>%s</td>
+        <td><span class="wpec-status-pill">%s</span></td>
+        <td>%d / %d</td>
+        <td>%s</td>
+        <td>%s</td>
+     </tr>',
+    esc_url($view_url), esc_html($name),
+    esc_url($view_url), esc_html($subject),
+    esc_html($r['list_names'] ?: '—'),
+    esc_html($r['status'] ?: '—'),
+    (int)$r['sent_count'], (int)$r['failed_count'],
+    $r['published_at'] ? esc_html($r['published_at']) : '—',
+    implode(' ', $actions)
+);
+
             }
         }
 
