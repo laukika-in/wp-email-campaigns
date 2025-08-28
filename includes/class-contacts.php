@@ -2395,21 +2395,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         $this->set_pagination_args( [ 'total_items' => $total, 'per_page' => $per_page, 'total_pages' => ceil( $total / $per_page ) ] );
     }
     public function column_default( $item, $col ) {
-    switch ( $col ) {
-        case 'email':
-        case 'first_name':
-        case 'last_name':
-            return esc_html( $item[ $col ] ?? '' );
-        case 'dup_count':
-            return esc_html( (string)($item['dup_count'] ?? '0') );
-        case 'current_list':
-            $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
-            return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
-        case 'other_lists': {
-    $meta = isset($item['other_lists_meta']) ? (string)$item['other_lists_meta'] : '';
-    if ($meta === '') {
-        return '<em>-</em>';
-    }
+        
     $pairs = explode('|', $meta);
     $links = [];
     foreach ($pairs as $pair) {
@@ -2428,6 +2414,28 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
             );
             $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
         }
+    }
+    switch ( $col ) {
+       // case 'email':
+        case 'email':
+            return sprintf(
+        '<a href="%s">%s</a>',
+        esc_url($url),
+        esc_html__(esc_html( $item['email'] ),'wp-email-campaigns') 
+    ); 
+       
+        case 'first_name':
+        case 'last_name':
+            return esc_html( $item[ $col ] ?? '' );
+        case 'dup_count':
+            return esc_html( (string)($item['dup_count'] ?? '0') );
+        case 'current_list':
+            $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
+            return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
+        case 'other_lists': {
+    $meta = isset($item['other_lists_meta']) ? (string)$item['other_lists_meta'] : '';
+    if ($meta === '') {
+        return '<em>-</em>';
     }
     return $links ? implode(', ', $links) : '<em>-</em>';
 }
