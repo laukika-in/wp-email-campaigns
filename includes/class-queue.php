@@ -85,7 +85,9 @@ class Queue {
                 $finished = ($queued === 0) || in_array($status, ['sent','failed','cancelled'], true);
 
                 echo '<tr data-id="'.$campaign_id.'" data-status="'.esc_attr($status).'">';
-                $detail = add_query_arg(
+                
+                // build Campaign Detail URL for this row
+$detail = add_query_arg(
     ['post_type'=>'email_campaign','page'=>'wpec-campaigns','view'=>'detail','id'=>(int)$r['id']],
     admin_url('edit.php')
 );
