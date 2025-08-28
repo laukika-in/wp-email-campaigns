@@ -2080,7 +2080,7 @@ $done = $eof;
 class WPEC_Lists_Table extends \WP_List_Table {
     public function get_columns() {
         return [
-            'name'       => __( 'Name', 'wp-email-campaigns' ),
+            'name'       => __( 'Namea', 'wp-email-campaigns' ),
             'status'     => __( 'Status', 'wp-email-campaigns' ),
             'metrics'    => __( 'Counts', 'wp-email-campaigns' ),
             'created_at' => __( 'Created', 'wp-email-campaigns' ),
