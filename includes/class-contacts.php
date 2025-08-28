@@ -2143,18 +2143,20 @@ class WPEC_Lists_Table extends \WP_List_Table {
     }
     
     public function column_default( $item, $col ) {
-        switch ( $col ) {
-           // case 'name': return '<a href="'.esc_url($view).'">'.esc_html($item['name']).'</a>';
-           case 'name': return sprintf('<a href="%s">%s</a>',
-                    esc_url($view), esc_html__($item['name'])
-                );
-           case 'status': return esc_html( ucfirst($item['status']) );
-            case 'created_at': return esc_html( $item['created_at'] );
-            case 'actions':
+        
                 $view = add_query_arg( [
                     'post_type' => 'email_campaign', 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => (int)$item['id'],
                 ], admin_url('edit.php') );
                 $dupes = admin_url('edit.php?post_type=email_campaign&page=wpec-duplicates');
+        switch ( $col ) {
+           // case 'name': return esc_html($item['name']);
+           case 'name':return sprintf('<a class="button" href="%s">%s</a> ',
+        
+                    esc_url($view), esc_html__('View','wp-email-campaigns')
+        );
+           case 'status': return esc_html( ucfirst($item['status']) );
+            case 'created_at': return esc_html( $item['created_at'] );
+            case 'actions':
                 return sprintf('<a class="button" href="%s">%s</a> <a class="button" href="%s">%s</a>',
                     esc_url($view), esc_html__('View','wp-email-campaigns'),
                     esc_url($dupes), esc_html__('View Duplicates','wp-email-campaigns')
