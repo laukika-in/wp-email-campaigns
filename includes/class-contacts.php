@@ -330,13 +330,13 @@ class Contacts {
             echo '<div class="wpec-toolbar">';
         // Left cluster — Saved views
         echo '<div class="cluster">';
-            echo '<strong>'.esc_html__('Saved views', 'wp-email-campaigns').'</strong>';
-            echo '<select id="wpec-preset" style="min-width:260px"></select>';
-            echo '<label><input type="checkbox" id="wpec-preset-default"> '.esc_html__('Default','wp-email-campaigns').'</label>';
-            echo '<button class="button" id="wpec-preset-load" disabled>'.esc_html__('Load','wp-email-campaigns').'</button>';
-            echo '<button class="button" id="wpec-preset-save">'.esc_html__('Save current as…','wp-email-campaigns').'</button>';
-            echo '<button class="button" id="wpec-preset-overwrite" disabled>'.esc_html__('Overwrite','wp-email-campaigns').'</button>';
-            echo '<button class="button" id="wpec-preset-delete" disabled>'.esc_html__('Delete','wp-email-campaigns').'</button>';
+        echo '<strong>'.esc_html__('Saved views', 'wp-email-campaigns').'</strong>';
+        echo '<select id="wpec-preset" style="min-width:260px"></select>';
+        echo '<label><input type="checkbox" id="wpec-preset-default"> '.esc_html__('Default','wp-email-campaigns').'</label>';
+        echo '<button class="button" id="wpec-preset-load" disabled>'.esc_html__('Load','wp-email-campaigns').'</button>';
+        echo '<button class="button" id="wpec-preset-save">'.esc_html__('Save current as…','wp-email-campaigns').'</button>';
+        echo '<button class="button" id="wpec-preset-overwrite" disabled>'.esc_html__('Overwrite','wp-email-campaigns').'</button>';
+        echo '<button class="button" id="wpec-preset-delete" disabled>'.esc_html__('Delete','wp-email-campaigns').'</button>';
         echo '</div>';
 
         // Right cluster — Export
@@ -400,9 +400,7 @@ class Contacts {
         echo '<div class="wpec-number-range">';
         echo '<input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0"> ';
         echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
-        echo '</div></label>';
-
-       
+        echo '</div></label>';       
 
         echo '</div>'; // row
         echo '<div id="wpec-active-filters"></div>';
