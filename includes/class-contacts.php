@@ -632,8 +632,7 @@ echo '</div></label>';
 
         // Helper to link to “All Contacts” with a pre-applied facet
         $contacts_url = function($param, $value){
-            $url = add_query_arg( [
-                'post_type' => 'email_campaign',
+            $url = add_query_arg( [ 
                 'page'      => 'wpec-contacts',
             ], admin_url('edit.php') );
             $url = add_query_arg( [ $param => $value ], $url );
@@ -657,8 +656,7 @@ echo '</div></label>';
             $chip_html = '<em>-</em>';
         } else {
             foreach ( $memberships as $m ) {
-                $list_url = add_query_arg( [
-                    'post_type' => 'email_campaign',
+                $list_url = add_query_arg( [ 
                     'page'      => 'wpec-lists',
                     'view'      => 'list',
                     'list_id'   => (int)$m['id'],
@@ -744,8 +742,7 @@ echo '</div></label>';
         echo '    <ul class="wpec-quick-actions">';
         // View duplicates (all lists)
         // View duplicates for this email only
-        $dupes_url = add_query_arg([
-            'post_type'    => 'email_campaign',
+        $dupes_url = add_query_arg([ 
             'page'         => 'wpec-duplicates',
             'focus_email'  => (string)$row['email'], // new param used by Duplicates screen
         ], admin_url('edit.php'));
@@ -765,8 +762,7 @@ echo '</div></label>';
         echo '<h2 style="margin-top:20px">'.esc_html__('Lists','wp-email-campaigns').'</h2>';
         echo '<div id="wpec-contact-memberships" class="wpec-chipset" style="margin:8px 0 12px 0">';
         foreach ( $memberships as $m ) {
-            $url = add_query_arg([
-                'post_type' => 'email_campaign',
+            $url = add_query_arg([ 
                 'page'      => 'wpec-lists',
                 'view'      => 'list',
                 'list_id'   => (int)$m['id'],
@@ -833,8 +829,7 @@ echo '</div></label>';
         $db->query( $db->prepare( "UPDATE $lists SET manual_added = COALESCE(manual_added,0)+1 WHERE id=%d", $list_id ) );
         $name = (string) $db->get_var( $db->prepare( "SELECT name FROM $lists WHERE id=%d", $list_id ) );
 
-        $list_url = add_query_arg( [
-            'post_type' => 'email_campaign',
+        $list_url = add_query_arg( [ 
             'page'      => 'wpec-lists',
             'view'      => 'list',
             'list_id'   => (int)$list_id,
@@ -1459,8 +1454,7 @@ echo '</div></label>';
         if ( is_wp_error( $result ) ) { wp_die( $result->get_error_message() ); }
 
         // Redirect back to Import page with resume flag
-        $url = add_query_arg( [
-            'post_type'         => 'email_campaign',
+        $url = add_query_arg( [ 
             'page'              => 'wpec-import',
             'wpec_start_import' => (int) $result['list_id'],
         ], admin_url( 'edit.php' ) );
