@@ -1359,7 +1359,7 @@ class Contacts {
             foreach ($list_ids as $lid) { $args[] = $lid; }
         }
 
-        $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email, c.status";
+        $select_cols = "c.id, CONCAT_WS(' ', c.first_name, c.last_name) AS full_name, c.email, c.status, c.created_at";
         foreach ( $cols as $cname ) { $select_cols .= ", c." . $cname; }
 
         // Human-readable list names (existing)
