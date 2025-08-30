@@ -1287,7 +1287,7 @@
         var html = "";
         rows.forEach(function (r) {
           var detailUrl = new URL(location.origin + location.pathname);
-          detailUrl.searchParams.set("page", "wpec-lists");
+          detailUrl.searchParams.set("page", "wpec-contacts");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
           html += "<tr>";
@@ -2156,7 +2156,7 @@
           const id = pair.slice(0, ix);
           const name = pair.slice(ix + 2);
           return (
-            '<a href="edit.php?page=wpec-lists&view=list&list_id=' +
+            '<a href="admin.php?page=wpec-lists&view=list&list_id=' +
             id +
             '">' +
             escapeHtml(name) +
@@ -2406,7 +2406,7 @@
                 : window.ajaxurl
                 ? window.ajaxurl.replace(
                     "admin-ajax.php",
-                    "edit.php?page=wpec-lists&view=list&list_id="
+                    "admin.php?page=wpec-lists&view=list&list_id="
                   )
                 : "";
             var href = base ? base + String(listId) : "#";
