@@ -2083,7 +2083,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
 
    public function column_actions( $item ) {
     $view  = add_query_arg( [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => (int)$item['id'] ], admin_url('admin.php') );
-    $dupes = add_query_arg( [ 'page' => 'wpec-duplicates' ], admin_url('admin.php') );
+    $dupes = add_query_arg(   [ 'page' => 'wpec-duplicates', 'list_id' => (int)$item['id'] ], admin_url('admin.php') );
 
     $cnt = isset($item['cnt']) ? (int)$item['cnt'] : 0;
 
