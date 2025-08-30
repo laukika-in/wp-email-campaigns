@@ -38,12 +38,15 @@ class CPT {
     //     'capability_type' => 'post',
     // ] );
  
+   
+    $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
+
     add_menu_page(
-        __( 'Lists', 'wp-email-campaigns' ),
-        __( 'Lists', 'wp-email-campaigns' ),
-        'manage_options',
+        __( 'Lists','wp-email-campaigns' ),
+        __( 'Lists','wp-email-campaigns' ),
+        $cap,
         'wpec-lists',
-        [ $this, 'render_contacts_page' ],
+        [ $this, 'render_send_screen' ],
         'dashicons-list-view',
         25
     );
