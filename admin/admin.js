@@ -1286,7 +1286,7 @@
               "<td>" + escapeHtml(r[c] == null ? "" : String(r[c])) + "</td>";
           });
           html += "<td>" + (r.status || "") + "</td>";
-          html += "<td>" + (r.created || "") + "</td>";
+          html += "<td>" + (r.created_at || "") + "</td>";
           html += "</tr>";
         });
         $("#wpec-lists-table tbody").html(html);
@@ -1976,7 +1976,7 @@
 
       // 5th TD = "List(s)" (index 4) — extra columns (if any) come after this
       const $cells = $(this).children("td");
-      const $listsCell = $cells.eq(4);
+      const $listsCell = $cells.eq(6);
       $listsCell.html(links.length ? links.join(", ") : "<em>-</em>");
     });
   }
