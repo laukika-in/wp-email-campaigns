@@ -1,18 +1,43 @@
 /* ==========================================================================
-   WP email campaigns — Admin Styles
+   WP Email Campaigns — Admin Styles
    ========================================================================== */
 
-/* Cards */
+/* ==========================================================================
+   1) Cards
+   ========================================================================== */
+
 .wpec-card {
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e5e7eb; /* unified border */
   border-radius: 8px;
   padding: 16px;
   margin: 12px 0;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
 }
 
-/* Loader (inline spinner element) */
+/* Vertical rhythm when multiple cards stack */
+.wpec-card + .wpec-card {
+  margin-top: 16px;
+}
+
+/* Card header blocks */
+.wpec-card-header {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.wpec-header-left {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex: 1 1 auto;
+}
+
+/* ==========================================================================
+   2) Inline Loader / Spinner
+   ========================================================================== */
+
 .wpec-loader {
   display: inline-block;
   width: 18px;
@@ -24,19 +49,24 @@
   vertical-align: middle;
   margin-left: 8px;
 }
+
 @keyframes wpecspin {
   to {
     transform: rotate(360deg);
   }
 }
 
-/* Progress bar */
+/* ==========================================================================
+   3) Progress Bar
+   ========================================================================== */
+
 .wpec-progress {
   background: #f3f4f6;
   border-radius: 6px;
   height: 12px;
   overflow: hidden;
 }
+
 .wpec-progress span {
   display: block;
   height: 100%;
@@ -44,7 +74,10 @@
   transition: width 0.2s ease;
 }
 
-/* Result panel (import summary) */
+/* ==========================================================================
+   4) Result Panel (Import Summary)
+   ========================================================================== */
+
 .wpec-result {
   margin-top: 12px;
   background: #f8fafc;
@@ -52,12 +85,16 @@
   border-radius: 8px;
   padding: 12px;
 }
+
 .wpec-result .wpec-stats {
   margin: 0;
   padding-left: 18px;
 }
 
-/* Pills */
+/* ==========================================================================
+   5) Pills / Status Chips
+   ========================================================================== */
+
 .wpec-pill {
   display: inline-block;
   padding: 2px 6px;
@@ -72,24 +109,104 @@
   color: #9a3412;
 }
 
-/* Toolbars + bulk progress */
+/* Contact status pills */
+.wpec-status-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  text-transform: none;
+  border: 1px solid transparent;
+}
+
+.wpec-status-pill.is-active {
+  background: #edf7ee;
+  color: #176a32;
+  border-color: #cfe7d2;
+}
+
+.wpec-status-pill.is-unsubscribed {
+  background: #f5f5f5;
+  color: #444;
+  border-color: #e2e2e2;
+}
+
+.wpec-status-pill.is-bounced {
+  background: #fff3f2;
+  color: #b42318;
+  border-color: #f3c6c3;
+}
+
+/* State-style pills used elsewhere */
+.wpec-pill-unsubscribed {
+  background: #d97706; /* amber-ish */
+  color: #fff;
+}
+
+.wpec-pill-bounced {
+  background: #ef4444; /* red */
+  color: #fff;
+}
+
+/* Tag/list chips */
+.wpec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #e2e4e7;
+  border-radius: 999px;
+  background: #fafbfc;
+  margin: 4px 6px 0 0;
+}
+
+.wpec-chip a {
+  text-decoration: none;
+}
+
+.wpec-chip .wpec-chip-remove {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: 2px;
+}
+
+.wpec-chip .wpec-chip-remove:hover {
+  color: #b42318;
+}
+
+/* ==========================================================================
+   6) Toolbars & Bulk Progress
+   ========================================================================== */
+
 .wpec-dup-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
 #wpec-dup-bulk-progress,
 #wpec-list-bulk-progress {
   margin: 10px 0;
 }
 
-/* Modal (overlay + windows) */
+/* ==========================================================================
+   7) Modal (Overlay + Windows)
+   ========================================================================== */
+
 #wpec-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.2);
   z-index: 10000;
 }
+
 #wpec-modal,
 #wpec-modal-list {
   position: fixed;
@@ -104,6 +221,7 @@
   max-width: 720px;
   width: 95%;
 }
+
 .wpec-modal-header {
   display: flex;
   align-items: center;
@@ -111,6 +229,7 @@
   padding: 12px 16px;
   border-bottom: 1px solid #e5e7eb;
 }
+
 .wpec-modal-body,
 .wpec-modal-inner {
   /* support both markup variants */
@@ -119,6 +238,7 @@
   overflow: auto;
   position: relative;
 }
+
 .wpec-modal-close {
   font-size: 22px;
   line-height: 1;
@@ -126,54 +246,69 @@
   border: 0;
   cursor: pointer;
 }
+
 .wpec-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-/* Expand rows (Lists page metrics) */
+/* ==========================================================================
+   8) Expand Rows (Lists Page Metrics)
+   ========================================================================== */
+
 .wpec-expand-row td {
   background: #fbfbfb;
   padding: 0 12px 12px;
 }
+
 .wpec-expand-box {
   padding: 12px 6px 6px;
   background: #fbfbfc;
   border: 1px dashed #ccd0d4;
 }
+
 .wpec-expand-loading {
   padding: 12px;
   color: #555;
 }
+
 .wpec-metrics-table th {
   width: 260px;
 }
 
-/* contacts directory — controls */
+/* ==========================================================================
+   9) Contacts Directory — Controls & Filters
+   ========================================================================== */
+
 #wpec-lists-controls {
   max-width: 1200px;
 }
+
 .wpec-filters {
   margin-top: 8px;
 }
+
 .wpec-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: flex-end;
 }
+
 .wpec-filter-row label {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 220px;
 }
+
 .wpec-number-range {
   display: flex;
   gap: 6px;
   align-items: center;
 }
+
 .wpec-filter-actions {
   margin-top: 10px;
 }
@@ -182,6 +317,7 @@
 .wpec-columns-toggle summary {
   cursor: pointer;
 }
+
 .wpec-columns-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -189,22 +325,44 @@
   margin-top: 8px;
 }
 
-/* Select2 tweaks */
+/* ==========================================================================
+   10) Select2 Tweaks
+   ========================================================================== */
+
+/* Generic width for Select2 controls in this plugin */
 .select2-container {
+  min-width: 240px;
+}
+
+/* Narrower minimum on filters where space is tighter */
+.wpec-filters .select2-container {
   min-width: 220px;
 }
+
+/* Multiple select height & padding */
 .select2-container .select2-selection--multiple {
   min-height: 32px;
 }
+
 .select2-container .select2-selection__rendered {
   padding: 2px 8px;
 }
 
-/* contacts table + scrolling */
+/* Explicit utility for wider select2s when needed */
+.wpec-select2 {
+  min-width: 240px;
+}
+
+/* ==========================================================================
+   11) Tables & Scrolling
+   ========================================================================== */
+
 .wpec-table-scroll {
   max-height: 62vh;
   overflow: auto;
 }
+
+/* Sticky table headers in lists table */
 #wpec-lists-table thead th {
   position: sticky;
   top: 0;
@@ -212,20 +370,32 @@
   z-index: 1;
 }
 
-/* Bulk bar (All Contacts) */
+/* Detail table */
+.wpec-detail-table th {
+  width: 220px;
+}
+
+/* ==========================================================================
+   12) Bulk Bar (All Contacts)
+   ========================================================================== */
+
 #wpec-bulkbar {
   display: flex;
   gap: 8px;
   align-items: center;
   max-width: 1200px;
 }
+
 #wpec-bulkbar .wpec-bulk-move {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-/* Pager */
+/* ==========================================================================
+   13) Pager
+   ========================================================================== */
+
 .wpec-pager {
   display: flex;
   align-items: center;
@@ -233,6 +403,7 @@
   justify-content: flex-end;
   margin-top: 10px;
 }
+
 #wpec-page-numbers .wpec-page-link {
   display: inline-block;
   padding: 3px 6px;
@@ -242,67 +413,41 @@
   color: #1d2327;
   background: #fff;
 }
+
 #wpec-page-numbers .wpec-page-link.is-active {
   background: #2271b1;
   color: #fff;
   border-color: #2271b1;
 }
+
 #wpec-page-numbers .wpec-page-link.is-disabled {
   opacity: 0.5;
   cursor: default;
   pointer-events: none;
 }
+
 #wpec-page-numbers .dots {
   padding: 0 4px;
   color: #777;
 }
-.wpec-select2 {
-  min-width: 240px;
-}
-.select2-container {
-  min-width: 240px;
-}
-.wpec-pill-unsubscribed {
-  background: #d97706;
-  color: #fff;
-} /* amber-ish */
-.wpec-pill-bounced {
-  background: #ef4444;
-  color: #fff;
-} /* red */
-/* ===== Contact Detail page ===== */
+
+/* ==========================================================================
+   14) Contact Detail Page Layout
+   ========================================================================== */
+
 .wpec-detail-grid {
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 16px;
 }
+
 @media (max-width: 1024px) {
   .wpec-detail-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.wpec-card {
-  background: #fff;
-  border: 1px solid #dcdcde;
-  border-radius: 8px;
-  padding: 16px;
-}
-.wpec-card + .wpec-card {
-  margin-top: 16px;
-}
-
-.wpec-card-header {
-  display: flex;
-  align-items: stretch;
-  gap: 16px;
-}
-.wpec-header-left {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  flex: 1 1 auto;
-}
+/* Avatar & header bits */
 .wpec-avatar {
   width: 56px;
   height: 56px;
@@ -316,93 +461,45 @@
   color: #3c434a;
   border: 1px solid #e2e4e7;
 }
+
 .wpec-head-meta {
   line-height: 1.35;
 }
+
 .wpec-head-name {
   margin: 0 0 4px 0;
   display: flex;
   gap: 8px;
   align-items: center;
 }
+
 .wpec-head-email {
   color: #50575e;
 }
+
 .wpec-head-lists {
   margin-top: 6px;
 }
 
+/* Header action controls */
 .wpec-header-actions {
   display: flex;
   gap: 10px;
   align-items: flex-end;
   flex-wrap: wrap;
 }
+
 .wpec-header-actions label select {
   min-width: 200px;
 }
 
-.wpec-status-pill {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1;
-  text-transform: none;
-  border: 1px solid transparent;
-}
-.wpec-status-pill.is-active {
-  background: #edf7ee;
-  color: #176a32;
-  border-color: #cfe7d2;
-}
-.wpec-status-pill.is-unsubscribed {
-  background: #f5f5f5;
-  color: #444;
-  border-color: #e2e2e2;
-}
-.wpec-status-pill.is-bounced {
-  background: #fff3f2;
-  color: #b42318;
-  border-color: #f3c6c3;
-}
-
-.wpec-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid #e2e4e7;
-  border-radius: 999px;
-  background: #fafbfc;
-  margin: 4px 6px 0 0;
-}
-.wpec-chip a {
-  text-decoration: none;
-}
-.wpec-chip .wpec-chip-remove {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: #666;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 2px;
-  margin-left: 2px;
-}
-.wpec-chip .wpec-chip-remove:hover {
-  color: #b42318;
-}
-
-.wpec-detail-table th {
-  width: 220px;
-}
+/* Quick actions list */
 .wpec-quick-actions {
   list-style: none;
   margin: 0;
   padding: 0;
 }
+
 .wpec-quick-actions li + li {
   margin-top: 8px;
 }
