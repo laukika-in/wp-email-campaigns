@@ -2181,9 +2181,9 @@ public function column_default( $item, $col ) {
             // Keep in sync with column_actions output for bulk row actions
             return $this->column_actions($item);
     }
-    return '';
-}
-   public function no_items() { _e( 'No lists found.', 'wp-email-campaigns' ); }
+        return '';
+    }
+    public function no_items() { _e( 'No lists found.', 'wp-email-campaigns' ); }
 }
 
 // ---------- Per-list contacts table ----------
@@ -2203,142 +2203,142 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     }
     public function get_primary_column_name() { return 'email'; }
     protected function column_cb( $item ) {
-        $value = (int)$this->list_id . ':' . (int)$item['contact_id'];
-        return sprintf('<input type="checkbox" name="ids[]" value="%s"/>', esc_attr($value));
-    }
-    public function prepare_items() {
-        global $wpdb;
-        $li = Helpers::table('list_items'); 
-        $ct = Helpers::table('contacts');
-    $lists = Helpers::table('lists');
-        
-        $per_page = 50; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
-        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
-        $where = "WHERE li.list_id=%d"; $args  = [ $this->list_id ];
-        if ( $search ) {
-            $where .= " AND (c.email LIKE %s OR c.first_name LIKE %s OR c.last_name LIKE %s)";
-            $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%';
+            $value = (int)$this->list_id . ':' . (int)$item['contact_id'];
+            return sprintf('<input type="checkbox" name="ids[]" value="%s"/>', esc_attr($value));
         }
-        $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $li li INNER JOIN $ct c ON c.id=li.contact_id $where", $args ) );
+    public function prepare_items() {
+            global $wpdb;
+            $li = Helpers::table('list_items'); 
+            $ct = Helpers::table('contacts');
+        $lists = Helpers::table('lists');
+            
+            $per_page = 50; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
+            $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+            $where = "WHERE li.list_id=%d"; $args  = [ $this->list_id ];
+            if ( $search ) {
+                $where .= " AND (c.email LIKE %s OR c.first_name LIKE %s OR c.last_name LIKE %s)";
+                $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%';
+            }
+            $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $li li INNER JOIN $ct c ON c.id=li.contact_id $where", $args ) );
 
-       $rows = $wpdb->get_results( $wpdb->prepare(
-    "SELECT 
-        c.id AS contact_id,
-        c.email,
-        CONCAT_WS(' ', c.first_name, c.last_name) AS name,
-        c.status,
-        li.created_at,
-        li.is_duplicate_import,
-        (
-          SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li2.created_at DESC SEPARATOR ', ')
-          FROM $li li2 
-          INNER JOIN $lists l ON l.id = li2.list_id
-          WHERE li2.contact_id = c.id
-        ) AS lists,
-        (
-          SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li2.created_at DESC SEPARATOR '|')
-          FROM $li li2 
-          INNER JOIN $lists l ON l.id = li2.list_id
-          WHERE li2.contact_id = c.id
-        ) AS lists_meta
-     FROM $li li 
-     INNER JOIN $ct c ON c.id=li.contact_id
-     $where
-     ORDER BY li.id DESC
-     LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
-        $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
-        $this->set_pagination_args( [ 'total_items'=>$total, 'per_page'=>$per_page, 'total_pages'=>ceil( $total / $per_page ) ] );
+        $rows = $wpdb->get_results( $wpdb->prepare(
+        "SELECT 
+            c.id AS contact_id,
+            c.email,
+            CONCAT_WS(' ', c.first_name, c.last_name) AS name,
+            c.status,
+            li.created_at,
+            li.is_duplicate_import,
+            (
+            SELECT GROUP_CONCAT(DISTINCT l.name ORDER BY li2.created_at DESC SEPARATOR ', ')
+            FROM $li li2 
+            INNER JOIN $lists l ON l.id = li2.list_id
+            WHERE li2.contact_id = c.id
+            ) AS lists,
+            (
+            SELECT GROUP_CONCAT(DISTINCT CONCAT(l.id,'::',l.name) ORDER BY li2.created_at DESC SEPARATOR '|')
+            FROM $li li2 
+            INNER JOIN $lists l ON l.id = li2.list_id
+            WHERE li2.contact_id = c.id
+            ) AS lists_meta
+        FROM $li li 
+        INNER JOIN $ct c ON c.id=li.contact_id
+        $where
+        ORDER BY li.id DESC
+        LIMIT %d OFFSET %d", array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
+            $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
+            $this->set_pagination_args( [ 'total_items'=>$total, 'per_page'=>$per_page, 'total_pages'=>ceil( $total / $per_page ) ] );
+        }
+        public function get_table_classes() {
+        return [ 'wp-list-table', 'widefat', 'fixed', 'striped', 'table-view-list', 'wpec-table' ];
     }
-    public function get_table_classes() {
-    return [ 'wp-list-table', 'widefat', 'fixed', 'striped', 'table-view-list', 'wpec-table' ];
-}
 
-   public function column_email( $item ) {
-    $view  = add_query_arg( [
-        'page'       => 'wpec-lists',
-        'view'       => 'contact',
-        'contact_id' => (int)$item['contact_id']
-    ], admin_url('admin.php'));
+    public function column_email( $item ) {
+        $view  = add_query_arg( [
+            'page'       => 'wpec-lists',
+            'view'       => 'contact',
+            'contact_id' => (int)$item['contact_id']
+        ], admin_url('admin.php'));
 
-    $email = $item['email'] ?? '';
-    $dup   = !empty($item['is_duplicate_import'])
-        ? ' <span class="wpec-pill wpec-pill-dup" title="'.esc_attr__('Imported as duplicate','wp-email-campaigns').'">'.esc_html__('Duplicate','wp-email-campaigns').'</span>'
-        : '';
+        $email = $item['email'] ?? '';
+        $dup   = !empty($item['is_duplicate_import'])
+            ? ' <span class="wpec-pill wpec-pill-dup" title="'.esc_attr__('Imported as duplicate','wp-email-campaigns').'">'.esc_html__('Duplicate','wp-email-campaigns').'</span>'
+            : '';
 
-    return sprintf(
-        '<strong><a class="row-title" href="%s">%s</a></strong>%s',
-        esc_url($view),
-        esc_html($email),
-        $dup
-    );
-}
-
-    public function column_status( $item ) {
-    $status = strtolower($item['status'] ?? '');
-    $map    = [
-        'active'        => 'is-active',
-        'unsubscribed'  => 'is-unsubscribed',
-        'bounced'       => 'is-bounced',
-    ];
-    $cls = 'wpec-status-pill ' . ($map[$status] ?? 'is-active');
-    $label = $status === 'unsubscribed' ? __( 'Do Not Send', 'wp-email-campaigns' )
-           : ( $status === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' ) : __( 'Active', 'wp-email-campaigns' ) );
-    return sprintf('<span class="%s">%s</span>', esc_attr($cls), esc_html($label));
-}
-
-public function column_actions( $item ) {
-    $view = add_query_arg( [
-        'page'       => 'wpec-lists',
-        'view'       => 'contact',
-        'contact_id' => (int)$item['contact_id']
-    ], admin_url('admin.php'));
-
-    $del = sprintf(
-        '<a href="#" class="button button-small wpec-del-from-list" data-list-id="%d" data-contact-id="%d" title="%s">
-            <span class="dashicons dashicons-trash" aria-hidden="true"></span> %s
-        </a>',
-        (int)$this->list_id,
-        (int)$item['contact_id'],
-        esc_attr__('Remove from this list','wp-email-campaigns'),
-        esc_html__('Delete','wp-email-campaigns')
-    );
-
-    return sprintf(
-        '<div class="wpec-actions">
-            <a class="button button-small" href="%s" title="%s">
-                <span class="dashicons dashicons-visibility" aria-hidden="true"></span> %s
-            </a>
-            %s
-        </div>',
-        esc_url($view), esc_attr__('View contact detail','wp-email-campaigns'), esc_html__('View detail','wp-email-campaigns'),
-        $del
-    );
-}
-
-public function no_items() { _e( 'No contacts found in this list.', 'wp-email-campaigns' ); }
-
-    public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
-    // ADD this method inside WPEC_List_Items_Table (below other column_* methods)
-public function column_lists( $item ) {
-    $meta = $item['lists_meta'] ?? '';
-    if ( ! $meta ) {
-        return $item['lists'] ? esc_html($item['lists']) : '<em>-</em>';
-    }
-    $parts = array_filter( array_map( 'trim', explode( '|', $meta ) ) );
-    $chips = [];
-    foreach ( $parts as $p ) {
-        $ix = strpos( $p, '::' );
-        if ( $ix === false ) continue;
-        $id   = (int) substr( $p, 0, $ix );
-        $name = substr( $p, $ix + 2 );
-        $url  = add_query_arg( [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => $id ], admin_url( 'admin.php' ) );
-        $chips[] = sprintf(
-            '<span class="wpec-chip"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><a href="%s">%s</a></span>',
-            esc_url($url), esc_html($name)
+        return sprintf(
+            '<strong><a class="row-title" href="%s">%s</a></strong>%s',
+            esc_url($view),
+            esc_html($email),
+            $dup
         );
     }
-    return $chips ? implode( ' ', $chips ) : '<em>-</em>';
-}
+
+    public function column_status( $item ) {
+        $status = strtolower($item['status'] ?? '');
+        $map    = [
+            'active'        => 'is-active',
+            'unsubscribed'  => 'is-unsubscribed',
+            'bounced'       => 'is-bounced',
+        ];
+        $cls = 'wpec-status-pill ' . ($map[$status] ?? 'is-active');
+        $label = $status === 'unsubscribed' ? __( 'Do Not Send', 'wp-email-campaigns' )
+            : ( $status === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' ) : __( 'Active', 'wp-email-campaigns' ) );
+        return sprintf('<span class="%s">%s</span>', esc_attr($cls), esc_html($label));
+    }
+
+    public function column_actions( $item ) {
+        $view = add_query_arg( [
+            'page'       => 'wpec-lists',
+            'view'       => 'contact',
+            'contact_id' => (int)$item['contact_id']
+        ], admin_url('admin.php'));
+
+        $del = sprintf(
+            '<a href="#" class="button button-small wpec-del-from-list" data-list-id="%d" data-contact-id="%d" title="%s">
+                <span class="dashicons dashicons-trash" aria-hidden="true"></span> %s
+            </a>',
+            (int)$this->list_id,
+            (int)$item['contact_id'],
+            esc_attr__('Remove from this list','wp-email-campaigns'),
+            esc_html__('Delete','wp-email-campaigns')
+        );
+
+        return sprintf(
+            '<div class="wpec-actions">
+                <a class="button button-small" href="%s" title="%s">
+                    <span class="dashicons dashicons-visibility" aria-hidden="true"></span> %s
+                </a>
+                %s
+            </div>',
+            esc_url($view), esc_attr__('View contact detail','wp-email-campaigns'), esc_html__('View detail','wp-email-campaigns'),
+            $del
+        );
+        }
+
+        public function no_items() { _e( 'No contacts found in this list.', 'wp-email-campaigns' ); }
+
+            public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
+            // ADD this method inside WPEC_List_Items_Table (below other column_* methods)
+        public function column_lists( $item ) {
+            $meta = $item['lists_meta'] ?? '';
+            if ( ! $meta ) {
+                return $item['lists'] ? esc_html($item['lists']) : '<em>-</em>';
+            }
+            $parts = array_filter( array_map( 'trim', explode( '|', $meta ) ) );
+            $chips = [];
+            foreach ( $parts as $p ) {
+                $ix = strpos( $p, '::' );
+                if ( $ix === false ) continue;
+                $id   = (int) substr( $p, 0, $ix );
+                $name = substr( $p, $ix + 2 );
+                $url  = add_query_arg( [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => $id ], admin_url( 'admin.php' ) );
+                $chips[] = sprintf(
+                    '<span class="wpec-chip"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><a href="%s">%s</a></span>',
+                    esc_url($url), esc_html($name)
+                );
+            }
+            return $chips ? implode( ' ', $chips ) : '<em>-</em>';
+        }
 
 
 }
@@ -2353,8 +2353,8 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         $this->list_id = (int) $list_id;     
         $this->focus_email = trim( (string) $focus_email );
     }
-    public function get_columns() {
-    return [
+public function get_columns() {
+    $cols = [
         'cb'            => '<input type="checkbox" />',
         'email'         => __( 'Email', 'wp-email-campaigns' ),
         'first_name'    => __( 'First name', 'wp-email-campaigns' ),
@@ -2362,30 +2362,33 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         'dup_count'     => __( 'Duplicate count', 'wp-email-campaigns' ),
         'current_list'  => __( 'List', 'wp-email-campaigns' ),
         'imported_at'   => __( 'Last imported date', 'wp-email-campaigns' ),
-        'other_lists'   => __( 'Duplicated lists', 'wp-email-campaigns' ), // <-- renamed + new data
+        'other_lists'   => __( 'Duplicated lists', 'wp-email-campaigns' ),
         'actions'       => __( 'Actions', 'wp-email-campaigns' ),
     ];
+    if ( ! $this->list_id ) unset($cols['current_list']);
+    return $cols;
 }
+
 
     public function get_primary_column_name() { return 'email'; }
     public function column_email( $item ) {
-    $email  = esc_html( $item['email'] ?? '' );
-    $status = isset( $item['status'] ) ? strtolower( $item['status'] ) : '';
-    $pill   = '';
+        $view = add_query_arg(
+            [ 'page' => 'wpec-lists', 'view' => 'contact', 'contact_id' => (int)$item['contact_id'] ],
+            admin_url('admin.php')
+        );
+        $email  = $item['email'] ?? '';
+        $status = isset($item['status']) ? strtolower($item['status']) : '';
+        $pill   = $status === 'unsubscribed'
+                    ? ' <span class="wpec-pill wpec-pill-dnd">'.esc_html__('DND','wp-email-campaigns').'</span>'
+                    : ( $status === 'bounced'
+                        ? ' <span class="wpec-pill wpec-pill-bounced">'.esc_html__('Bounced','wp-email-campaigns').'</span>'
+                        : '' );
 
-    if ( $status === 'unsubscribed' ) {
-        $pill = ' <span class="wpec-pill wpec-pill-dnd">' . esc_html__( 'DND', 'wp-email-campaigns' ) . '</span>';
-    } elseif ( $status === 'bounced' ) {
-        $pill = ' <span class="wpec-pill wpec-pill-bounced">' . esc_html__( 'Bounced', 'wp-email-campaigns' ) . '</span>';
+        return sprintf('<a class="row-title" href="%s">%s</a>%s',
+            esc_url($view), esc_html($email), $pill
+        );
     }
 
-    return sprintf(
-        '<a href="%s">%s%s</a>',
-        esc_url($view),
-        esc_html($email),
-        $pill
-    );
-    }
 
     protected function column_cb( $item ) {
         $value = (int)$item['list_id'] . ':' . (int)$item['contact_id'];
@@ -2393,128 +2396,168 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     }
     public function prepare_items() {
         global $wpdb;
-
-        $ct    = Helpers::table('contacts');
-        $li    = Helpers::table('list_items');
-        $lists = Helpers::table('lists');
-
+        $ct = Helpers::table('contacts');
         $dupes = Helpers::table('dupes');
-        $per_page = 30;
-        $paged = max(1, (int)($_GET['paged'] ?? 1)); 
-        $offset = ( $paged - 1 ) * $per_page;
-        $search = isset($_REQUEST['s']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['s']))) : '';
+        $lists = Helpers::table('lists');
+        $li = Helpers::table('list_items');
 
-       
-$args  = [ $this->list_id, $this->list_id, $this->list_id, $this->list_id ];
-$where = "WHERE c_sel.email <> ''";
-        if ( $this->list_id ) { $where .= " AND d.list_id=%d"; $args[] = $this->list_id; }
-        // Filter by the focused email if provided (case-insensitive)
+        $per_page = 30;
+        $paged    = max(1, (int)($_GET['paged'] ?? 1));
+        $offset   = ($paged - 1) * $per_page;
+
+        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+        $where  = "WHERE 1=1";
+        $args   = [];
+
+        if ( $this->list_id ) {
+            $where .= " AND d.list_id=%d";
+            $args[] = $this->list_id;
+
+            // ✅ Only contacts in THIS list that also exist in ANY OTHER list
+            $where .= " AND EXISTS (
+                SELECT 1 FROM $li liX
+                WHERE liX.contact_id = d.contact_id AND liX.list_id <> d.list_id
+            )";
+        } else {
+            // ✅ Global view: keep only contacts that are in 2+ lists
+            $where .= " AND (
+                SELECT COUNT(DISTINCT liX.list_id)
+                FROM $li liX
+                WHERE liX.contact_id = d.contact_id
+            ) > 1";
+        }
+
+        // Focused email (case-insensitive)
         if ( $this->focus_email !== '' ) {
             $where .= " AND LOWER(d.email) = LOWER(%s)";
             $args[] = $this->focus_email;
         }
 
-       if ( $search ) {
-    $where .= " AND (c_sel.email LIKE %s OR c_sel.first_name LIKE %s OR c_sel.last_name LIKE %s)";
-    $like = '%'. $wpdb->esc_like($search) .'%';
-    $args = array_merge($args, [ $like, $like, $like ]);
-}
-        $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $dupes d $where", $args ) );
-       $sql_base = "
-  SELECT
-    c_sel.email,
-    MIN(c_sel.id) AS any_contact_id_in_selected,
-    COUNT(DISTINCT CASE WHEN li_all.list_id <> %d THEN li_all.list_id END) AS other_lists_count,
-    GROUP_CONCAT(
-      DISTINCT CASE WHEN li_all.list_id <> %d
-        THEN CONCAT(l_all.id, '::', l_all.name)
-      END
-      ORDER BY l_all.name SEPARATOR '|'
-    ) AS other_lists_meta,
-    GROUP_CONCAT(
-      DISTINCT CASE WHEN li_all.list_id = %d
-        THEN CONCAT(l_all.id, '::', l_all.name)
-      END
-      ORDER BY l_all.name SEPARATOR '|'
-    ) AS selected_lists_meta
-  FROM $ct c_sel
-  INNER JOIN $li li_sel    ON li_sel.contact_id = c_sel.id AND li_sel.list_id = %d
-  INNER JOIN $ct c_all     ON c_all.email = c_sel.email
-  INNER JOIN $li li_all    ON li_all.contact_id = c_all.id
-  INNER JOIN $lists l_all  ON l_all.id = li_all.list_id
-  $where
-  GROUP BY c_sel.email
-  HAVING other_lists_count > 0
-";
-$total = (int) $wpdb->get_var(
-  $wpdb->prepare("SELECT COUNT(*) FROM ($sql_base) t", $args)
-);
-
-$sql = $sql_base . " ORDER BY other_lists_count DESC, c_sel.email ASC LIMIT %d OFFSET %d";
-$rows = $wpdb->get_results(
-  $wpdb->prepare($sql, array_merge($args, [ $per_page, $offset ])),
-  ARRAY_A
-);
-
-
-        $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
-        $this->set_pagination_args( [ 'total_items' => $total, 'per_page' => $per_page, 'total_pages' => ceil( $total / $per_page ) ] );
-    }
-    public function column_default( $item, $col ) {
-        
-    $pairs = explode('|', $meta);
-    $links = [];
-    foreach ($pairs as $pair) {
-        $parts = explode('::', $pair, 2);
-        $lid   = isset($parts[0]) ? (int)$parts[0] : 0;
-        $lname = isset($parts[1]) ? $parts[1] : '';
-        if ($lid && $lname !== '') {
-            $url = add_query_arg(
-                [
-                    'post_type' => 'email_campaign',
-                    'page'      => 'wpec-lists',
-                    'view'      => 'list',
-                    'list_id'   => $lid,
-                ],
-                admin_url('edit.php')
-            );
-            $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
+        if ( $search ) {
+            $like = '%'.$wpdb->esc_like($search).'%';
+            $where .= " AND (d.email LIKE %s OR d.first_name LIKE %s OR d.last_name LIKE %s)";
+            array_push($args, $like, $like, $like);
         }
+
+        $total = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM $dupes d $where", $args
+        ));
+
+        $sql = "
+            SELECT
+                d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
+                d.list_id, l.name AS current_list,
+                (
+                    SELECT COUNT(*) FROM $dupes d2
+                    WHERE d2.contact_id = d.contact_id
+                ) AS dup_count,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT CONCAT(l2.id,'::',l2.name)
+                                        ORDER BY li2.created_at DESC SEPARATOR '|')
+                    FROM $li li2
+                    INNER JOIN $lists l2 ON l2.id = li2.list_id
+                    WHERE li2.contact_id = d.contact_id
+                    AND li2.list_id <> d.list_id
+                ) AS other_lists_meta,
+                d.contact_id,
+                c.status
+            FROM $dupes d
+            INNER JOIN $lists l ON l.id = d.list_id
+            INNER JOIN $ct c ON c.id = d.contact_id
+            $where
+            ORDER BY LOWER(d.email) ASC, d.contact_id ASC, d.id DESC
+            LIMIT %d OFFSET %d
+        ";
+
+        $rows = $wpdb->get_results(
+            $wpdb->prepare($sql, array_merge($args, [ $per_page, $offset ])), ARRAY_A
+        );
+
+        $this->items = $rows;
+        $this->_column_headers = [ $this->get_columns(), [], [] ];
+        $this->set_pagination_args([
+            'total_items' => $total,
+            'per_page'    => $per_page,
+            'total_pages' => ceil($total / $per_page),
+        ]);
     }
-    switch ( $col ) {
-       // case 'email':
-        case 'email':
-            
+
+    public function column_default( $item, $col ) {            
+        $pairs = explode('|', $meta);
+        $links = [];
+        foreach ($pairs as $pair) {
+            $parts = explode('::', $pair, 2);
+            $lid   = isset($parts[0]) ? (int)$parts[0] : 0;
+            $lname = isset($parts[1]) ? $parts[1] : '';
+            if ($lid && $lname !== '') {
+                $url = add_query_arg(
+                    [
+                        'post_type' => 'email_campaign',
+                        'page'      => 'wpec-lists',
+                        'view'      => 'list',
+                        'list_id'   => $lid,
+                    ],
+                    admin_url('edit.php')
+                );
+                $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
+            }
+        }
+        switch ( $col ) {
         case 'first_name':
         case 'last_name':
-            return esc_html( $item[ $col ] ?? '' );
+            return esc_html( $item[$col] ?? '' );
+
         case 'dup_count':
             return esc_html( (string)($item['dup_count'] ?? '0') );
-        case 'current_list':
-            $url = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>(int)$item['list_id'] ], admin_url('edit.php') );
-            return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($item['current_list'] ?? ('#'.(int)$item['list_id'])) );
+
+        case 'current_list': {
+            $url = add_query_arg(
+                [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => (int)$item['list_id'] ],
+                admin_url('admin.php')
+            );
+            $label = $item['current_list'] ?? ('#'.(int)$item['list_id']);
+            return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($label));
+        }
+
         case 'other_lists': {
-    $meta = isset($item['other_lists_meta']) ? (string)$item['other_lists_meta'] : '';
-    if ($meta === '') {
-        return '<em>-</em>';
-    }
-    return $links ? implode(', ', $links) : '<em>-</em>';
-}
+            $meta = (string)($item['other_lists_meta'] ?? '');
+            if ( $meta === '' ) return '<em>-</em>';
+
+            $pairs = array_filter(array_map('trim', explode('|', $meta)));
+            $links = [];
+            foreach ( $pairs as $pair ) {
+                [$lid, $lname] = array_pad(explode('::', $pair, 2), 2, '');
+                $lid = (int)$lid;
+                if ( $lid && $lname !== '' ) {
+                    $url = add_query_arg(
+                        [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => $lid ],
+                        admin_url('admin.php')
+                    );
+                    $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
+                }
+            }
+            return $links ? implode(', ', $links) : '<em>-</em>';
+        }
 
         case 'imported_at':
             return esc_html( $item['imported_at'] ?? '' );
-        case 'actions':
-            $view = add_query_arg( [ 'post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'contact','contact_id'=>(int)$item['contact_id'] ], admin_url('edit.php') );
-            $btn = sprintf(
-                '<button type="button" class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d">%s</button> <a class="button button-small" href="%s">%s</a>',
+
+        case 'actions': {
+            $view = add_query_arg(
+                [ 'page'=>'wpec-lists','view'=>'contact','contact_id'=>(int)$item['contact_id'] ],
+                admin_url('admin.php')
+            );
+            return sprintf(
+                '<a class="button button-small wpec-del-dup" data-list-id="%d" data-contact-id="%d" href="#">%s</a>
+                 <a class="button button-small" href="%s">%s</a>',
                 (int)$item['list_id'], (int)$item['contact_id'],
-                esc_html__('Delete', 'wp-email-campaigns'),
+                esc_html__('Delete','wp-email-campaigns'),
                 esc_url($view), esc_html__('View detail','wp-email-campaigns')
             );
-            return $btn;
+        }
     }
     return '';
-}
+    }
 
     public function no_items() { _e( 'No duplicates found.', 'wp-email-campaigns' ); }
 }
