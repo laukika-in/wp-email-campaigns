@@ -86,7 +86,8 @@ class Contacts {
             __( 'Contacts', 'wp-email-campaigns' ),
             $cap,
             'wpec-contacts',
-            [ $this, 'render_all_contacts' ],
+            
+  [ $this, 'route_contacts' ],
             'dashicons-groups',
             26
         );
