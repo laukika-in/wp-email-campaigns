@@ -1282,7 +1282,7 @@
           html += "<td>" + emailHtml + "</td>";
 
           html += "<td>" + (r.status || "") + "</td>";
-          html += "<td>" + (r.created_at || "") + "</td>";
+          html += "<td>" + r.created_at + "</td>";
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
 
           cols.forEach(function (c) {
