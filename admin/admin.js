@@ -2397,12 +2397,10 @@
             var base =
               WPEC && WPEC.listViewBase
                 ? WPEC.listViewBase
-                : window.ajaxurl
-                ? window.ajaxurl.replace(
+                : window.ajaxurl.replace(
                     "admin-ajax.php",
                     "edit.php?page=wpec-lists&view=list&list_id="
-                  )
-                : "";
+                  );
             var href = base ? base + String(listId) : "#";
             var chip =
               '<span class="wpec-chip" data-list-id="' +
