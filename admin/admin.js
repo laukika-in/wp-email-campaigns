@@ -1285,6 +1285,8 @@
             html +=
               "<td>" + escapeHtml(r[c] == null ? "" : String(r[c])) + "</td>";
           });
+          html += "<td>" + (r.status || "") + "</td>";
+          html += "<td>" + (r.created_at || "") + "</td>";
           html += "</tr>";
         });
         $("#wpec-lists-table tbody").html(html);
@@ -1322,6 +1324,10 @@
         return "City";
       case "postal_code":
         return "Postal code";
+      case "status":
+        return "Status";
+      case "created_at":
+        return "Created";
       default:
         return key;
     }
