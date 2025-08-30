@@ -2394,12 +2394,19 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     public function prepare_items() {
         global $wpdb;
 
-        $ct = Helpers::table('contacts');
+        $ct    = Helpers::table('contacts');
+        $li    = Helpers::table('list_items');
+        $lists = Helpers::table('lists');
 
-        $dupes = Helpers::table('dupes'); $lists = Helpers::table('lists'); $li = Helpers::table('list_items');
-        $per_page = 30; $paged = max(1, (int)($_GET['paged'] ?? 1)); $offset = ( $paged - 1 ) * $per_page;
-        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
-        $where = "WHERE 1=1"; $args = [];
+        $dupes = Helpers::table('dupes');
+        $per_page = 30;
+        $paged = max(1, (int)($_GET['paged'] ?? 1)); 
+        $offset = ( $paged - 1 ) * $per_page;
+        $search = isset($_REQUEST['s']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['s']))) : '';
+
+       
+$args  = [ $this->list_id, $this->list_id, $this->list_id, $this->list_id ];
+$where = "WHERE c_sel.email <> ''";
         if ( $this->list_id ) { $where .= " AND d.list_id=%d"; $args[] = $this->list_id; }
         // Filter by the focused email if provided (case-insensitive)
         if ( $this->focus_email !== '' ) {
@@ -2407,39 +2414,49 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
             $args[] = $this->focus_email;
         }
 
-        if ( $search ) {
-            $where .= " AND (d.email LIKE %s OR d.first_name LIKE %s OR d.last_name LIKE %s)";
-            $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%'; $args[] = '%'.$wpdb->esc_like($search).'%';
-        }
+       if ( $search ) {
+    $where .= " AND (c_sel.email LIKE %s OR c_sel.first_name LIKE %s OR c_sel.last_name LIKE %s)";
+    $like = '%'. $wpdb->esc_like($search) .'%';
+    $args = array_merge($args, [ $like, $like, $like ]);
+}
         $total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $dupes d $where", $args ) );
-        $sql = "
-            SELECT d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
-                d.list_id, l.name AS current_list,
-                (
-                    SELECT COUNT(*) FROM $dupes d2 WHERE d2.contact_id = d.contact_id
-                ) AS dup_count,
-                (
-                     SELECT GROUP_CONCAT(
-           DISTINCT CONCAT(l2.id,'::',l2.name)
-           ORDER BY li2.created_at DESC
-           SEPARATOR '|'
-         )
-            FROM $li li2
-            INNER JOIN $lists l2 ON l2.id = li2.list_id
-            WHERE li2.contact_id = d.contact_id
-                AND li2.list_id <> d.list_id
-                ) AS other_lists_meta,
-                d.contact_id,
-                c.status
-            FROM $dupes d
-            INNER JOIN $lists l ON l.id = d.list_id
-            INNER JOIN $ct c ON c.id = d.contact_id
-            $where
-            ORDER BY LOWER(d.email) ASC, d.contact_id ASC, d.id DESC
-            LIMIT %d OFFSET %d
-        ";
+       $sql_base = "
+  SELECT
+    c_sel.email,
+    MIN(c_sel.id) AS any_contact_id_in_selected,
+    COUNT(DISTINCT CASE WHEN li_all.list_id <> %d THEN li_all.list_id END) AS other_lists_count,
+    GROUP_CONCAT(
+      DISTINCT CASE WHEN li_all.list_id <> %d
+        THEN CONCAT(l_all.id, '::', l_all.name)
+      END
+      ORDER BY l_all.name SEPARATOR '|'
+    ) AS other_lists_meta,
+    GROUP_CONCAT(
+      DISTINCT CASE WHEN li_all.list_id = %d
+        THEN CONCAT(l_all.id, '::', l_all.name)
+      END
+      ORDER BY l_all.name SEPARATOR '|'
+    ) AS selected_lists_meta
+  FROM $ct c_sel
+  INNER JOIN $li li_sel    ON li_sel.contact_id = c_sel.id AND li_sel.list_id = %d
+  INNER JOIN $ct c_all     ON c_all.email = c_sel.email
+  INNER JOIN $li li_all    ON li_all.contact_id = c_all.id
+  INNER JOIN $lists l_all  ON l_all.id = li_all.list_id
+  $where
+  GROUP BY c_sel.email
+  HAVING other_lists_count > 0
+";
+$total = (int) $wpdb->get_var(
+  $wpdb->prepare("SELECT COUNT(*) FROM ($sql_base) t", $args)
+);
 
-        $rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, [ $per_page, $offset ] ) ), ARRAY_A );
+$sql = $sql_base . " ORDER BY other_lists_count DESC, c_sel.email ASC LIMIT %d OFFSET %d";
+$rows = $wpdb->get_results(
+  $wpdb->prepare($sql, array_merge($args, [ $per_page, $offset ])),
+  ARRAY_A
+);
+
+
         $this->items = $rows; $this->_column_headers = [ $this->get_columns(), [], [] ];
         $this->set_pagination_args( [ 'total_items' => $total, 'per_page' => $per_page, 'total_pages' => ceil( $total / $per_page ) ] );
     }
