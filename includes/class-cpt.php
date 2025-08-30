@@ -25,21 +25,20 @@ class CPT {
     }
 
     public function register() {
-        register_post_type( self::POST_TYPE, [
-            'labels' => [
-                'name'          => __( 'Email Campaigns', 'wp-email-campaigns' ),
-                'singular_name' => __( 'Email Campaign', 'wp-email-campaigns' ),
-            ],
-            'public'       => true,
-            'show_ui'      => true,
-            'show_in_menu' => true,
-            'menu_icon'    => 'dashicons-email',
-            'supports'     => [ 'title', 'editor' ],
-            'capability_type' => 'post',
-        ] );
-
-        // contacts/Lists page under Campaigns
-        add_menu_page(
+    register_post_type( self::POST_TYPE, [
+        'labels' => [
+            'name'          => __( 'Email Campaigns', 'wp-email-campaigns' ),
+            'singular_name' => __( 'Email Campaign', 'wp-email-campaigns' ),
+        ],
+        'public'          => true,
+        'show_ui'         => true,
+        'show_in_menu'    => true,          // keep CPT menu
+        'menu_icon'       => 'dashicons-email',
+        'supports'        => [ 'title', 'editor' ],
+        'capability_type' => 'post',
+    ] );
+ 
+    add_menu_page(
         __( 'Lists', 'wp-email-campaigns' ),
         __( 'Lists', 'wp-email-campaigns' ),
         'manage_options',
@@ -48,7 +47,8 @@ class CPT {
         'dashicons-list-view',
         25
     );
-    }
+}
+
 
     public function render_contacts_page() {
    
