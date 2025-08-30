@@ -1237,7 +1237,7 @@
       // Build thead
       var $thead = $("#wpec-lists-table thead tr");
       var head =
-        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Status</th><th>Created</th><th>Email</th><th>Lists)</th>';
+        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Email</th><th>Status</th><th>Created</th><th>Lists</th>';
       cols.forEach(function (c) {
         head += "<th>" + headerLabel(c) + "</th>";
       });
