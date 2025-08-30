@@ -1207,6 +1207,58 @@
       .data("page", pageNo + 1);
     $("#wpec-page-info").text(" — " + total + " contacts");
   }
+  function formatWpecDate(val) {
+    if (val == null || val === "") return "";
+    let d;
+
+    // Number? (seconds or milliseconds)
+    if (typeof val === "number" || /^\d+$/.test(String(val))) {
+      let n = Number(val);
+      if (n < 1e12) n *= 1000; // treat as seconds
+      d = new Date(n);
+    } else {
+      // MySQL DATETIME 'YYYY-MM-DD HH:MM:SS' (parse as LOCAL time)
+      const m = String(val).match(
+        /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
+      );
+      if (m) {
+        d = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          Number(m[4]),
+          Number(m[5]),
+          m[6] ? Number(m[6]) : 0
+        );
+      } else {
+        d = new Date(val); // ISO or other parseable
+      }
+    }
+    if (isNaN(d)) return "";
+
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ][d.getMonth()];
+    const year = d.getFullYear();
+    let h = d.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    const min = String(d.getMinutes()).padStart(2, "0");
+
+    return `${day} ${month} ${year} ${h}:${min} ${ampm}`;
+  }
 
   function contactsQuery(page) {
     var per = parseInt($("#wpec-page-size").val(), 10) || 50;
@@ -1282,7 +1334,7 @@
           html += "<td>" + emailHtml + "</td>";
 
           html += "<td>" + (r.status || "") + "</td>";
-          html += "<td>" + r.created_at + "</td>";
+          html += "<td>" + formatWpecDate(r.created_at) + "</td>";
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
 
           cols.forEach(function (c) {
