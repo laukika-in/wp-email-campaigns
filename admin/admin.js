@@ -2155,7 +2155,7 @@
           if (ix === -1) return null;
           const id = pair.slice(0, ix);
           const name = pair.slice(ix + 2);
-          return '<a href="' + base .'='.+ id + '">' + escapeHtml(name) + "</a>";
+          return '<a href="' + base + id + '">' + escapeHtml(name) + "</a>";
         })
         .filter(Boolean);
 
