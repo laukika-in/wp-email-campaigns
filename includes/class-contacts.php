@@ -2241,73 +2241,93 @@ class WPEC_List_Items_Table extends \WP_List_Table {
     return [ 'wp-list-table', 'widefat', 'fixed', 'striped', 'table-view-list', 'wpec-table' ];
 }
 
-    public function column_email( $item ) {
-        $pill = !empty($item['is_duplicate_import']) ? ' <span class="wpec-pill wpec-pill-dup">'.esc_html__('Duplicate','wp-email-campaigns').'</span>' : '';
-        return sprintf(
-        '<a href="%s">%s</a>',
-         esc_url($view),
-        esc_html($email),
-        $pill
-    ); 
-        
-    }
-    public function column_status( $item ) {
-    $status = isset($item['status']) ? $item['status'] : '';
-    $label  = $status === 'unsubscribed' ? __( 'Do Not Send', 'wp-email-campaigns' )
-             : ( $status === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' )
-             : __( 'Active', 'wp-email-campaigns' ) );
+   public function column_email( $item ) {
+    $view  = add_query_arg( [
+        'page'       => 'wpec-lists',
+        'view'       => 'contact',
+        'contact_id' => (int)$item['contact_id']
+    ], admin_url('admin.php'));
 
-    $cls = ($status && $status !== 'active') ? ' wpec-pill wpec-pill-'.$status : '';
-    return '<span class="'.trim($cls).'">'.esc_html($label).'</span>';
+    $email = $item['email'] ?? '';
+    $dup   = !empty($item['is_duplicate_import'])
+        ? ' <span class="wpec-pill wpec-pill-dup" title="'.esc_attr__('Imported as duplicate','wp-email-campaigns').'">'.esc_html__('Duplicate','wp-email-campaigns').'</span>'
+        : '';
+
+    return sprintf(
+        '<strong><a class="row-title" href="%s">%s</a></strong>%s',
+        esc_url($view),
+        esc_html($email),
+        $dup
+    );
 }
 
-    public function column_actions( $item ) {
+    public function column_status( $item ) {
+    $status = strtolower($item['status'] ?? '');
+    $map    = [
+        'active'        => 'is-active',
+        'unsubscribed'  => 'is-unsubscribed',
+        'bounced'       => 'is-bounced',
+    ];
+    $cls = 'wpec-status-pill ' . ($map[$status] ?? 'is-active');
+    $label = $status === 'unsubscribed' ? __( 'Do Not Send', 'wp-email-campaigns' )
+           : ( $status === 'bounced' ? __( 'Bounced', 'wp-email-campaigns' ) : __( 'Active', 'wp-email-campaigns' ) );
+    return sprintf('<span class="%s">%s</span>', esc_attr($cls), esc_html($label));
+}
+
+public function column_actions( $item ) {
     $view = add_query_arg( [
-        'post_type' => 'email_campaign',
-        'page'      => 'wpec-lists',
-        'view'      => 'contact',
-        'contact_id'=> (int)$item['contact_id']
-    ], admin_url('edit.php'));
+        'page'       => 'wpec-lists',
+        'view'       => 'contact',
+        'contact_id' => (int)$item['contact_id']
+    ], admin_url('admin.php'));
 
     $del = sprintf(
-        '<a href="#" class="button button-small wpec-del-from-list" data-list-id="%d" data-contact-id="%d">%s</a>',
+        '<a href="#" class="button button-small wpec-del-from-list" data-list-id="%d" data-contact-id="%d" title="%s">
+            <span class="dashicons dashicons-trash" aria-hidden="true"></span> %s
+        </a>',
         (int)$this->list_id,
         (int)$item['contact_id'],
+        esc_attr__('Remove from this list','wp-email-campaigns'),
         esc_html__('Delete','wp-email-campaigns')
     );
 
     return sprintf(
-        '<a class="button button-small" href="%s">%s</a> %s',
-        esc_url($view),
-        esc_html__('View detail','wp-email-campaigns'),
+        '<div class="wpec-actions">
+            <a class="button button-small" href="%s" title="%s">
+                <span class="dashicons dashicons-visibility" aria-hidden="true"></span> %s
+            </a>
+            %s
+        </div>',
+        esc_url($view), esc_attr__('View contact detail','wp-email-campaigns'), esc_html__('View detail','wp-email-campaigns'),
         $del
     );
 }
+
+public function no_items() { _e( 'No contacts found in this list.', 'wp-email-campaigns' ); }
 
     public function column_default( $item, $col ) { return esc_html( $item[$col] ?? '' ); }
     // ADD this method inside WPEC_List_Items_Table (below other column_* methods)
 public function column_lists( $item ) {
     $meta = $item['lists_meta'] ?? '';
     if ( ! $meta ) {
-        return esc_html( $item['lists'] ?? '' );
+        return $item['lists'] ? esc_html($item['lists']) : '<em>-</em>';
     }
     $parts = array_filter( array_map( 'trim', explode( '|', $meta ) ) );
-    $links = [];
+    $chips = [];
     foreach ( $parts as $p ) {
         $ix = strpos( $p, '::' );
         if ( $ix === false ) continue;
-        $id = (int) substr( $p, 0, $ix );
+        $id   = (int) substr( $p, 0, $ix );
         $name = substr( $p, $ix + 2 );
-        $url = add_query_arg( [
-            'post_type' => 'email_campaign',
-            'page'      => 'wpec-lists',
-            'view'      => 'list',
-            'list_id'   => $id,
-        ], admin_url( 'edit.php' ) );
-        $links[] = sprintf( '<a href="%s">%s</a>', esc_url( $url ), esc_html( $name ) );
+        $url  = add_query_arg( [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => $id ], admin_url( 'admin.php' ) );
+        $chips[] = sprintf(
+            '<span class="wpec-chip"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><a href="%s">%s</a></span>',
+            esc_url($url), esc_html($name)
+        );
     }
-    return $links ? implode( ', ', $links ) : '<em>-</em>';
+    return $chips ? implode( ' ', $chips ) : '<em>-</em>';
 }
+
 
 }
 
