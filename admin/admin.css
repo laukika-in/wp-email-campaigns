@@ -778,3 +778,75 @@
     transform: translateX(100%);
   }
 }
+/* ===== Dual range slider (lightweight, no libs) ===== */
+.wpec-range {
+  position: relative;
+  height: 28px;
+  margin: 4px 0 8px;
+}
+.wpec-range input[type="range"] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  width: 100%;
+  margin: 0;
+  pointer-events: none;
+  background: transparent;
+  z-index: 2;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+}
+.wpec-range input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #2271b1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.wpec-range input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #2271b1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.wpec-range input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+.wpec-range input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+
+.wpec-range .wpec-range-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 15px;
+  height: 4px;
+  z-index: 1;
+  background: #e5e7eb;
+  border-radius: 999px;
+}
+.wpec-range .wpec-range-track > span {
+  position: absolute;
+  height: 100%;
+  left: 0;
+  width: 0;
+  background: #2271b1;
+  border-radius: 999px;
+}
+
+/* Narrow number inputs to sit neatly beside each other */
+.wpec-number-range input[type="number"] {
+  width: 120px;
+}

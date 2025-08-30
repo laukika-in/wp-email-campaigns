@@ -418,17 +418,30 @@ class Contacts {
  
         echo '</select></label>';
 
-        echo '<label>'.esc_html__('Employees','wp-email-campaigns');
-        echo '<div class="wpec-number-range">';
-        echo '<input type="number" id="wpec-f-emp-min" placeholder="≥ min" min="0"> ';
-        echo '<input type="number" id="wpec-f-emp-max" placeholder="≤ max" min="0">';
-        echo '</div></label>';
+     /* ---- Employees (dual slider + number boxes) ---- */
+echo '<label>'.esc_html__('Employees','wp-email-campaigns');
+echo '<div class="wpec-range" data-target-min="#wpec-f-emp-min" data-target-max="#wpec-f-emp-max" data-min="0" data-max="50000" data-step="10">';
+echo '  <input type="range" class="wpec-range-l" min="0" max="50000" step="10" value="0" aria-label="'.esc_attr__('Employees min','wp-email-campaigns').'">';
+echo '  <input type="range" class="wpec-range-h" min="0" max="50000" step="10" value="50000" aria-label="'.esc_attr__('Employees max','wp-email-campaigns').'">';
+echo '  <div class="wpec-range-track"><span></span></div>';
+echo '</div>';
+echo '<div class="wpec-number-range">';
+echo '  <input type="number" id="wpec-f-emp-min" placeholder="≥ min" min="0" step="10">';
+echo '  <input type="number" id="wpec-f-emp-max" placeholder="≤ max" min="0" step="10">';
+echo '</div></label>';
 
-        echo '<label>'.esc_html__('Annual revenue','wp-email-campaigns');
-        echo '<div class="wpec-number-range">';
-        echo '<input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0"> ';
-        echo '<input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0">';
-        echo '</div></label>';       
+/* ---- Annual revenue (dual slider + number boxes) ---- */
+echo '<label>'.esc_html__('Annual revenue','wp-email-campaigns');
+echo '<div class="wpec-range" data-target-min="#wpec-f-rev-min" data-target-max="#wpec-f-rev-max" data-min="0" data-max="1000000000" data-step="100000">';
+echo '  <input type="range" class="wpec-range-l" min="0" max="1000000000" step="100000" value="0" aria-label="'.esc_attr__('Revenue min','wp-email-campaigns').'">';
+echo '  <input type="range" class="wpec-range-h" min="0" max="1000000000" step="100000" value="1000000000" aria-label="'.esc_attr__('Revenue max','wp-email-campaigns').'">';
+echo '  <div class="wpec-range-track"><span></span></div>';
+echo '</div>';
+echo '<div class="wpec-number-range">';
+echo '  <input type="number" id="wpec-f-rev-min" placeholder="≥ min" min="0" step="100000">';
+echo '  <input type="number" id="wpec-f-rev-max" placeholder="≤ max" min="0" step="100000">';
+echo '</div></label>';
+   
 
         echo '</div>'; // row
         echo '<div id="wpec-active-filters"></div>';

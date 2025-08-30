@@ -1935,7 +1935,108 @@
       $("#wpec-status-remove").prop("disabled", true);
     });
   }
+  function clamp(n, min, max) {
+    return Math.min(max, Math.max(min, n));
+  }
 
+  function initDualRange($wrap) {
+    const $low = $wrap.find(".wpec-range-l");
+    const $high = $wrap.find(".wpec-range-h");
+    const $bar = $wrap.find(".wpec-range-track > span");
+
+    const targetMinSel = $wrap.data("target-min");
+    const targetMaxSel = $wrap.data("target-max");
+    const $targetMin = $(targetMinSel);
+    const $targetMax = $(targetMaxSel);
+
+    const min = Number($wrap.data("min"));
+    const max = Number($wrap.data("max"));
+    const step = Number($wrap.data("step")) || 1;
+
+    // Ensure attributes agree
+    $low.attr({ min, max, step });
+    $high.attr({ min, max, step });
+
+    // Init values from numeric inputs if present, else full span
+    const initLow = $targetMin.val() !== "" ? Number($targetMin.val()) : min;
+    const initHigh = $targetMax.val() !== "" ? Number($targetMax.val()) : max;
+    $low.val(clamp(initLow, min, max));
+    $high.val(clamp(initHigh, min, max));
+
+    function paint() {
+      const l = Number($low.val());
+      const h = Number($high.val());
+      const pctL = ((l - min) / (max - min)) * 100;
+      const pctH = ((h - min) / (max - min)) * 100;
+      $bar.css({ left: pctL + "%", width: pctH - pctL + "%" });
+    }
+
+    function syncFromSliders() {
+      let l = Number($low.val());
+      let h = Number($high.val());
+      if (l > h) {
+        const t = l;
+        l = h;
+        h = t;
+        $low.val(l);
+        $high.val(h);
+      }
+      $targetMin.val(l);
+      $targetMax.val(h);
+      paint();
+    }
+
+    function syncFromInputs() {
+      let l = $targetMin.val() === "" ? min : Number($targetMin.val());
+      let h = $targetMax.val() === "" ? max : Number($targetMax.val());
+      l = clamp(l, min, max);
+      h = clamp(h, min, max);
+      if (l > h) {
+        const t = l;
+        l = h;
+        h = t;
+      }
+      $low.val(l);
+      $high.val(h);
+      paint();
+    }
+
+    // Events
+    $low.on("input change", syncFromSliders);
+    $high.on("input change", syncFromSliders);
+    $targetMin.on("input change", syncFromInputs);
+    $targetMax.on("input change", syncFromInputs);
+
+    // Initial paint
+    paint();
+
+    // Expose a reset helper
+    $wrap.data("wpecReset", function () {
+      $low.val(min);
+      $high.val(max);
+      $targetMin.val("");
+      $targetMax.val("");
+      paint();
+    });
+  }
+
+  $(function () {
+    // Init all sliders on Contacts page
+    const $app = $('#wpec-lists-app[data-page="all"]');
+    if (!$app.length) return;
+
+    $(".wpec-range").each(function () {
+      initDualRange($(this));
+    });
+
+    // Hook your existing Reset button to reset the sliders too
+    $("#wpec-f-reset").on("click", function () {
+      $(".wpec-range").each(function () {
+        const reset = $(this).data("wpecReset");
+        if (typeof reset === "function") reset();
+      });
+    });
+  });
   // Only bind on special list pages
   $(function () {
     var $special = $('#wpec-lists-app[data-page="special"]');
