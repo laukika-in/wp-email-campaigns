@@ -822,10 +822,19 @@ private function render_duplicates( $list_id = 0 ) {
         $focus_email = sanitize_email( wp_unslash( (string) $_GET['focus_email'] ) );
     }
 
-    $title = $list_id ? sprintf( __( 'Duplicates — List #%d', 'wp-email-campaigns' ), $list_id )
-                      : __( 'Duplicates — All Lists', 'wp-email-campaigns' );
-
+    if ( $list_id ) {
+        $lists = Helpers::table('lists');
+        $list_name = $wpdb->get_var( $wpdb->prepare("SELECT name FROM $lists WHERE id=%d", $list_id) );
+        if ( $list_name ) {
+            $title = sprintf( __( 'Duplicates — %s', 'wp-email-campaigns' ), $list_name );
+        }
+    }
     echo '<div class="wrap"><h1>' . esc_html( $title ) . '</h1>';
+    if ( $list_id ) {
+        $clear = esc_url( add_query_arg( ['page'=>'wpec-duplicates'], admin_url('admin.php') ) );
+        echo '<p><a class="button button-secondary" href="'.$clear.'">'.esc_html__('Clear filter','wp-email-campaigns').'</a></p>';
+    }
+
 
     if ( $focus_email ) {
         printf(
@@ -844,9 +853,9 @@ private function render_duplicates( $list_id = 0 ) {
     // PASS the resolved email into the table (2nd arg)
     $table = new WPEC_Duplicates_Table( $list_id, $focus_email );
     $table->prepare_items();
-    echo '<form id="wpec-dup-form" method="get">';
+echo '<form id="wpec-dup-form" method="get" action="' . esc_url( admin_url('admin.php') ) . '">';
     echo '<input type="hidden" name="post_type" value="email_campaign" />';
-    echo '<input type="hidden" name="page" value="wpec-lists" />';
+    echo '<input type="hidden" name="page" value="wpec-duplicates" />';
     echo '<input type="hidden" name="view" value="dupes' . ( $list_id ? '_list' : '' ) . '" />';
     if ( $list_id ) { echo '<input type="hidden" name="list_id" value="' . (int) $list_id . '" />'; }
     $table->search_box( __( 'Search email/name', 'wp-email-campaigns' ), 'wpecdup' );
@@ -854,7 +863,10 @@ private function render_duplicates( $list_id = 0 ) {
     echo '</form></div>';
 }
 
-public function render_duplicates_page() { $this->render_duplicates(0); }
+public function render_duplicates_page() {
+    $list_id = isset($_GET['list_id']) ? absint($_GET['list_id']) : 0;
+    $this->render_duplicates($list_id);
+}
 
 /** ===== Saved Views (Presets) — user-scoped ===== */
 
