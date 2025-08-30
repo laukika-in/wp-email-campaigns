@@ -1836,7 +1836,7 @@
       var href =
         window.WPEC && WPEC.adminBase
           ? WPEC.adminBase + "?" + viewUrl
-          : window.location.origin + "/wp-admin/edit.php?" + viewUrl;
+          : window.location.origin + "/wp-admin/admin.php?" + viewUrl;
       actions =
         '<a class="button button-small" href="' + href + '">View detail</a>';
     }
@@ -2620,7 +2620,7 @@ jQuery(function () {
             WPEC && WPEC.adminBase
               ? WPEC.adminBase + "?page=wpec-contacts"
               : window.location.origin +
-                "/wp-admin/edit.php?page=wpec-contacts";
+                "/wp-admin/admin.php?page=wpec-contacts";
         } else {
           alert((resp && resp.data && resp.data.message) || "Delete failed.");
         }
