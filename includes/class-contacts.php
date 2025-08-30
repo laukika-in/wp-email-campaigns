@@ -2343,7 +2343,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
 
 }
 
-// ---------- Duplicates table (with Duplicate Count) ----------
+// ---------- Duplicates table (with duplicate Count) ----------
 class WPEC_Duplicates_Table extends \WP_List_Table {
     protected $list_id;
     protected $focus_email = '';
@@ -2360,7 +2360,7 @@ public function get_columns() {
         'first_name'    => __( 'First name', 'wp-email-campaigns' ),
         'last_name'     => __( 'Last name', 'wp-email-campaigns' ),
         'dup_count'     => __( 'Duplicate count', 'wp-email-campaigns' ),
-        'current_list'  => __( 'List', 'wp-email-campaigns' ),
+        'current_list'  => __( 'Current List', 'wp-email-campaigns' ),
         'imported_at'   => __( 'Last imported date', 'wp-email-campaigns' ),
         'other_lists'   => __( 'Duplicated lists', 'wp-email-campaigns' ),
         'actions'       => __( 'Actions', 'wp-email-campaigns' ),
@@ -2413,44 +2413,61 @@ public function prepare_items() {
     if ( $this->list_id ) {
         $cur = (int)$this->list_id;
 
-        // ✅ Must belong to the chosen list…
+        // Must belong to the chosen list…
         $where .= " AND EXISTS (
             SELECT 1 FROM $li li_cur
-            WHERE li_cur.contact_id = d.contact_id
-              AND li_cur.list_id = %d
+            WHERE li_cur.contact_id = d.contact_id AND li_cur.list_id = %d
         )";
         $args[] = $cur;
 
-        // ✅ …and also exist in at least one OTHER list
+        // …and also exist in at least one OTHER list
         $where .= " AND EXISTS (
             SELECT 1 FROM $li li_other
-            WHERE li_other.contact_id = d.contact_id
-              AND li_other.list_id <> %d
+            WHERE li_other.contact_id = d.contact_id AND li_other.list_id <> %d
         )";
         $args[] = $cur;
 
-        // Build SELECT fields that pin the current list explicitly
-        $select_current_list = "
+        // In scoped view, Current List is the chosen list
+        $select_current = "
             $cur AS list_id,
             (SELECT name FROM $lists WHERE id = $cur) AS current_list,
         ";
-
-        // Exclude the current list in the “other lists” rollup
-        $other_lists_clause = "AND li2.list_id <> $cur";
+        $other_lists_excl = "AND li2.list_id <> $cur";
+        $join_lists = ""; // no need to join $lists l
     } else {
-        // 🌍 Global view: show only contacts that are in 2+ lists
+        // Global view: only contacts that are in 2+ lists
         $where .= " AND (
             SELECT COUNT(DISTINCT liX.list_id)
             FROM $li liX
             WHERE liX.contact_id = d.contact_id
         ) > 1";
 
-        // In global view, show whatever list the dup event row has
-        $select_current_list = "
-            d.list_id,
-            l.name AS current_list,
+        // In global view, Current List = first uploaded list for that contact
+        $select_current = "
+            (
+                SELECT li_first.list_id
+                FROM $li li_first
+                WHERE li_first.contact_id = d.contact_id
+                ORDER BY li_first.created_at ASC
+                LIMIT 1
+            ) AS list_id,
+            (
+                SELECT l_first.name
+                FROM $li li_first
+                INNER JOIN $lists l_first ON l_first.id = li_first.list_id
+                WHERE li_first.contact_id = d.contact_id
+                ORDER BY li_first.created_at ASC
+                LIMIT 1
+            ) AS current_list,
         ";
-        $other_lists_clause = "AND li2.list_id <> d.list_id";
+        $other_lists_excl = "AND li2.list_id <> (
+            SELECT li_first.list_id
+            FROM $li li_first
+            WHERE li_first.contact_id = d.contact_id
+            ORDER BY li_first.created_at ASC
+            LIMIT 1
+        )";
+        $join_lists = ""; // not needed
     }
 
     // Focused email (case-insensitive)
@@ -2465,33 +2482,29 @@ public function prepare_items() {
         array_push($args, $like, $like, $like);
     }
 
-    // COUNT for pagination
-    $total = (int) $wpdb->get_var( $wpdb->prepare(
-        "SELECT COUNT(*) FROM $dupes d $where", $args
-    ) );
+    // Total for pagination
+    $total = (int) $wpdb->get_var( $wpdb->prepare("SELECT COUNT(*) FROM $dupes d $where", $args) );
 
     // Main rows
     $sql = "
         SELECT
             d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
-            $select_current_list
+            $select_current
             (
-                SELECT COUNT(*) FROM $dupes d2
-                WHERE d2.contact_id = d.contact_id
+                SELECT COUNT(*) FROM $dupes d2 WHERE d2.contact_id = d.contact_id
             ) AS dup_count,
             (
-                SELECT GROUP_CONCAT(DISTINCT CONCAT(l2.id,'::',l2.name)
-                                    ORDER BY li2.created_at DESC SEPARATOR '|')
+                SELECT GROUP_CONCAT(DISTINCT CONCAT(l2.id,'::',l2.name) ORDER BY li2.created_at DESC SEPARATOR '|')
                 FROM $li li2
                 INNER JOIN $lists l2 ON l2.id = li2.list_id
                 WHERE li2.contact_id = d.contact_id
-                $other_lists_clause
+                $other_lists_excl
             ) AS other_lists_meta,
             d.contact_id,
             c.status
         FROM $dupes d
-        " . ( $this->list_id ? "" : "INNER JOIN $lists l ON l.id = d.list_id" ) . "
         INNER JOIN $ct c ON c.id = d.contact_id
+        $join_lists
         $where
         ORDER BY LOWER(d.email) ASC, d.contact_id ASC, d.id DESC
         LIMIT %d OFFSET %d
@@ -2520,9 +2533,9 @@ public function prepare_items() {
             $lname = isset($parts[1]) ? $parts[1] : '';
             if ($lid && $lname !== '') {
                $url = add_query_arg(
-    [ 'page'=>'wpec-lists', 'view'=>'list', 'list_id'=>(int)$item['list_id'] ],
-    admin_url('admin.php')
-);
+                    [ 'page'=>'wpec-lists', 'view'=>'list', 'list_id'=>(int)$item['list_id'] ],
+                    admin_url('admin.php')
+                );
 
                 $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
             }
@@ -2535,12 +2548,15 @@ public function prepare_items() {
         case 'dup_count':
             return esc_html( (string)($item['dup_count'] ?? '0') );
 
-        case 'current_list': {
+       case 'current_list': {
+            $lid = (int)($item['list_id'] ?? 0);
+            $label = $item['current_list'] ?? ($lid ? '#'.$lid : '');
+            if ( ! $lid ) return '<em>-</em>';
+
             $url = add_query_arg(
-                [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => (int)$item['list_id'] ],
+                [ 'page' => 'wpec-lists', 'view' => 'list', 'list_id' => $lid ],
                 admin_url('admin.php')
             );
-            $label = $item['current_list'] ?? ('#'.(int)$item['list_id']);
             return sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($label));
         }
 
