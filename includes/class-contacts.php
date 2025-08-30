@@ -2327,7 +2327,7 @@ class WPEC_List_Items_Table extends \WP_List_Table {
 
     public function column_actions( $item ) {
         $view = add_query_arg( [
-            'page'       => 'wpec-contacts',
+            'page'       => 'wpec-lists',
             'view'       => 'contact',
             'contact_id' => (int)$item['contact_id']
         ], admin_url('admin.php'));
@@ -2412,7 +2412,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
     public function get_primary_column_name() { return 'email'; }
     public function column_email( $item ) {
         $view = add_query_arg(
-            [ 'page' => 'wpec-contacts', 'view' => 'contact', 'contact_id' => (int)$item['contact_id'] ],
+            [ 'page' => 'wpec-lists', 'view' => 'contact', 'contact_id' => (int)$item['contact_id'] ],
             admin_url('admin.php')
         );
         $email  = $item['email'] ?? '';
@@ -2624,7 +2624,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
 
         case 'actions': {
             $view = add_query_arg(
-                [ 'page'=>'wpec-contacts','view'=>'contact','contact_id'=>(int)$item['contact_id'] ],
+                [ 'page'=>'wpec-lists','view'=>'contact','contact_id'=>(int)$item['contact_id'] ],
                 admin_url('admin.php')
             );
             return sprintf(

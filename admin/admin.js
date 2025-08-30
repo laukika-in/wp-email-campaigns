@@ -1286,9 +1286,7 @@
       } else {
         var html = "";
         rows.forEach(function (r) {
-          var detailUrl =
-            WPEC.contactViewBase + encodeURIComponent(String(r.id));
-
+          var detailUrl = new URL(location.origin + location.pathname);
           detailUrl.searchParams.set("page", "wpec-contacts");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
