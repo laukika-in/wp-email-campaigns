@@ -424,6 +424,8 @@ class Contacts {
         echo '<th>'.esc_html__('Full name','wp-email-campaigns').'</th>';
         echo '<th>'.esc_html__('Email','wp-email-campaigns').'</th>';
         echo '<th>'.esc_html__('List(s)','wp-email-campaigns').'</th>';
+        echo '<th>'.esc_html__('Status','wp-email-campaigns').'</th>';
+        echo '<th>'.esc_html__('Created','wp-email-campaigns').'</th>';
         echo '</tr></thead>';
 
         echo '<tbody></tbody>';
