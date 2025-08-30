@@ -289,7 +289,7 @@
     var dupesUrlAll = new URL(
       location.origin +
         location.pathname +
-        "?post_type=email_campaign&page=wpec-duplicates",
+        "?page=wpec-duplicates",
       location.origin
     );
     var dupesUrlList = new URL(dupesUrlAll.toString());
@@ -2419,7 +2419,7 @@
                 : window.ajaxurl
                 ? window.ajaxurl.replace(
                     "admin-ajax.php",
-                    "edit.php?post_type=email_campaign&page=wpec-lists&view=list&list_id="
+                    "edit.php?page=wpec-lists&view=list&list_id="
                   )
                 : "";
             var href = base ? base + String(listId) : "#";
@@ -2631,9 +2631,9 @@ jQuery(function () {
         if (resp && resp.success) {
           window.location =
             WPEC && WPEC.adminBase
-              ? WPEC.adminBase + "?post_type=email_campaign&page=wpec-contacts"
+              ? WPEC.adminBase + "?page=wpec-contacts"
               : window.location.origin +
-                "/wp-admin/edit.php?post_type=email_campaign&page=wpec-contacts";
+                "/wp-admin/edit.php?page=wpec-contacts";
         } else {
           alert((resp && resp.data && resp.data.message) || "Delete failed.");
         }

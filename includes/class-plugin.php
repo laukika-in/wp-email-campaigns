@@ -24,9 +24,7 @@ class Plugin {
         (new Queue)->init();
 
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
-        remove_submenu_page('edit.php?post_type=email_campaign','edit.php?post_type=email_campaign');
-remove_submenu_page('edit.php?post_type=email_campaign','post-new.php?post_type=email_campaign');
-
+  
     }
     
 public function admin_assets( $hook ) {

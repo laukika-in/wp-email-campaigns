@@ -146,7 +146,7 @@ class Contacts {
             'startImport'    => isset($_GET['wpec_start_import']) ? intval($_GET['wpec_start_import']) : 0,
             'select2CdnJs'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
             'select2CdnCss'  => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
-            'listViewBase'    => admin_url('edit.php?post_type=email_campaign&page=wpec-lists&view=list&list_id='),
+            'listViewBase'    => admin_url('edit.php?page=wpec-lists&view=list&list_id='),
 
         ] );
     }
@@ -166,8 +166,8 @@ class Contacts {
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__( 'Lists', 'wp-email-campaigns' ) . '</h1>';
         echo '<p style="margin:6px 0 14px 0">';
-        echo '<a class="button" href="'.esc_url( admin_url('edit.php?post_type=email_campaign&page=wpec-import') ).'">'.esc_html__('Go to Import','wp-email-campaigns').'</a> ';
-        echo '<a class="button" href="'.esc_url( admin_url('edit.php?post_type=email_campaign&page=wpec-duplicates') ).'">'.esc_html__('View Duplicates (All Lists)','wp-email-campaigns').'</a>';
+        echo '<a class="button" href="'.esc_url( admin_url('edit.php?page=wpec-import') ).'">'.esc_html__('Go to Import','wp-email-campaigns').'</a> ';
+        echo '<a class="button" href="'.esc_url( admin_url('edit.php?page=wpec-duplicates') ).'">'.esc_html__('View Duplicates (All Lists)','wp-email-campaigns').'</a>';
         echo '</p>';
 
         $table = new WPEC_Lists_Table();
@@ -549,7 +549,7 @@ echo '</div></label>';
         echo '<div class="wrap"><h1>' . esc_html( sprintf( __( 'List: %s', 'wp-email-campaigns' ), $list->name ) ) . '</h1>';
 
         $export_url = admin_url( 'admin-post.php?action=wpec_export_list&list_id=' . $list_id . '&_wpnonce=' . wp_create_nonce('wpec_export_list') );
-        $dupes_url  = admin_url('edit.php?post_type=email_campaign&page=wpec-duplicates');
+        $dupes_url  = admin_url('edit.php?page=wpec-duplicates');
 
         echo '<p><a class="button" href="' . esc_url( $export_url ) . '">' . esc_html__( 'Export this list to CSV', 'wp-email-campaigns' ) . '</a> ';
         echo '<a class="button" href="' . esc_url( $dupes_url ) . '">' . esc_html__( 'View Duplicates (All Lists)', 'wp-email-campaigns' ) . '</a></p>';
@@ -1485,7 +1485,7 @@ echo '</div></label>';
             $db->query( $db->prepare( "UPDATE $lists SET deleted = COALESCE(deleted,0)+1 WHERE id=%d", $list_id ) );
         }
 
-        wp_safe_redirect( wp_get_referer() ?: admin_url('edit.php?post_type=email_campaign&page=wpec-lists') ); exit;
+        wp_safe_redirect( wp_get_referer() ?: admin_url('edit.php?page=wpec-lists') ); exit;
     }
 
     public function ajax_delete_list_mapping() {

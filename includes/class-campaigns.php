@@ -171,7 +171,7 @@ printf(
     }
 
     /**
-     * Detail page for a single campaign. Route: ?post_type=email_campaign&page=wpec-campaigns&view=detail&campaign_id=ID
+     * Detail page for a single campaign. 
      */
     private function render_campaign_detail( int $cid ) {
     if ( ! \WPEC\Helpers::user_can_manage() ) { wp_die('Denied'); }

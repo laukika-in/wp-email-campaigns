@@ -7,7 +7,7 @@
   }
 
   function adminEditUrl(params) {
-    // Build /wp-admin/edit.php?post_type=email_campaign&...
+    // Build  
     var base =
       (window.WPECCAMPAIGN && WPECCAMPAIGN.adminBase) ||
       (window.ajaxurl
