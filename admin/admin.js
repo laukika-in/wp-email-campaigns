@@ -1286,7 +1286,7 @@
       } else {
         var html = "";
         rows.forEach(function (r) {
-          var detailUrl = new URL(WPEC.adminUrl); // e.g. admin_url('admin.php')
+          var detailUrl = new URL(location.origin + location.pathname);
           detailUrl.searchParams.set("page", "wpec-contacts");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
@@ -1828,7 +1828,7 @@
     if (r.id) {
       var viewUrl = window.ajaxurl
         ? new URLSearchParams({
-            page: "wpec-lists",
+            page: "wpec-contacts",
             view: "contact",
             contact_id: String(r.id),
           }).toString()
