@@ -9,20 +9,19 @@ class Campaigns {
         add_action('admin_post_wpec_campaign_duplicate', [ $this, 'handle_duplicate' ]);
     }
 
-    public function add_menu() {
-        $parent = 'edit.php?post_type=email_campaign';
-        $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
+public function add_menu() {
+    $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
 
-        add_submenu_page(
-            $parent,
-            __('Campaigns','wp-email-campaigns'),
-            __('Campaigns','wp-email-campaigns'),
-            $cap,
-            'wpec-campaigns',
-            [ $this, 'render_list' ],
-            7
-        );
-    }
+    add_menu_page(
+        __( 'Campaigns','wp-email-campaigns' ),
+        __( 'Campaigns','wp-email-campaigns' ),
+        $cap,
+        'wpec-campaigns',
+        [ $this, 'render_list' ],
+        'dashicons-megaphone',
+        29
+    );
+}
 
     /**
      * List page (also routes to detail view when ?view=detail&campaign_id=ID)

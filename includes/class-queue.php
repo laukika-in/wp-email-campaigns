@@ -9,20 +9,19 @@ class Queue {
         add_action('admin_menu', [ $this, 'add_menu' ]);
     }
 
-    public function add_menu() {
-        $parent = 'edit.php?post_type=email_campaign';
-        $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
+public function add_menu() {
+    $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
 
-        add_submenu_page(
-            $parent,
-            __('Queue','wp-email-campaigns'),
-            __('Queue','wp-email-campaigns'),
-            $cap,
-            'wpec-queue',
-            [ $this, 'render' ],
-            8
-        );
-    }
+    add_menu_page(
+        __( 'Queue','wp-email-campaigns' ),
+        __( 'Queue','wp-email-campaigns' ),
+        $cap,
+        'wpec-queue',
+        [ $this, 'render' ],
+        'dashicons-schedule',
+        30
+    );
+}
 
     public function render() {
         if ( ! Helpers::user_can_manage() ) wp_die('Denied');

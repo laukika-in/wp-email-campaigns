@@ -29,20 +29,19 @@ class Sender {
      *  Admin: Send screen
      * ---------------------*/
 
-    public function add_send_screen() {
-        $parent = 'edit.php?post_type=email_campaign';
-        $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
+public function add_send_screen() {
+    $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
 
-        add_submenu_page(
-            $parent,
-            __('Send','wp-email-campaigns'),
-            __('Send','wp-email-campaigns'),
-            $cap,
-            'wpec-send',
-            [ $this, 'render_send_screen' ],
-            6
-        );
-    }
+    add_menu_page(
+        __( 'Send','wp-email-campaigns' ),
+        __( 'Send','wp-email-campaigns' ),
+        $cap,
+        'wpec-send',
+        [ $this, 'render_send_screen' ],
+        'dashicons-email-alt',
+        31
+    );
+}
 
     public function render_send_screen() {
         if ( ! Helpers::user_can_manage() ) wp_die('Denied');

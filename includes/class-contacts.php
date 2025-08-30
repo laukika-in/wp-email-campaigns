@@ -69,8 +69,7 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
 
  add_action( 'admin_menu', [ $this, 'admin_menu_adjustments' ], 999 );
     }
-
- public function admin_menu_adjustments() {
+public function admin_menu_adjustments() {
     // Resolve capability safely
     $cap = 'manage_options';
     if ( class_exists(__NAMESPACE__ . '\\Helpers') ) {
@@ -81,69 +80,38 @@ add_action( 'wp_ajax_wpec_contact_add_to_list',   [ $this, 'ajax_contact_add_to_
         }
     }
 
-    global $submenu;
-    $parent = 'edit.php?post_type=email_campaign';
-
-    // Rename 'wpec-lists' to 'Lists' and move it to the top
-    if ( isset( $submenu[ $parent ] ) ) {
-        $lists_idx = null;
-
-        foreach ( $submenu[ $parent ] as $i => $item ) {
-            // $item = [menu_title, capability, slug, (optional) page_title]
-            if ( isset( $item[2] ) && $item[2] === 'wpec-lists' ) {
-                $lists_idx = $i;
-                break;
-            }
-        }
-
-        if ( $lists_idx !== null ) {
-            $lists_item = $submenu[ $parent ][ $lists_idx ];
-
-            // Rename the menu title (index 0) and page title (index 3 if present)
-            $lists_item[0] = __( 'Lists', 'wp-email-campaigns' );
-            if ( isset( $lists_item[3] ) ) {
-                $lists_item[3] = __( 'Lists', 'wp-email-campaigns' );
-            }
-
-            // Move it to index 0 so clicking the parent opens "Lists"
-            unset( $submenu[ $parent ][ $lists_idx ] );
-            array_unshift( $submenu[ $parent ], $lists_item );
-            $submenu[ $parent ] = array_values( $submenu[ $parent ] );
-        }
-    }
-
-    // Ensure other submenus exist (come after "Lists")
-    add_submenu_page(
-        $parent,
+    // ✅ Top-level: Contacts
+    add_menu_page(
         __( 'Contacts', 'wp-email-campaigns' ),
         __( 'Contacts', 'wp-email-campaigns' ),
         $cap,
         'wpec-contacts',
         [ $this, 'render_all_contacts' ],
-       20
+        'dashicons-groups',
+        26
     );
- 
-         add_submenu_page(
-            $parent,
-            __( 'Import', 'wp-email-campaigns' ),
-            __( 'Import', 'wp-email-campaigns' ),
-            $cap,
-            'wpec-import',
-            [ $this, 'render_import_screen' ],
-            21
-        );
 
- 
+    // ✅ Top-level: Import
+    add_menu_page(
+        __( 'Import', 'wp-email-campaigns' ),
+        __( 'Import', 'wp-email-campaigns' ),
+        $cap,
+        'wpec-import',
+        [ $this, 'render_import_screen' ],
+        'dashicons-upload',
+        27
+    );
 
-   add_submenu_page(
-            $parent,
-            __( 'Duplicates', 'wp-email-campaigns' ),
-            __( 'Duplicates', 'wp-email-campaigns' ),
-            $cap,
-            'wpec-duplicates',
-            [ $this, 'render_duplicates_page' ],
-            22
-        ); 
+    // ✅ Top-level: Duplicates
+    add_menu_page(
+        __( 'Duplicates', 'wp-email-campaigns' ),
+        __( 'Duplicates', 'wp-email-campaigns' ),
+        $cap,
+        'wpec-duplicates',
+        [ $this, 'render_duplicates_page' ],
+        'dashicons-admin-page',
+        28
+    );
 }
 
 
