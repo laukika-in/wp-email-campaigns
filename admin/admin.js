@@ -2155,7 +2155,7 @@
           if (ix === -1) return null;
           const id = pair.slice(0, ix);
           const name = pair.slice(ix + 2);
-          return '<a href="' + base + id + '">' + escapeHtml(name) + "</a>";
+          return '<a href="' + base .'='.+ id + '">' + escapeHtml(name) + "</a>";
         })
         .filter(Boolean);
 
@@ -2397,10 +2397,12 @@
             var base =
               WPEC && WPEC.listViewBase
                 ? WPEC.listViewBase
-                : window.ajaxurl.replace(
+                : window.ajaxurl
+                ? window.ajaxurl.replace(
                     "admin-ajax.php",
                     "edit.php?page=wpec-lists&view=list&list_id="
-                  );
+                  )
+                : "";
             var href = base ? base + String(listId) : "#";
             var chip =
               '<span class="wpec-chip" data-list-id="' +
