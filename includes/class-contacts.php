@@ -147,7 +147,7 @@ class Contacts {
             'select2CdnJs'   => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js',
             'select2CdnCss'  => 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css',
             'listViewBase'    => admin_url('admin.php?page=wpec-lists&view=list&list_id='),
-            'contactViewBase'  => admin_url('admin.php?page=wpec-contacts&view=contact&contact_id='),
+            'adminBase'      => admin_url('admin.php'),
             
 
         ] );

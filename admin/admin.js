@@ -1286,7 +1286,17 @@
       } else {
         var html = "";
         rows.forEach(function (r) {
-          var detailUrl = new URL(location.origin + location.pathname);
+          var adminBase =
+            window.WPEC && WPEC.adminBase
+              ? WPEC.adminBase
+              : window.ajaxurl
+              ? window.ajaxurl.replace("admin-ajax.php", "admin.php")
+              : window.location.origin
+              ? window.location.origin + "/wp-admin/admin.php"
+              : "/wp-admin/admin.php";
+
+          var detailUrl = new URL(adminBase);
+          //var detailUrl = new URL(location.origin + location.pathname);
           detailUrl.searchParams.set("page", "wpec-contacts");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
