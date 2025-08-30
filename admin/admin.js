@@ -1237,7 +1237,7 @@
       // Build thead
       var $thead = $("#wpec-lists-table thead tr");
       var head =
-        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Email</th><th>Lists)</th>';
+        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Email</th><th>Lists)</th><th>Status</th><th>Created</th>';
       cols.forEach(function (c) {
         head += "<th>" + headerLabel(c) + "</th>";
       });
@@ -1281,12 +1281,13 @@
           }
           html += "<td>" + emailHtml + "</td>";
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
+
+          html += "<td>" + (r.status || "") + "</td>";
+          html += "<td>" + (r.created_at || "") + "</td>";
           cols.forEach(function (c) {
             html +=
               "<td>" + escapeHtml(r[c] == null ? "" : String(r[c])) + "</td>";
           });
-          html += "<td>" + (r.status || "") + "</td>";
-          html += "<td>" + (r.created_at || "") + "</td>";
           html += "</tr>";
         });
         $("#wpec-lists-table tbody").html(html);
