@@ -2636,7 +2636,7 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
 
         case 'actions': {
             $view = add_query_arg(
-                [ 'page'=>'wpec-lists','view'=>'contact','contact_id'=>(int)$item['contact_id'] ],
+                [ 'page'=>'wpec-contacts','view'=>'contact','contact_id'=>(int)$item['contact_id'] ],
                 admin_url('admin.php')
             );
             return sprintf(
