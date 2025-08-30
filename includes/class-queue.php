@@ -76,7 +76,7 @@ public function add_menu() {
                         'view'      => 'detail',
                         'id'        => $campaign_id,
                     ],
-                    admin_url('edit.php')
+                    admin_url('admin.php')
                 );
 
                 // Finished if nothing left in queue OR it's already in a terminal state.
@@ -87,7 +87,7 @@ public function add_menu() {
                 // build Campaign Detail URL for this row
 $detail = add_query_arg(
     ['page'=>'wpec-campaigns','view'=>'detail','campaign_id'=>(int)$r['id']],
-    admin_url('edit.php')
+    admin_url('admin.php')
 );
 $title  = $r['subject'] ?: ($r['name'] ?: ('#'.$r['id']));
 echo '<td><a href="'.esc_url($detail).'">'.esc_html($title).'</a></td>';

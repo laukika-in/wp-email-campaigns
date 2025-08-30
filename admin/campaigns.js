@@ -11,8 +11,8 @@
     var base =
       (window.WPECCAMPAIGN && WPECCAMPAIGN.adminBase) ||
       (window.ajaxurl
-        ? window.ajaxurl.replace("admin-ajax.php", "edit.php")
-        : "/wp-admin/edit.php");
+        ? window.ajaxurl.replace("admin-ajax.php", "admin.php")
+        : "/wp-admin/admin.php");
     const usp = new URLSearchParams({...params });
     return base + "?" + usp.toString();
   }

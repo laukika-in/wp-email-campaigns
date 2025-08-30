@@ -1287,7 +1287,7 @@
         var html = "";
         rows.forEach(function (r) {
           var detailUrl = new URL(location.origin + location.pathname);
-          detailUrl.searchParams.set("page", "wpec-contacts");
+          detailUrl.searchParams.set("page", "wpec-lists");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
           html += "<tr>";

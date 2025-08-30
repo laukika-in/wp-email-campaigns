@@ -168,8 +168,8 @@ class Contacts {
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__( 'Lists', 'wp-email-campaigns' ) . '</h1>';
         echo '<p style="margin:6px 0 14px 0">';
-        echo '<a class="button" href="'.esc_url( admin_url('edit.php?page=wpec-import') ).'">'.esc_html__('Go to Import','wp-email-campaigns').'</a> ';
-        echo '<a class="button" href="'.esc_url( admin_url('edit.php?page=wpec-duplicates') ).'">'.esc_html__('View Duplicates (All Lists)','wp-email-campaigns').'</a>';
+        echo '<a class="button" href="'.esc_url( admin_url('admin.php?page=wpec-import') ).'">'.esc_html__('Go to Import','wp-email-campaigns').'</a> ';
+        echo '<a class="button" href="'.esc_url( admin_url('admin.php?page=wpec-duplicates') ).'">'.esc_html__('View Duplicates (All Lists)','wp-email-campaigns').'</a>';
         echo '</p>';
 
         $table = new WPEC_Lists_Table();
@@ -550,7 +550,7 @@ class Contacts {
         echo '<div class="wrap"><h1>' . esc_html( sprintf( __( 'List: %s', 'wp-email-campaigns' ), $list->name ) ) . '</h1>';
 
         $export_url = admin_url( 'admin-post.php?action=wpec_export_list&list_id=' . $list_id . '&_wpnonce=' . wp_create_nonce('wpec_export_list') );
-        $dupes_url  = admin_url('edit.php?page=wpec-duplicates');
+        $dupes_url  = admin_url('admin.php?page=wpec-duplicates');
 
         echo '<p><a class="button" href="' . esc_url( $export_url ) . '">' . esc_html__( 'Export this list to CSV', 'wp-email-campaigns' ) . '</a> ';
         echo '<a class="button" href="' . esc_url( $dupes_url ) . '">' . esc_html__( 'View Duplicates (All Lists)', 'wp-email-campaigns' ) . '</a></p>';
@@ -634,7 +634,7 @@ class Contacts {
         $contacts_url = function($param, $value){
             $url = add_query_arg( [ 
                 'page'      => 'wpec-contacts',
-            ], admin_url('edit.php') );
+            ], admin_url('admin.php') );
             $url = add_query_arg( [ $param => $value ], $url );
             return $url;
         };
@@ -745,7 +745,7 @@ class Contacts {
         $dupes_url = add_query_arg([ 
             'page'         => 'wpec-duplicates',
             'focus_email'  => (string)$row['email'], // new param used by Duplicates screen
-        ], admin_url('edit.php'));
+        ], admin_url('admin.php'));
         echo '      <li><a class="button" href="'.esc_url($dupes_url).'">'.esc_html__('View duplicates for this email','wp-email-campaigns').'</a></li>';
 
             echo '    </ul>';
@@ -833,7 +833,7 @@ class Contacts {
             'page'      => 'wpec-lists',
             'view'      => 'list',
             'list_id'   => (int)$list_id,
-        ], admin_url('edit.php') );
+        ], admin_url('admin.php') );
 
         wp_send_json_success([
             'list_id'   => (int)$list_id,
@@ -1456,7 +1456,7 @@ class Contacts {
         $url = add_query_arg( [ 
             'page'              => 'wpec-import',
             'wpec_start_import' => (int) $result['list_id'],
-        ], admin_url( 'edit.php' ) );
+        ], admin_url( 'admin.php' ) );
         wp_safe_redirect( $url ); exit;
     }
 

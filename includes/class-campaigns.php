@@ -91,7 +91,7 @@ public function add_menu() {
         echo '</select></label></p>';
         echo '<p><label>'.esc_html__('From','wp-email-campaigns').'<br><input type="date" name="d1" value="'.esc_attr($d1).'"></label></p>';
         echo '<p><label>'.esc_html__('To','wp-email-campaigns').'<br><input type="date" name="d2" value="'.esc_attr($d2).'"></label></p>';
-        $send_url = add_query_arg([ 'page'=>'wpec-send'], admin_url('edit.php'));
+        $send_url = add_query_arg([ 'page'=>'wpec-send'], admin_url('admin.php'));
         echo '<p><button class="button">Filter</button> <a class="button button-primary" href="'.esc_url($send_url).'">'.esc_html__('Send new mail','wp-email-campaigns').'</a></p>';
         echo '</form>';
 
@@ -116,7 +116,7 @@ public function add_menu() {
                         'view'        => 'detail',
                         'campaign_id' => (int)$r['id'],
                     ],
-                    admin_url('edit.php')
+                    admin_url('admin.php')
                 );
 
                 $dup_url = wp_nonce_url(
@@ -127,7 +127,7 @@ public function add_menu() {
                 $cont_url = add_query_arg([ 
                     'page'          => 'wpec-send',
                     'load_campaign' => (int)$r['id'],
-                ], admin_url('edit.php'));
+                ], admin_url('admin.php'));
 
                 // Compute a display status from live queue counts to avoid stale UI
                 $display_status = $this->compute_display_status($r['status'] ?? '', (int)$r['queued'], (int)$r['failed'], (int)$r['sent']);
@@ -238,7 +238,7 @@ printf(
                     'view'      => 'list',
                     'list_id'   => (int)$l['id'],
                 ],
-                admin_url('edit.php')
+                admin_url('admin.php')
             );
             $bits[] = '<a href="'.esc_url($list_url).'">'.esc_html($l['name']).'</a>';
         }
@@ -247,7 +247,7 @@ printf(
 
     $back = add_query_arg(
         [  'page' => 'wpec-campaigns'],
-        admin_url('edit.php')
+        admin_url('admin.php')
     );
 
     // Finished if no queued remain and status is terminal (we still show "sent" even with some failed)
@@ -360,7 +360,7 @@ printf(
         wp_safe_redirect( add_query_arg([ 
             'page'=>'wpec-send',
             'load_campaign'=>$new_id
-        ], admin_url('edit.php')) );
+        ], admin_url('admin.php')) );
         exit;
     }
 

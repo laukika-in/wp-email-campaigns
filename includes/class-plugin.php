@@ -73,10 +73,10 @@ public function admin_assets( $hook ) {
     $common = [
         'nonce'        => wp_create_nonce( 'wpec_admin' ),
         'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-        'adminBase'    => admin_url( 'edit.php' ),
+        'adminBase'    => admin_url( 'admin.php' ),
         'listViewBase' => add_query_arg(
             [ 'page'=>'wpec-lists','view'=>'list','list_id'=>''],
-            admin_url('edit.php')
+            admin_url('admin.php')
         ),
         // expose local + CDN to JS 
         'select2CdnCss'   => $select2_cdn_css,
@@ -99,10 +99,10 @@ public function admin_assets( $hook ) {
             // keep any extras specific to this screen here
             'nonce'            => wp_create_nonce( 'wpec_admin' ),
         'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
-          'adminBase'      => admin_url( 'edit.php' ),
+          'adminBase'      => admin_url( 'admin.php' ),
     'queueUrl'       => add_query_arg(
         [  'page' => 'wpec-queue'],
-        admin_url('edit.php')),
+        admin_url('admin.php')),
         ] ) );
     }
     if ( $is_history ) {
