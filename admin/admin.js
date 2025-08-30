@@ -263,21 +263,6 @@
   // ensure state is recalculated after table refresh
   $(document).on("wpec:tableRefreshed", setBulkState);
 
-  // ── Campaign publish confirm ──────────────────────────────────────────────
-  $(function () {
-    var $form = $("#post");
-    if ($("body").hasClass("post-type-email_campaign")) {
-      $form.on("submit", function () {
-        if ($("#publish").length) {
-          var ok = confirm(
-            "Publish campaign? (Sending is configured in next phase.)"
-          );
-          if (!ok) return false;
-        }
-      });
-    }
-  });
-
   // ── Upload/import progress (Import page) ──────────────────────────────────
   function setProgress(pct, text) {
     $("#wpec-progress-wrap").show();
@@ -287,9 +272,7 @@
   function showResultPanel(stats, listId) {
     var $panel = $("#wpec-import-result");
     var dupesUrlAll = new URL(
-      location.origin +
-        location.pathname +
-        "?page=wpec-duplicates",
+      location.origin + location.pathname + "?page=wpec-duplicates",
       location.origin
     );
     var dupesUrlList = new URL(dupesUrlAll.toString());
@@ -331,7 +314,7 @@
     html += "<p>";
     // Link to the just-uploaded list view
     var listUrl = new URL(location.origin + location.pathname, location.origin);
-    listUrl.searchParams.set("post_type", "email_campaign");
+
     listUrl.searchParams.set("page", "wpec-lists");
     listUrl.searchParams.set("view", "list");
     listUrl.searchParams.set("list_id", String(listId));
@@ -1304,7 +1287,6 @@
         var html = "";
         rows.forEach(function (r) {
           var detailUrl = new URL(location.origin + location.pathname);
-          detailUrl.searchParams.set("post_type", "email_campaign");
           detailUrl.searchParams.set("page", "wpec-lists");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
@@ -1846,7 +1828,6 @@
     if (r.id) {
       var viewUrl = window.ajaxurl
         ? new URLSearchParams({
-            post_type: "email_campaign",
             page: "wpec-lists",
             view: "contact",
             contact_id: String(r.id),
