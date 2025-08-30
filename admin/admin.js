@@ -1355,19 +1355,179 @@
   $(document).on("change", "#wpec-page-size", function () {
     contactsQuery(1);
   });
+  const $app = $('#wpec-lists-app[data-page="all"]');
+  if (!$app.length) return;
+
+  /* ========== 3) Compact view (persisted) ========== */
+  const compactKey = "wpec-contacts-compact";
+  function applyCompact() {
+    const on = localStorage.getItem(compactKey) === "1";
+    $app.closest(".wrap").toggleClass("wpec-compact", on);
+    $("#wpec-compact-toggle").prop("checked", on);
+  }
+  function ensureCompactToggle() {
+    const $toolbar = $(".wpec-toolbar");
+    if (!$toolbar.length) return; // safe if you haven’t added the toolbar yet
+    if (!$("#wpec-compact-toggle").length) {
+      $toolbar
+        .find(".cluster")
+        .last()
+        .append(
+          '<label style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;">' +
+            '<input type="checkbox" id="wpec-compact-toggle"> Compact' +
+            "</label>"
+        );
+    }
+    $("#wpec-compact-toggle")
+      .off("change")
+      .on("change", function () {
+        localStorage.setItem(compactKey, this.checked ? "1" : "0");
+        applyCompact();
+      });
+  }
+  ensureCompactToggle();
+  applyCompact();
 
   // Filters
+  function ensureActiveFiltersBar() {
+    if (!$("#wpec-active-filters").length) {
+      // Insert after the filters card
+      $('<div id="wpec-active-filters"></div>').insertAfter(
+        $(".wpec-filters").closest(".wpec-card")
+      );
+    }
+  }
+
+  function valLabelFromSelect($sel) {
+    const vals = $sel.val() || [];
+    return vals.map(function (v) {
+      const $opt = $sel.find(
+        'option[value="' + String(v).replace(/"/g, '\\"') + '"]'
+      );
+      return { value: v, label: ($opt.data("label") || $opt.text()).trim() };
+    });
+  }
+  function buildChips() {
+    ensureActiveFiltersBar();
+    const $bar = $("#wpec-active-filters").empty();
+
+    const defs = [
+      { id: "#wpec-f-search", type: "text", label: "Search" },
+      { id: "#wpec-f-company", type: "select", label: "Company" },
+      { id: "#wpec-f-city", type: "select", label: "City" },
+      { id: "#wpec-f-state", type: "select", label: "State" },
+      { id: "#wpec-f-country", type: "select", label: "Country" },
+      { id: "#wpec-f-job", type: "select", label: "Job" },
+      { id: "#wpec-f-postcode", type: "select", label: "PIN" },
+      { id: "#wpec-f-list", type: "select", label: "List" },
+      { id: "#wpec-f-status", type: "select", label: "Status" },
+      { id: "#wpec-f-emp-min", type: "min", label: "Employees ≥" },
+      { id: "#wpec-f-emp-max", type: "max", label: "Employees ≤" },
+      { id: "#wpec-f-rev-min", type: "min", label: "Revenue ≥" },
+      { id: "#wpec-f-rev-max", type: "max", label: "Revenue ≤" },
+    ];
+
+    const chips = [];
+
+    defs.forEach(function (d) {
+      const $el = $(d.id);
+      if (!$el.length) return;
+
+      if (d.type === "text") {
+        const val = ($el.val() || "").trim();
+        if (val)
+          chips.push({
+            key: d.id,
+            label: d.label + ": " + val,
+            clear: () => {
+              $el.val("");
+            },
+          });
+      }
+      if (d.type === "select") {
+        valLabelFromSelect($el).forEach(function (it) {
+          chips.push({
+            key: d.id + "::" + it.value,
+            label: d.label + ": " + it.label,
+            clear: () => {
+              const vals = ($el.val() || []).filter(
+                (v) => String(v) !== String(it.value)
+              );
+              $el.val(vals).trigger("change");
+            },
+          });
+        });
+      }
+      if (d.type === "min" || d.type === "max") {
+        const val = $el.val();
+        if (val !== "" && val != null) {
+          chips.push({
+            key: d.id,
+            label: d.label + " " + val,
+            clear: () => {
+              $el.val("");
+            },
+          });
+        }
+      }
+    });
+
+    if (!chips.length) {
+      $bar.hide();
+      return;
+    }
+
+    chips.forEach(function (ch) {
+      const $chip = $(
+        '<span class="wpec-chip" data-key="' + ch.key + '"></span>'
+      ).text(ch.label);
+      const $x = $(
+        '<button type="button" class="wpec-chip-remove" aria-label="Remove">&times;</button>'
+      );
+      $x.on("click", function () {
+        ch.clear();
+        buildChips();
+        $("#wpec-f-apply").trigger("click"); // re-run your fetch/render
+      });
+      $chip.append($x);
+      $bar.append($chip);
+    });
+
+    $bar.css("display", "flex");
+  }
+
+  /* ========== 1) Empty state ========== */
+  function ensureEmptyState() {
+    if (!$("#wpec-empty").length) {
+      const $tfoot = $("#wpec-lists-table tfoot");
+      const row =
+        '<tr><td colspan="5"><div class="wpec-empty" id="wpec-empty" style="display:none">' +
+        '<span class="dashicons dashicons-search"></span> ' +
+        "No contacts match the current filters." +
+        "</div></td></tr>";
+      if ($tfoot.length) $tfoot.html(row);
+      else $("#wpec-lists-table").append($("<tfoot/>").html(row));
+    }
+  }
+  function updateEmptyState() {
+    ensureEmptyState();
+    const hasRows = $("#wpec-lists-table tbody tr").length > 0;
+    $("#wpec-empty").toggle(!hasRows);
+  }
+
   $(document).on("click", "#wpec-f-apply", function (e) {
     e.preventDefault();
+    buildChips();
     contactsQuery(1);
   });
   $(document).on("click", "#wpec-f-reset", function (e) {
     e.preventDefault();
     $("#wpec-f-search").val("");
     $(".wpec-s2").val(null).trigger("change");
-    $("#wpec-f-emp-min, #wpec-f-emp-max, #wpec-f-rev-min, #wpec-f-rev-max").val(
+    $("#wpec-f-emp-min,#wpec-f-emp-max,#wpec-f-rev-min,#wpec-f-rev-max").val(
       ""
     );
+    buildChips();
     $(".wpec-col-toggle").prop("checked", false);
     $("#wpec-f-status").val("").trigger("change");
 
@@ -2378,3 +2538,4 @@ jQuery(function () {
       });
   });
 });
+$(document).trigger("wpec:table-updated");
