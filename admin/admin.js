@@ -1334,7 +1334,7 @@
           html += "<td>" + emailHtml + "</td>";
 
           html += "<td>" + (r.status || "") + "</td>";
-          html += "<td>" + formatWpecDate(r.created_at) + "</td>";
+          html += "<td>" + String(r.created_at) + "</td>";
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
 
           cols.forEach(function (c) {

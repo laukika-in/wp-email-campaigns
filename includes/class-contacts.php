@@ -353,7 +353,7 @@ class Contacts {
         $cols = [
             'company_name'=>'Company name','company_employees'=>'Employees','company_annual_revenue'=>'Annual revenue',
             'contact_number'=>'Contact number','job_title'=>'Job title','industry'=>'Industry',
-            'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code','status'=>'Status','created_at'=>'Created'
+            'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code','created_at'=>'Created'
         ];
         foreach ( $cols as $key=>$label ) {
             printf('<label><input type="checkbox" class="wpec-col-toggle" value="%s"> %s</label>', esc_attr($key), esc_html($label));
@@ -421,9 +421,9 @@ class Contacts {
         echo '<th>'.esc_html__('ID','wp-email-campaigns').'</th>';
         echo '<th>'.esc_html__('Full name','wp-email-campaigns').'</th>';
         echo '<th>'.esc_html__('Email','wp-email-campaigns').'</th>';
-        echo '<th>'.esc_html__('Lists','wp-email-campaigns').'</th>';
         echo '<th>'.esc_html__('Status','wp-email-campaigns').'</th>';
         echo '<th>'.esc_html__('Created','wp-email-campaigns').'</th>';
+        echo '<th>'.esc_html__('Lists','wp-email-campaigns').'</th>';
         echo '</tr></thead>';
 
         echo '<tbody></tbody>';
