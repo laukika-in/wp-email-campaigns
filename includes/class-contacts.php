@@ -2394,93 +2394,122 @@ public function get_columns() {
         $value = (int)$item['list_id'] . ':' . (int)$item['contact_id'];
         return sprintf('<input type="checkbox" name="ids[]" value="%s"/>', esc_attr($value));
     }
-    public function prepare_items() {
-        global $wpdb;
-        $ct = Helpers::table('contacts');
-        $dupes = Helpers::table('dupes');
-        $lists = Helpers::table('lists');
-        $li = Helpers::table('list_items');
+public function prepare_items() {
+    global $wpdb;
 
-        $per_page = 30;
-        $paged    = max(1, (int)($_GET['paged'] ?? 1));
-        $offset   = ($paged - 1) * $per_page;
+    $ct    = Helpers::table('contacts');
+    $dupes = Helpers::table('dupes');
+    $lists = Helpers::table('lists');
+    $li    = Helpers::table('list_items');
 
-        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
-        $where  = "WHERE 1=1";
-        $args   = [];
+    $per_page = 30;
+    $paged    = max(1, (int)($_GET['paged'] ?? 1));
+    $offset   = ($paged - 1) * $per_page;
 
-        if ( $this->list_id ) {
-            $where .= " AND d.list_id=%d";
-            $args[] = $this->list_id;
+    $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+    $where  = "WHERE 1=1";
+    $args   = [];
 
-            // ✅ Only contacts in THIS list that also exist in ANY OTHER list
-            $where .= " AND EXISTS (
-                SELECT 1 FROM $li liX
-                WHERE liX.contact_id = d.contact_id AND liX.list_id <> d.list_id
-            )";
-        } else {
-            // ✅ Global view: keep only contacts that are in 2+ lists
-            $where .= " AND (
-                SELECT COUNT(DISTINCT liX.list_id)
-                FROM $li liX
-                WHERE liX.contact_id = d.contact_id
-            ) > 1";
-        }
+    if ( $this->list_id ) {
+        $cur = (int)$this->list_id;
 
-        // Focused email (case-insensitive)
-        if ( $this->focus_email !== '' ) {
-            $where .= " AND LOWER(d.email) = LOWER(%s)";
-            $args[] = $this->focus_email;
-        }
+        // ✅ Must belong to the chosen list…
+        $where .= " AND EXISTS (
+            SELECT 1 FROM $li li_cur
+            WHERE li_cur.contact_id = d.contact_id
+              AND li_cur.list_id = %d
+        )";
+        $args[] = $cur;
 
-        if ( $search ) {
-            $like = '%'.$wpdb->esc_like($search).'%';
-            $where .= " AND (d.email LIKE %s OR d.first_name LIKE %s OR d.last_name LIKE %s)";
-            array_push($args, $like, $like, $like);
-        }
+        // ✅ …and also exist in at least one OTHER list
+        $where .= " AND EXISTS (
+            SELECT 1 FROM $li li_other
+            WHERE li_other.contact_id = d.contact_id
+              AND li_other.list_id <> %d
+        )";
+        $args[] = $cur;
 
-        $total = (int) $wpdb->get_var( $wpdb->prepare(
-            "SELECT COUNT(*) FROM $dupes d $where", $args
-        ));
-
-        $sql = "
-            SELECT
-                d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
-                d.list_id, l.name AS current_list,
-                (
-                    SELECT COUNT(*) FROM $dupes d2
-                    WHERE d2.contact_id = d.contact_id
-                ) AS dup_count,
-                (
-                    SELECT GROUP_CONCAT(DISTINCT CONCAT(l2.id,'::',l2.name)
-                                        ORDER BY li2.created_at DESC SEPARATOR '|')
-                    FROM $li li2
-                    INNER JOIN $lists l2 ON l2.id = li2.list_id
-                    WHERE li2.contact_id = d.contact_id
-                    AND li2.list_id <> d.list_id
-                ) AS other_lists_meta,
-                d.contact_id,
-                c.status
-            FROM $dupes d
-            INNER JOIN $lists l ON l.id = d.list_id
-            INNER JOIN $ct c ON c.id = d.contact_id
-            $where
-            ORDER BY LOWER(d.email) ASC, d.contact_id ASC, d.id DESC
-            LIMIT %d OFFSET %d
+        // Build SELECT fields that pin the current list explicitly
+        $select_current_list = "
+            $cur AS list_id,
+            (SELECT name FROM $lists WHERE id = $cur) AS current_list,
         ";
 
-        $rows = $wpdb->get_results(
-            $wpdb->prepare($sql, array_merge($args, [ $per_page, $offset ])), ARRAY_A
-        );
+        // Exclude the current list in the “other lists” rollup
+        $other_lists_clause = "AND li2.list_id <> $cur";
+    } else {
+        // 🌍 Global view: show only contacts that are in 2+ lists
+        $where .= " AND (
+            SELECT COUNT(DISTINCT liX.list_id)
+            FROM $li liX
+            WHERE liX.contact_id = d.contact_id
+        ) > 1";
 
-        $this->items = $rows;
-        $this->_column_headers = [ $this->get_columns(), [], [] ];
-        $this->set_pagination_args([
-            'total_items' => $total,
-            'per_page'    => $per_page,
-            'total_pages' => ceil($total / $per_page),
-        ]);
+        // In global view, show whatever list the dup event row has
+        $select_current_list = "
+            d.list_id,
+            l.name AS current_list,
+        ";
+        $other_lists_clause = "AND li2.list_id <> d.list_id";
     }
+
+    // Focused email (case-insensitive)
+    if ( $this->focus_email !== '' ) {
+        $where .= " AND LOWER(d.email) = LOWER(%s)";
+        $args[] = $this->focus_email;
+    }
+
+    if ( $search ) {
+        $like = '%'.$wpdb->esc_like($search).'%';
+        $where .= " AND (d.email LIKE %s OR d.first_name LIKE %s OR d.last_name LIKE %s)";
+        array_push($args, $like, $like, $like);
+    }
+
+    // COUNT for pagination
+    $total = (int) $wpdb->get_var( $wpdb->prepare(
+        "SELECT COUNT(*) FROM $dupes d $where", $args
+    ) );
+
+    // Main rows
+    $sql = "
+        SELECT
+            d.id, d.email, d.first_name, d.last_name, d.created_at AS imported_at,
+            $select_current_list
+            (
+                SELECT COUNT(*) FROM $dupes d2
+                WHERE d2.contact_id = d.contact_id
+            ) AS dup_count,
+            (
+                SELECT GROUP_CONCAT(DISTINCT CONCAT(l2.id,'::',l2.name)
+                                    ORDER BY li2.created_at DESC SEPARATOR '|')
+                FROM $li li2
+                INNER JOIN $lists l2 ON l2.id = li2.list_id
+                WHERE li2.contact_id = d.contact_id
+                $other_lists_clause
+            ) AS other_lists_meta,
+            d.contact_id,
+            c.status
+        FROM $dupes d
+        " . ( $this->list_id ? "" : "INNER JOIN $lists l ON l.id = d.list_id" ) . "
+        INNER JOIN $ct c ON c.id = d.contact_id
+        $where
+        ORDER BY LOWER(d.email) ASC, d.contact_id ASC, d.id DESC
+        LIMIT %d OFFSET %d
+    ";
+
+    $rows = $wpdb->get_results(
+        $wpdb->prepare($sql, array_merge($args, [ $per_page, $offset ] )),
+        ARRAY_A
+    );
+
+    $this->items = $rows;
+    $this->_column_headers = [ $this->get_columns(), [], [] ];
+    $this->set_pagination_args([
+        'total_items' => $total,
+        'per_page'    => $per_page,
+        'total_pages' => ceil($total / $per_page),
+    ]);
+}
 
     public function column_default( $item, $col ) {            
         $pairs = explode('|', $meta);
@@ -2490,15 +2519,11 @@ public function get_columns() {
             $lid   = isset($parts[0]) ? (int)$parts[0] : 0;
             $lname = isset($parts[1]) ? $parts[1] : '';
             if ($lid && $lname !== '') {
-                $url = add_query_arg(
-                    [
-                        'post_type' => 'email_campaign',
-                        'page'      => 'wpec-lists',
-                        'view'      => 'list',
-                        'list_id'   => $lid,
-                    ],
-                    admin_url('edit.php')
-                );
+               $url = add_query_arg(
+    [ 'page'=>'wpec-lists', 'view'=>'list', 'list_id'=>(int)$item['list_id'] ],
+    admin_url('admin.php')
+);
+
                 $links[] = sprintf('<a href="%s">%s</a>', esc_url($url), esc_html($lname));
             }
         }
