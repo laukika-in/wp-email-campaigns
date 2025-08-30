@@ -1207,21 +1207,9 @@
       .data("page", pageNo + 1);
     $("#wpec-page-info").text(" — " + total + " contacts");
   }
+
   function contactsQuery(page) {
     var per = parseInt($("#wpec-page-size").val(), 10) || 50;
-
-    // If you want Status + Created to show by default on first load,
-    // make sure your checkboxes for those have data-default="1" and are checked by PHP.
-    // collectCols() should then include them; if not, you can implement a fallback here.
-    var cols =
-      collectCols && collectCols().length
-        ? collectCols()
-        : Array.from(
-            document.querySelectorAll(
-              '.wpec-col-toggle[data-default="1"]:checked'
-            )
-          ).map((el) => el.value);
-
     var filters = currentFilters();
     var data = Object.assign(
       {
@@ -1229,15 +1217,13 @@
         nonce: WPEC.nonce,
         page: page || 1,
         per_page: per,
-        cols: cols,
+        cols: collectCols(),
       },
       filters
     );
-
     $("#wpec-lists-table tbody").html(
       '<tr><td colspan="999">Loading…</td></tr>'
     );
-
     return $.post(WPEC.ajaxUrl, data).done(function (resp) {
       if (!resp || !resp.success) {
         $("#wpec-lists-table tbody").html(
@@ -1245,84 +1231,37 @@
         );
         return;
       }
-
       var rows = resp.data.rows || [];
-      // Refresh cols in case server normalized them
-      cols =
-        collectCols && collectCols().length
-          ? collectCols()
-          : Array.from(
-              document.querySelectorAll(
-                '.wpec-col-toggle[data-default="1"]:checked'
-              )
-            ).map((el) => el.value);
+      var cols = collectCols();
 
-      // ---- HEADERS ----
-      // Base, always-on columns
+      // Build thead
+      var $thead = $("#wpec-lists-table thead tr");
       var head =
-        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th>' +
-        "<th>ID</th>" +
-        "<th>Full name</th>" +
-        "<th>Email</th>" +
-        "<th>List(s)</th>";
-
-      // Optional columns from chooser: include status/created_at here so they can be toggled
+        '<th style="width:28px"><input type="checkbox" id="wpec-master-cb"></th><th>ID</th><th>Full name</th><th>Email</th><th>List(s)</th><th>Status</th><th>Created</th>';
       cols.forEach(function (c) {
-        head += "<th>" + headerLabel(c) + "</th>"; // ensure headerLabel('created_at') => 'Created', headerLabel('status') => 'Status'
+        head += "<th>" + headerLabel(c) + "</th>";
       });
-      $("#wpec-lists-table thead tr").html(head);
+      $thead.html(head);
 
-      // Helper to render a cell based on the column key
-      function renderCell(c, r) {
-        switch (c) {
-          case "status": {
-            var status = (r.status || "").toLowerCase();
-            var map = {
-              active: "is-active",
-              unsubscribed: "is-unsubscribed",
-              bounced: "is-bounced",
-            };
-            var cls = "wpec-status-pill " + (map[status] || "is-active");
-            var label =
-              status === "unsubscribed"
-                ? "Do Not Send"
-                : status === "bounced"
-                ? "Bounced"
-                : "Active";
-            return '<span class="' + cls + '">' + escapeHtml(label) + "</span>";
-          }
-          case "created_at":
-            return escapeHtml(r.created_at || "");
-          default:
-            return escapeHtml(r[c] == null ? "" : String(r[c]));
-        }
-      }
-
-      // ---- ROWS ----
+      // Build rows
       if (!rows.length) {
         $("#wpec-lists-table tbody").html(
           '<tr><td colspan="999">No contacts found.</td></tr>'
         );
       } else {
         var html = "";
-        var showStatusCol = cols.indexOf("status") !== -1; // avoid duplicating pill in Email when status column is shown
-
         rows.forEach(function (r) {
           var detailUrl = new URL(location.origin + location.pathname);
           detailUrl.searchParams.set("post_type", "email_campaign");
           detailUrl.searchParams.set("page", "wpec-lists");
           detailUrl.searchParams.set("view", "contact");
           detailUrl.searchParams.set("contact_id", String(r.id));
-
           html += "<tr>";
-
-          // Checkbox
           html +=
             '<td style="width:24px;"><input type="checkbox" class="wpec-row-cb" data-id="' +
             r.id +
             '"></td>';
 
-          // Base cells
           html += "<td>" + (r.id || "") + "</td>";
           html +=
             '<td><a href="' +
@@ -1330,10 +1269,8 @@
             '">' +
             escapeHtml(r.full_name || "") +
             "</a></td>";
-
-          // Email (only add DND/Bounced pill here if status column is NOT visible)
           var emailHtml = escapeHtml(r.email || "");
-          if (!showStatusCol && r.status && r.status !== "active") {
+          if (r.status && r.status !== "active") {
             var txt = r.status === "unsubscribed" ? "DND" : "Bounced";
             emailHtml +=
               ' <span class="wpec-pill wpec-pill-' +
@@ -1343,31 +1280,27 @@
               "</span>";
           }
           html += "<td>" + emailHtml + "</td>";
-
-          // Lists
           html += "<td>" + escapeHtml(r.lists || "") + "</td>";
-
-          // Optional columns in chosen order
           cols.forEach(function (c) {
-            html += "<td>" + renderCell(c, r) + "</td>";
+            html +=
+              "<td>" + escapeHtml(r[c] == null ? "" : String(r[c])) + "</td>";
           });
 
+          html += "<td>" + status + "</td>";
+
+          html += "<td>" + created_at + "</td>";
           html += "</tr>";
         });
-
         $("#wpec-lists-table tbody").html(html);
       }
 
-      // Pager + state
+      // Pager
       renderPager(
         resp.data.page || 1,
         resp.data.total_pages || 1,
         resp.data.total || 0
       );
       setBulkState();
-
-      // Notify any listeners (empty-state toggler, etc.)
-      $(document).trigger("wpec:table-updated");
     });
   }
 
@@ -1393,10 +1326,6 @@
         return "City";
       case "postal_code":
         return "Postal code";
-      case "status":
-        return "Status";
-      case "created_at":
-        return "Created";
       default:
         return key;
     }
