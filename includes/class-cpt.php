@@ -39,14 +39,15 @@ class CPT {
         ] );
 
         // contacts/Lists page under Campaigns
-        add_submenu_page(
-            'edit.php?post_type=' . self::POST_TYPE,
-            __( 'Lists', 'wp-email-campaigns' ),
-            __( 'Lists', 'wp-email-campaigns' ),
-            'manage_options',
-            'wpec-lists',
-            [ $this, 'render_contacts_page' ]
-        );
+        add_menu_page(
+        __( 'Lists', 'wp-email-campaigns' ),
+        __( 'Lists', 'wp-email-campaigns' ),
+        'manage_options',
+        'wpec-lists',
+        [ $this, 'render_contacts_page' ],
+        'dashicons-list-view',
+        25
+    );
     }
 
     public function render_contacts_page() {
