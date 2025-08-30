@@ -1413,6 +1413,29 @@
   });
   const $app = $('#wpec-lists-app[data-page="all"]');
   if (!$app.length) return;
+  function updateColCount() {
+    const n = $(".wpec-col-toggle:checked").length;
+    $("#wpec-col-count").text(n);
+  }
+  $(document).on("change", ".wpec-col-toggle", updateColCount);
+  updateColCount();
+
+  // Quick status segmented filters → mirror into #wpec-f-status
+  function setStatusFilter(value) {
+    // value = "__all" | "active" | "unsubscribed" | "bounced"
+    const $sel = $("#wpec-f-status");
+    if (value === "__all") {
+      $sel.val(null).trigger("change");
+    } else {
+      $sel.val([value]).trigger("change");
+    }
+    $(".wpec-seg-btn").removeClass("is-on");
+    $('.wpec-seg-btn[data-status="' + value + '"]').addClass("is-on");
+    $("#wpec-f-apply").trigger("click");
+  }
+  $(document).on("click", ".wpec-seg-btn", function () {
+    setStatusFilter($(this).data("status"));
+  });
 
   /* ========== 3) Compact view (persisted) ========== */
   const compactKey = "wpec-contacts-compact";
@@ -1421,6 +1444,28 @@
     $app.closest(".wrap").toggleClass("wpec-compact", on);
     $("#wpec-compact-toggle").prop("checked", on);
   }
+  $("#wpec-compact-toggle").on("change", function () {
+    localStorage.setItem(compactKey, this.checked ? "1" : "0");
+    applyCompact();
+  });
+  applyCompact();
+  // Skeleton rows on load
+  function putSkeletonRows() {
+    const cols = $("#wpec-lists-table thead th").length || 8;
+    let skel = "";
+    for (let i = 0; i < 8; i++) {
+      skel += "<tr>";
+      for (let c = 0; c < cols; c++) {
+        skel +=
+          '<td><div class="wpec-skel" style="width:' +
+          (30 + Math.random() * 60) +
+          '%"></div></td>';
+      }
+      skel += "</tr>";
+    }
+    $("#wpec-lists-table tbody").html(skel);
+  }
+  $(document).on("wpec:loading", putSkeletonRows);
   function ensureCompactToggle() {
     const $toolbar = $(".wpec-toolbar");
     if (!$toolbar.length) return; // safe if you haven’t added the toolbar yet
@@ -1842,7 +1887,7 @@
     var status = $wrap.data("status") || "";
     var pageSize = parseInt($("#wpec-page-size").val() || "50", 10);
     var page = opts && opts.page ? opts.page : 1;
-
+    $(document).trigger("wpec:loading");
     $("#wpec-lists-table tbody").html('<tr><td colspan="5">Loading…</td></tr>');
     $.post(WPEC.ajaxUrl, {
       action: "wpec_contacts_query",

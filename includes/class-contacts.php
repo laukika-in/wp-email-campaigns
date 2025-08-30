@@ -307,7 +307,8 @@ class Contacts {
              ORDER BY l.name ASC LIMIT 1000", ARRAY_A
         );
 
-        echo '<div class="wrap" id="wpec-lists-app" data-page="all">';
+        echo '<div class="wrap wpec-admin" id="wpec-lists-app" data-page="all">';
+
 
         echo '<h1>' . esc_html__('Contacts', 'wp-email-campaigns') . '</h1>';
 
@@ -327,38 +328,65 @@ class Contacts {
         echo '<span class="wpec-loader" id="wpec-bulk-loader" style="display:none"></span>';
         echo '</div>';
         // Presets toolbar (Saved Views)
-            echo '<div class="wpec-toolbar">';
+        // ===== Toolbar (Saved views • Quick status • Export • Columns • Compact) =====
+        echo '<div class="wpec-toolbar">';
+
         // Left cluster — Saved views
         echo '<div class="cluster">';
-        echo '<strong>'.esc_html__('Saved views', 'wp-email-campaigns').'</strong>';
-        echo '<select id="wpec-preset" style="min-width:260px"></select>';
-        echo '<label><input type="checkbox" id="wpec-preset-default"> '.esc_html__('Default','wp-email-campaigns').'</label>';
-        echo '<button class="button" id="wpec-preset-load" disabled>'.esc_html__('Load','wp-email-campaigns').'</button>';
-        echo '<button class="button" id="wpec-preset-save">'.esc_html__('Save current as…','wp-email-campaigns').'</button>';
-        echo '<button class="button" id="wpec-preset-overwrite" disabled>'.esc_html__('Overwrite','wp-email-campaigns').'</button>';
-        echo '<button class="button" id="wpec-preset-delete" disabled>'.esc_html__('Delete','wp-email-campaigns').'</button>';
+            echo '<strong>'.esc_html__('Saved views', 'wp-email-campaigns').'</strong>';
+            echo '<select id="wpec-preset" style="min-width:260px"></select>';
+            echo '<label><input type="checkbox" id="wpec-preset-default"> '.esc_html__('Default','wp-email-campaigns').'</label>';
+            echo '<button class="button" id="wpec-preset-load" disabled>'.esc_html__('Load','wp-email-campaigns').'</button>';
+            echo '<button class="button" id="wpec-preset-save">'.esc_html__('Save current as…','wp-email-campaigns').'</button>';
+            echo '<button class="button" id="wpec-preset-overwrite" disabled>'.esc_html__('Overwrite','wp-email-campaigns').'</button>';
+            echo '<button class="button" id="wpec-preset-delete" disabled>'.esc_html__('Delete','wp-email-campaigns').'</button>';
         echo '</div>';
 
-        // Right cluster — Export
+        // Middle cluster — Quick status filters (segmented)
+        echo '<div class="cluster wpec-seg" role="group" aria-label="Quick status">';
+            echo '<button type="button" class="button wpec-seg-btn is-on" data-status="__all">'.esc_html__('All','wp-email-campaigns').'</button>';
+            echo '<button type="button" class="button wpec-seg-btn" data-status="active">'.esc_html__('Active','wp-email-campaigns').'</button>';
+            echo '<button type="button" class="button wpec-seg-btn" data-status="unsubscribed">'.esc_html__('DND','wp-email-campaigns').'</button>';
+            echo '<button type="button" class="button wpec-seg-btn" data-status="bounced">'.esc_html__('Bounced','wp-email-campaigns').'</button>';
+        echo '</div>';
+
+        // Right cluster — Export • Columns dropdown • Compact toggle
         echo '<div class="cluster">';
-            echo '<button class="button" id="wpec-export-contacts">'
-            . '<span class="dashicons dashicons-download" aria-hidden="true"></span>'
-            . esc_html__('Export CSV (filtered)', 'wp-email-campaigns') . '</button>';
-        echo '</div>';
+            echo '<button class="button" id="wpec-export-contacts"><span class="dashicons dashicons-download" aria-hidden="true"></span> '.esc_html__('Export CSV (filtered)', 'wp-email-campaigns').'</button>';
+
+            // Columns dropdown (moved from "Show more columns")
+            echo '<details class="wpec-dropdown" id="wpec-cols-dd">';
+            echo '<summary class="button"><span class="dashicons dashicons-screenoptions" aria-hidden="true"></span> '.esc_html__('Columns','wp-email-campaigns').' <span id="wpec-col-count" class="wpec-count-badge">0</span></summary>';
+            echo '<div class="wpec-menu">';
+                echo '<div class="wpec-columns-grid">';
+                $cols = [
+                    'company_name'=>'Company name','company_employees'=>'Employees','company_annual_revenue'=>'Annual revenue',
+                    'contact_number'=>'Contact number','job_title'=>'Job title','industry'=>'Industry',
+                    'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code',
+                    'status'=>'Status','created_at'=>'Created'
+                ];
+                // default-on: Status + Created
+                $default_visible_cols = ['status','created_at'];
+                foreach ( $cols as $key=>$label ) {
+                    $checked = in_array($key,$default_visible_cols,true) ? ' checked' : '';
+                    printf('<label><input type="checkbox" class="wpec-col-toggle" value="%s" data-default="%d"%s> %s</label>',
+                    esc_attr($key),
+                    in_array($key,$default_visible_cols,true) ? 1 : 0,
+                    $checked,
+                    esc_html($label)
+                    );
+                }
+                echo '</div>';
+            echo '</div>';
+            echo '</details>';
+
+            // Compact view toggle
+            echo '<label class="wpec-compact-toggle"><input type="checkbox" id="wpec-compact-toggle"> '.esc_html__('Compact','wp-email-campaigns').'</label>';
+
         echo '</div>';
 
-        // Column chooser
-        echo '<details class="wpec-columns-toggle"><summary>'.esc_html__('Show more columns','wp-email-campaigns').'</summary>';
-        echo '<div class="wpec-columns-grid">';
-        $cols = [
-            'company_name'=>'Company name','company_employees'=>'Employees','company_annual_revenue'=>'Annual revenue',
-            'contact_number'=>'Contact number','job_title'=>'Job title','industry'=>'Industry',
-            'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code','created_at'=>'Created'
-        ];
-        foreach ( $cols as $key=>$label ) {
-            printf('<label><input type="checkbox" class="wpec-col-toggle" value="%s"> %s</label>', esc_attr($key), esc_html($label));
-        }
-        echo '</div></details>';
+        echo '</div>'; // /wpec-toolbar
+
 
         // Filters (Select2-enhanced)
         echo '<div class="wpec-filters">';
@@ -1311,8 +1339,6 @@ class Contacts {
         $emp_max  = isset($_POST['emp_max']) && $_POST['emp_max'] !== '' ? (int)$_POST['emp_max'] : null;
         $rev_min  = isset($_POST['rev_min']) && $_POST['rev_min'] !== '' ? (int)$_POST['rev_min'] : null;
         $rev_max  = isset($_POST['rev_max']) && $_POST['rev_max'] !== '' ? (int)$_POST['rev_max'] : null;
- 
-
 
         $allowed_cols = [
             'company_name','company_employees','company_annual_revenue','contact_number',
