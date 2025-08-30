@@ -1285,10 +1285,6 @@
             html +=
               "<td>" + escapeHtml(r[c] == null ? "" : String(r[c])) + "</td>";
           });
-
-          html += "<td>" + status + "</td>";
-
-          html += "<td>" + created_at + "</td>";
           html += "</tr>";
         });
         $("#wpec-lists-table tbody").html(html);
