@@ -516,7 +516,7 @@ public function render_status_list( $status_slug ) {
         $table = new WPEC_List_Items_Table( $list_id );
         $table->prepare_items();
         echo '<div class="wpec-toolbar" style="display:flex;gap:8px;align-items:center;margin:8px 0">'; 
-echo ' <span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none"></span>';
+        echo ' <span class="wpec-loader" id="wpec-list-bulk-loader" style="display:none"></span>';
 
 // Move to another list (exclude current list)
 global $wpdb;
@@ -2125,7 +2125,7 @@ class WPEC_Lists_Table extends \WP_List_Table {
            case 'status': return esc_html( ucfirst($item['status']) );
             case 'created_at': return esc_html( $item['created_at'] );
             case 'actions':
-                return sprintf('<a class="button" href="%s">%s</a> <a class="button" href="%s">%s</a>',
+                return sprintf('<a href="%s">%s</a> <a class="button" href="%s">%s</a>',
                     esc_url($view), esc_html__('View','wp-email-campaigns'),
                     esc_url($dupes), esc_html__('View Duplicates','wp-email-campaigns')
                 );
