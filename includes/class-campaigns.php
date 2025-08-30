@@ -81,7 +81,7 @@ public function add_menu() {
 
         // Toolbar
         echo '<form method="GET" class="wpec-toolbar" style="display:flex;gap:8px;align-items:end;margin:10px 0;">';
-        echo '<input type="hidden" name="post_type" value="email_campaign">';
+    
         echo '<input type="hidden" name="page" value="wpec-campaigns">';
         echo '<p><label>'.esc_html__('Search','wp-email-campaigns').'<br><input type="text" name="q" value="'.esc_attr($q).'"></label></p>';
         echo '<p><label>'.esc_html__('Status','wp-email-campaigns').'<br><select name="status"><option value="">—</option>';
@@ -91,7 +91,7 @@ public function add_menu() {
         echo '</select></label></p>';
         echo '<p><label>'.esc_html__('From','wp-email-campaigns').'<br><input type="date" name="d1" value="'.esc_attr($d1).'"></label></p>';
         echo '<p><label>'.esc_html__('To','wp-email-campaigns').'<br><input type="date" name="d2" value="'.esc_attr($d2).'"></label></p>';
-        $send_url = add_query_arg(['post_type'=>'email_campaign','page'=>'wpec-send'], admin_url('edit.php'));
+        $send_url = add_query_arg([ 'page'=>'wpec-send'], admin_url('edit.php'));
         echo '<p><button class="button">Filter</button> <a class="button button-primary" href="'.esc_url($send_url).'">'.esc_html__('Send new mail','wp-email-campaigns').'</a></p>';
         echo '</form>';
 
@@ -111,8 +111,7 @@ public function add_menu() {
         } else {
             foreach ($rows as $r) {
                 $view_url = add_query_arg(
-                    [
-                        'post_type'   => 'email_campaign',
+                    [ 
                         'page'        => 'wpec-campaigns',
                         'view'        => 'detail',
                         'campaign_id' => (int)$r['id'],
@@ -125,8 +124,7 @@ public function add_menu() {
                     'wpec_admin', 'nonce'
                 );
 
-                $cont_url = add_query_arg([
-                    'post_type'     => 'email_campaign',
+                $cont_url = add_query_arg([ 
                     'page'          => 'wpec-send',
                     'load_campaign' => (int)$r['id'],
                 ], admin_url('edit.php'));
@@ -235,8 +233,7 @@ printf(
         $bits = [];
         foreach ( $lists as $l ) {
             $list_url = add_query_arg(
-                [
-                    'post_type' => 'email_campaign',
+                [ 
                     'page'      => 'wpec-lists',
                     'view'      => 'list',
                     'list_id'   => (int)$l['id'],
@@ -249,7 +246,7 @@ printf(
     }
 
     $back = add_query_arg(
-        ['post_type' => 'email_campaign', 'page' => 'wpec-campaigns'],
+        [  'page' => 'wpec-campaigns'],
         admin_url('edit.php')
     );
 
@@ -360,8 +357,7 @@ printf(
         }
 
         // Go directly to Send screen with the new draft loaded
-        wp_safe_redirect( add_query_arg([
-            'post_type'=>'email_campaign',
+        wp_safe_redirect( add_query_arg([ 
             'page'=>'wpec-send',
             'load_campaign'=>$new_id
         ], admin_url('edit.php')) );

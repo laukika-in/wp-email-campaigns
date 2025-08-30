@@ -71,8 +71,7 @@ public function add_menu() {
 
                 // Detail link
                 $detail_url = add_query_arg(
-                    [
-                        'post_type' => 'email_campaign',
+                    [ 
                         'page'      => 'wpec-campaigns',
                         'view'      => 'detail',
                         'id'        => $campaign_id,
@@ -87,7 +86,7 @@ public function add_menu() {
                 
                 // build Campaign Detail URL for this row
 $detail = add_query_arg(
-    ['post_type'=>'email_campaign','page'=>'wpec-campaigns','view'=>'detail','campaign_id'=>(int)$r['id']],
+    ['page'=>'wpec-campaigns','view'=>'detail','campaign_id'=>(int)$r['id']],
     admin_url('edit.php')
 );
 $title  = $r['subject'] ?: ($r['name'] ?: ('#'.$r['id']));

@@ -42,7 +42,7 @@ public function admin_assets( $hook ) {
     $is_queue   = in_array($pg, ['wpec-queue'], true);
 
 
-    if ( $pt === 'email_campaign' && in_array($hook, ['post.php','post-new.php'], true) ) {
+    if (  in_array($hook, ['post.php','post-new.php'], true) ) {
         $is_campaign_edit = true;
     }
     if ( in_array($pg, ['wpec-send','wpec-campaigns','wpec-queue'], true) ) {
@@ -75,7 +75,7 @@ public function admin_assets( $hook ) {
         'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
         'adminBase'    => admin_url( 'edit.php' ),
         'listViewBase' => add_query_arg(
-            ['post_type'=>'email_campaign','page'=>'wpec-lists','view'=>'list','list_id'=>''],
+            [ 'page'=>'wpec-lists','view'=>'list','list_id'=>''],
             admin_url('edit.php')
         ),
         // expose local + CDN to JS 
@@ -101,7 +101,7 @@ public function admin_assets( $hook ) {
         'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
           'adminBase'      => admin_url( 'edit.php' ),
     'queueUrl'       => add_query_arg(
-        ['post_type' => 'email_campaign', 'page' => 'wpec-queue'],
+        [  'page' => 'wpec-queue'],
         admin_url('edit.php')),
         ] ) );
     }

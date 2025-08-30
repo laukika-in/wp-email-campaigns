@@ -172,8 +172,7 @@ class Contacts {
 
         $table = new WPEC_Lists_Table();
         $table->prepare_items();
-        echo '<form method="get">';
-        echo '<input type="hidden" name="post_type" value="email_campaign" />';
+        echo '<form method="get">'; 
         echo '<input type="hidden" name="page" value="wpec-lists" />';
         $table->search_box( __( 'Search Lists', 'wp-email-campaigns' ), 'wpecl' );
         $table->display();
@@ -583,8 +582,7 @@ echo '</div></label>';
         echo '<button class="button" id="wpec-list-bulk-move" disabled>'.esc_html__('Move','wp-email-campaigns').'</button>';
         echo '</div>';
 
-        echo '<form id="wpec-list-form" method="get">';
-        echo '<input type="hidden" name="post_type" value="email_campaign" />';
+        echo '<form id="wpec-list-form" method="get">'; 
         echo '<input type="hidden" name="page" value="wpec-lists" />';
         echo '<input type="hidden" name="view" value="list" />';
         echo '<input type="hidden" name="list_id" value="' . (int) $list_id . '" />';
@@ -895,8 +893,7 @@ echo '</div></label>';
         // PASS the resolved email into the table (2nd arg)
         $table = new WPEC_Duplicates_Table( $list_id, $focus_email );
         $table->prepare_items();
-        echo '<form id="wpec-dup-form" method="get" action="' . esc_url( admin_url('admin.php') ) . '">';
-        echo '<input type="hidden" name="post_type" value="email_campaign" />';
+        echo '<form id="wpec-dup-form" method="get" action="' . esc_url( admin_url('admin.php') ) . '">'; 
         echo '<input type="hidden" name="page" value="wpec-duplicates" />';
         echo '<input type="hidden" name="view" value="dupes' . ( $list_id ? '_list' : '' ) . '" />';
         if ( $list_id ) { echo '<input type="hidden" name="list_id" value="' . (int) $list_id . '" />'; }

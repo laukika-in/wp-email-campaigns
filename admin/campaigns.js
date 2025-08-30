@@ -13,7 +13,7 @@
       (window.ajaxurl
         ? window.ajaxurl.replace("admin-ajax.php", "edit.php")
         : "/wp-admin/edit.php");
-    const usp = new URLSearchParams({ post_type: "email_campaign", ...params });
+    const usp = new URLSearchParams({...params });
     return base + "?" + usp.toString();
   }
 
@@ -315,7 +315,7 @@
   function onCampaignDetailPage() {
     const sp = new URLSearchParams(location.search);
     return (
-      sp.get("post_type") === "email_campaign" &&
+     
       sp.get("page") === "wpec-campaigns" &&
       sp.get("view") === "detail"
     );
