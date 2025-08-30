@@ -42,7 +42,7 @@ add_action('admin_menu', [ $this, 'register' ]);
         __( 'Lists','wp-email-campaigns' ),
         $cap,
         'wpec-lists',
-        [ $this, 'render_send_screen' ],
+        [ $this, 'render_contacts_page' ],
         'dashicons-list-view',
         25
     );
