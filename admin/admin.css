@@ -503,3 +503,99 @@
 .wpec-quick-actions li + li {
   margin-top: 8px;
 }
+/* ========= Toolbar + Filters polish (add to end) ========= */
+
+/* A tidy, sticky toolbar that holds Saved Views (left) and Export (right) */
+.wpec-toolbar {
+  position: sticky;
+  top: 32px; /* 32px admin bar on desktop */
+  z-index: 40;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  margin: 12px 0;
+}
+@media (max-width: 782px) {
+  .wpec-toolbar {
+    top: 46px;
+  }
+} /* admin bar height on small screens */
+
+.wpec-toolbar .cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.wpec-toolbar .cluster strong {
+  margin-right: 4px;
+}
+.wpec-toolbar .button .dashicons {
+  margin-right: 4px;
+}
+
+/* Filters: clean grid with consistent column widths and tidy spacing */
+.wpec-filters {
+  padding-top: 6px;
+}
+.wpec-filter-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 1280px) {
+  .wpec-filter-row {
+    grid-template-columns: repeat(3, minmax(200px, 1fr));
+  }
+}
+@media (max-width: 782px) {
+  .wpec-filter-row {
+    grid-template-columns: 1fr;
+  }
+}
+.wpec-filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; /* allow shrinking inside grid */
+}
+.wpec-filter-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* Select2 alignment & compact chips */
+.wpec-filters .select2-container {
+  min-width: 220px;
+}
+.select2-container .select2-selection--multiple {
+  min-height: 34px;
+  border-color: #c3c4c7;
+}
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice {
+  margin-top: 4px;
+}
+
+/* Optional: show active filter chips below filters (if you emit them via JS) */
+#wpec-active-filters {
+  display: none; /* set to flex via JS when chips exist */
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+#wpec-active-filters .wpec-chip {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1e3a8a;
+}
