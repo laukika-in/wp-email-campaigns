@@ -592,6 +592,15 @@ class Contacts {
         $table->display();
         echo '</form></div>';
     }
+public function route_contacts() {
+  $view = isset($_GET['view']) ? sanitize_key($_GET['view']) : 'all';
+  if ($view === 'contact') {
+    $id = isset($_GET['contact_id']) ? absint($_GET['contact_id']) : 0;
+    $this->render_contact_detail($id);
+  } else {
+    $this->render_all_contacts();
+  }
+}
 
     private function render_contact_detail( $contact_id ) {
         if ( ! Helpers::user_can_manage() ) { wp_die( 'Denied' ); }
@@ -672,6 +681,8 @@ class Contacts {
                 );
             }
         }
+
+        
 
         echo '<div class="wrap" id="wpec-contact-detail" data-contact-id="'.(int)$contact_id.'">';
 
