@@ -1324,10 +1324,6 @@
         return "City";
       case "postal_code":
         return "Postal code";
-      case "status":
-        return "Status";
-      case "created_at":
-        return "Created";
       default:
         return key;
     }
