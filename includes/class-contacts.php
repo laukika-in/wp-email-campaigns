@@ -362,8 +362,7 @@ class Contacts {
                 $cols = [
                     'company_name'=>'Company name','company_employees'=>'Employees','company_annual_revenue'=>'Annual revenue',
                     'contact_number'=>'Contact number','job_title'=>'Job title','industry'=>'Industry',
-                    'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code',
-                    'status'=>'Status','created_at'=>'Created'
+                    'country'=>'Country','state'=>'State','city'=>'City','postal_code'=>'Postal code'
                 ];
                 // default-on: Status + Created
                 $default_visible_cols = ['status','created_at'];

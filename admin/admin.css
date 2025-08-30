@@ -1,32 +1,36 @@
 /* ==========================================================================
-   WP Email Campaigns — Admin Styles
+   WP Email Campaigns — Admin Styles (consolidated)
    ========================================================================== */
+
+/* Root scope tokens */
+.wpec-admin {
+  --bg: #fff;
+  --line: #e5e7eb;
+  --muted: #6b7280;
+  --chip: #f3f4f6;
+  --shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
 
 /* ==========================================================================
    1) Cards
    ========================================================================== */
-
 .wpec-card {
-  background: #fff;
-  border: 1px solid #e5e7eb; /* unified border */
+  background: var(--bg);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
   margin: 12px 0;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow);
 }
-
-/* Vertical rhythm when multiple cards stack */
 .wpec-card + .wpec-card {
   margin-top: 16px;
 }
 
-/* Card header blocks */
 .wpec-card-header {
   display: flex;
   align-items: stretch;
   gap: 16px;
 }
-
 .wpec-header-left {
   display: flex;
   gap: 14px;
@@ -37,7 +41,6 @@
 /* ==========================================================================
    2) Inline Loader / Spinner
    ========================================================================== */
-
 .wpec-loader {
   display: inline-block;
   width: 18px;
@@ -49,7 +52,6 @@
   vertical-align: middle;
   margin-left: 8px;
 }
-
 @keyframes wpecspin {
   to {
     transform: rotate(360deg);
@@ -59,14 +61,12 @@
 /* ==========================================================================
    3) Progress Bar
    ========================================================================== */
-
 .wpec-progress {
   background: #f3f4f6;
   border-radius: 6px;
   height: 12px;
   overflow: hidden;
 }
-
 .wpec-progress span {
   display: block;
   height: 100%;
@@ -77,7 +77,6 @@
 /* ==========================================================================
    4) Result Panel (Import Summary)
    ========================================================================== */
-
 .wpec-result {
   margin-top: 12px;
   background: #f8fafc;
@@ -85,16 +84,14 @@
   border-radius: 8px;
   padding: 12px;
 }
-
 .wpec-result .wpec-stats {
   margin: 0;
   padding-left: 18px;
 }
 
 /* ==========================================================================
-   5) Pills / Status Chips
+   5) Pills / Status Chips / Tags
    ========================================================================== */
-
 .wpec-pill {
   display: inline-block;
   padding: 2px 6px;
@@ -102,54 +99,46 @@
   font-size: 11px;
   line-height: 1;
 }
-
 .wpec-pill-dup {
   background: #fff7ed;
   border-color: #fdba74;
   color: #9a3412;
 }
 
-/* Contact status pills */
 .wpec-status-pill {
   display: inline-block;
   padding: 3px 8px;
   border-radius: 999px;
   font-size: 12px;
   line-height: 1;
-  text-transform: none;
   border: 1px solid transparent;
 }
-
 .wpec-status-pill.is-active {
   background: #edf7ee;
   color: #176a32;
   border-color: #cfe7d2;
 }
-
 .wpec-status-pill.is-unsubscribed {
   background: #f5f5f5;
   color: #444;
   border-color: #e2e2e2;
 }
-
 .wpec-status-pill.is-bounced {
   background: #fff3f2;
   color: #b42318;
   border-color: #f3c6c3;
 }
 
-/* State-style pills used elsewhere */
+/* legacy state-style pills used elsewhere */
 .wpec-pill-unsubscribed {
-  background: #d97706; /* amber-ish */
+  background: #d97706;
   color: #fff;
 }
-
 .wpec-pill-bounced {
-  background: #ef4444; /* red */
+  background: #ef4444;
   color: #fff;
 }
 
-/* Tag/list chips */
 .wpec-chip {
   display: inline-flex;
   align-items: center;
@@ -160,11 +149,9 @@
   background: #fafbfc;
   margin: 4px 6px 0 0;
 }
-
 .wpec-chip a {
   text-decoration: none;
 }
-
 .wpec-chip .wpec-chip-remove {
   appearance: none;
   border: 0;
@@ -176,7 +163,6 @@
   padding: 0 2px;
   margin-left: 2px;
 }
-
 .wpec-chip .wpec-chip-remove:hover {
   color: #b42318;
 }
@@ -184,13 +170,11 @@
 /* ==========================================================================
    6) Toolbars & Bulk Progress
    ========================================================================== */
-
 .wpec-dup-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 #wpec-dup-bulk-progress,
 #wpec-list-bulk-progress {
   margin: 10px 0;
@@ -199,14 +183,12 @@
 /* ==========================================================================
    7) Modal (Overlay + Windows)
    ========================================================================== */
-
 #wpec-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.2);
   z-index: 10000;
 }
-
 #wpec-modal,
 #wpec-modal-list {
   position: fixed;
@@ -214,31 +196,27 @@
   left: 50%;
   transform: translateX(-50%);
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
   z-index: 10001;
   max-width: 720px;
   width: 95%;
 }
-
 .wpec-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--line);
 }
-
 .wpec-modal-body,
 .wpec-modal-inner {
-  /* support both markup variants */
   padding: 12px 16px;
   max-height: 70vh;
   overflow: auto;
   position: relative;
 }
-
 .wpec-modal-close {
   font-size: 22px;
   line-height: 1;
@@ -246,7 +224,6 @@
   border: 0;
   cursor: pointer;
 }
-
 .wpec-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -256,361 +233,26 @@
 /* ==========================================================================
    8) Expand Rows (Lists Page Metrics)
    ========================================================================== */
-
 .wpec-expand-row td {
   background: #fbfbfb;
   padding: 0 12px 12px;
 }
-
 .wpec-expand-box {
   padding: 12px 6px 6px;
   background: #fbfbfc;
   border: 1px dashed #ccd0d4;
 }
-
 .wpec-expand-loading {
   padding: 12px;
   color: #555;
 }
-
 .wpec-metrics-table th {
   width: 260px;
 }
 
 /* ==========================================================================
-   9) Contacts Directory — Controls & Filters
+   9) Toolbar (sticky), Columns dropdown, Segmented filters
    ========================================================================== */
-
-#wpec-lists-controls {
-  max-width: 1200px;
-}
-
-.wpec-filters {
-  margin-top: 8px;
-}
-
-.wpec-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.wpec-filter-row label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 220px;
-}
-
-.wpec-number-range {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.wpec-filter-actions {
-  margin-top: 10px;
-}
-
-/* Column chooser */
-.wpec-columns-toggle summary {
-  cursor: pointer;
-}
-
-.wpec-columns-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-
-/* ==========================================================================
-   10) Select2 Tweaks
-   ========================================================================== */
-
-/* Generic width for Select2 controls in this plugin */
-.select2-container {
-  min-width: 240px;
-}
-
-/* Narrower minimum on filters where space is tighter */
-.wpec-filters .select2-container {
-  min-width: 220px;
-}
-
-/* Multiple select height & padding */
-.select2-container .select2-selection--multiple {
-  min-height: 32px;
-}
-
-.select2-container .select2-selection__rendered {
-  padding: 2px 8px;
-}
-
-/* Explicit utility for wider select2s when needed */
-.wpec-select2 {
-  min-width: 240px;
-}
-
-/* ==========================================================================
-   11) Tables & Scrolling
-   ========================================================================== */
-
-.wpec-table-scroll {
-  max-height: 62vh;
-  overflow: auto;
-}
-
-/* Sticky table headers in lists table */
-#wpec-lists-table thead th {
-  position: sticky;
-  top: 0;
-  background: #fff;
-  z-index: 1;
-}
-
-/* Detail table */
-.wpec-detail-table th {
-  width: 220px;
-}
-
-/* ==========================================================================
-   12) Bulk Bar (All Contacts)
-   ========================================================================== */
-
-#wpec-bulkbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  max-width: 1200px;
-}
-
-#wpec-bulkbar .wpec-bulk-move {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-/* ==========================================================================
-   13) Pager
-   ========================================================================== */
-
-.wpec-pager {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
-#wpec-page-numbers .wpec-page-link {
-  display: inline-block;
-  padding: 3px 6px;
-  border: 1px solid #ccd0d4;
-  margin: 0 2px;
-  text-decoration: none;
-  color: #1d2327;
-  background: #fff;
-}
-
-#wpec-page-numbers .wpec-page-link.is-active {
-  background: #2271b1;
-  color: #fff;
-  border-color: #2271b1;
-}
-
-#wpec-page-numbers .wpec-page-link.is-disabled {
-  opacity: 0.5;
-  cursor: default;
-  pointer-events: none;
-}
-
-#wpec-page-numbers .dots {
-  padding: 0 4px;
-  color: #777;
-}
-
-/* ==========================================================================
-   14) Contact Detail Page Layout
-   ========================================================================== */
-
-.wpec-detail-grid {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 16px;
-}
-
-@media (max-width: 1024px) {
-  .wpec-detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Avatar & header bits */
-.wpec-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 18px;
-  background: #f0f2f4;
-  color: #3c434a;
-  border: 1px solid #e2e4e7;
-}
-
-.wpec-head-meta {
-  line-height: 1.35;
-}
-
-.wpec-head-name {
-  margin: 0 0 4px 0;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.wpec-head-email {
-  color: #50575e;
-}
-
-.wpec-head-lists {
-  margin-top: 6px;
-}
-
-/* Header action controls */
-.wpec-header-actions {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-
-.wpec-header-actions label select {
-  min-width: 200px;
-}
-
-/* Quick actions list */
-.wpec-quick-actions {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.wpec-quick-actions li + li {
-  margin-top: 8px;
-}
-/* ========= Toolbar + Filters polish (add to end) ========= */
-
-/* A tidy, sticky toolbar that holds Saved Views (left) and Export (right) */
-.wpec-toolbar {
-  position: sticky;
-  top: 32px; /* 32px admin bar on desktop */
-  z-index: 40;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
-  margin: 12px 0;
-}
-@media (max-width: 782px) {
-  .wpec-toolbar {
-    top: 46px;
-  }
-} /* admin bar height on small screens */
-
-.wpec-toolbar .cluster {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-.wpec-toolbar .cluster strong {
-  margin-right: 4px;
-}
-.wpec-toolbar .button .dashicons {
-  margin-right: 4px;
-}
-
-/* Filters: clean grid with consistent column widths and tidy spacing */
-.wpec-filters {
-  padding-top: 6px;
-}
-.wpec-filter-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
-  gap: 12px;
-  align-items: end;
-}
-@media (max-width: 1280px) {
-  .wpec-filter-row {
-    grid-template-columns: repeat(3, minmax(200px, 1fr));
-  }
-}
-@media (max-width: 782px) {
-  .wpec-filter-row {
-    grid-template-columns: 1fr;
-  }
-}
-.wpec-filter-row label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0; /* allow shrinking inside grid */
-}
-.wpec-filter-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-/* Select2 alignment & compact chips */
-.wpec-filters .select2-container {
-  min-width: 220px;
-}
-.select2-container .select2-selection--multiple {
-  min-height: 34px;
-  border-color: #c3c4c7;
-}
-.select2-container--default
-  .select2-selection--multiple
-  .select2-selection__choice {
-  margin-top: 4px;
-}
-
-/* Optional: show active filter chips below filters (if you emit them via JS) */
-#wpec-active-filters {
-  display: none; /* set to flex via JS when chips exist */
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-#wpec-active-filters .wpec-chip {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #1e3a8a;
-}
-.regular-text {
-  width: auto !important;
-}
-/* ====== Dashboard polish (toolbar, dropdown, segments, badges) ====== */
-.wpec-admin {
-  --line: #e5e7eb;
-  --chip: #f3f4f6;
-  --bg: #fff;
-  --muted: #6b7280;
-  --shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
-}
-
 .wpec-toolbar {
   position: sticky;
   top: 32px;
@@ -654,7 +296,7 @@
   margin-left: 6px;
 }
 
-/* Segmented control */
+/* Segmented quick status */
 .wpec-seg {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -706,7 +348,12 @@
   }
 }
 
-/* Filters alignment */
+/* ==========================================================================
+   10) Filters (grid) + Active chips
+   ========================================================================== */
+#wpec-lists-controls {
+  max-width: 1200px;
+}
 .wpec-filters {
   padding-top: 6px;
 }
@@ -732,8 +379,6 @@
   justify-content: flex-end;
   margin-top: 12px;
 }
-
-/* Active filter chips row */
 #wpec-active-filters {
   display: none;
   flex-wrap: wrap;
@@ -746,7 +391,48 @@
   color: #1e3a8a;
 }
 
-/* Compact density */
+/* Make WP's .regular-text not stretch too wide in grid */
+.regular-text {
+  width: auto !important;
+}
+
+/* ==========================================================================
+   11) Select2 Tweaks
+   ========================================================================== */
+.select2-container {
+  min-width: 240px;
+}
+.wpec-filters .select2-container {
+  min-width: 220px;
+}
+.select2-container .select2-selection--multiple {
+  min-height: 34px;
+  border-color: #c3c4c7;
+}
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice {
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   12) Tables & Scrolling
+   ========================================================================== */
+.wpec-table-scroll {
+  max-height: 62vh;
+  overflow: auto;
+}
+#wpec-lists-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+.wpec-detail-table th {
+  width: 220px;
+}
+
+/* Compact density toggle */
 .wpec-compact #wpec-lists-table th,
 .wpec-compact #wpec-lists-table td {
   padding: 6px 8px;
@@ -778,7 +464,114 @@
     transform: translateX(100%);
   }
 }
-/* ===== Dual range slider (lightweight, no libs) ===== */
+
+/* ==========================================================================
+   13) Bulk Bar (All Contacts)
+   ========================================================================== */
+#wpec-bulkbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 1200px;
+}
+
+/* ==========================================================================
+   14) Pager
+   ========================================================================== */
+.wpec-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+#wpec-page-numbers .wpec-page-link {
+  display: inline-block;
+  padding: 3px 6px;
+  border: 1px solid #ccd0d4;
+  margin: 0 2px;
+  text-decoration: none;
+  color: #1d2327;
+  background: #fff;
+}
+#wpec-page-numbers .wpec-page-link.is-active {
+  background: #2271b1;
+  color: #fff;
+  border-color: #2271b1;
+}
+#wpec-page-numbers .wpec-page-link.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+#wpec-page-numbers .dots {
+  padding: 0 4px;
+  color: #777;
+}
+
+/* ==========================================================================
+   15) Contact Detail Page Layout
+   ========================================================================== */
+.wpec-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+}
+@media (max-width: 1024px) {
+  .wpec-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wpec-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 18px;
+  background: #f0f2f4;
+  color: #3c434a;
+  border: 1px solid #e2e4e7;
+}
+.wpec-head-meta {
+  line-height: 1.35;
+}
+.wpec-head-name {
+  margin: 0 0 4px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.wpec-head-email {
+  color: #50575e;
+}
+.wpec-head-lists {
+  margin-top: 6px;
+}
+.wpec-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.wpec-header-actions label select {
+  min-width: 200px;
+}
+.wpec-quick-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpec-quick-actions li + li {
+  margin-top: 8px;
+}
+
+/* ==========================================================================
+   16) Dual Range Sliders (Employees / Revenue)
+   ========================================================================== */
 .wpec-range {
   position: relative;
   height: 28px;
@@ -846,7 +639,12 @@
   border-radius: 999px;
 }
 
-/* Narrow number inputs to sit neatly beside each other */
+/* Number inputs beside sliders */
+.wpec-number-range {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 .wpec-number-range input[type="number"] {
   width: 120px;
 }
