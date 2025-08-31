@@ -29,19 +29,19 @@ class Sender {
      *  Admin: Send screen
      * ---------------------*/
 
-public function add_send_screen() {
-    $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
+    public function add_send_screen() {
+        $cap = method_exists(Helpers::class,'manage_cap') ? Helpers::manage_cap() : 'manage_options';
 
-    add_menu_page(
-        __( 'Send','wp-email-campaigns' ),
-        __( 'Send','wp-email-campaigns' ),
-        $cap,
-        'wpec-send',
-        [ $this, 'render_send_screen' ],
-        'dashicons-email-alt',
-        31
-    );
-}
+        add_menu_page(
+            __( 'Send','wp-email-campaigns' ),
+            __( 'Send','wp-email-campaigns' ),
+            $cap,
+            'wpec-send',
+            [ $this, 'render_send_screen' ],
+            'dashicons-email-alt',
+            31
+        );
+    }
 
     public function render_send_screen() {
         if ( ! Helpers::user_can_manage() ) wp_die('Denied');
@@ -60,9 +60,11 @@ public function add_send_screen() {
             'from_name'  => '',
             'from_email' => '',
             'body_html'  => '',
+            'preheader'  => '',
             'status'     => 'draft',
             'list_ids'   => [],
         ];
+
         if ( isset($_GET['load_campaign']) && ($cid = absint($_GET['load_campaign'])) ) {
             $row = $wpdb->get_row(
                 $wpdb->prepare("SELECT * FROM {$wpdb->prefix}wpec_campaigns WHERE id=%d", $cid),
@@ -76,12 +78,22 @@ public function add_send_screen() {
                 $prefill['from_email'] = (string)$row['from_email'];
                 $prefill['body_html']  = (string)$row['body_html'];
                 $prefill['status']     = (string)($row['status'] ?: 'draft');
+
+                // Load lists
                 $prefill['list_ids']   = $wpdb->get_col(
                     $wpdb->prepare(
                         "SELECT list_id FROM {$wpdb->prefix}wpec_campaign_lists WHERE campaign_id=%d",
                         $cid
                     )
                 );
+
+                // Load preheader from options_json
+                if ( ! empty($row['options_json']) ) {
+                    $opts = json_decode((string)$row['options_json'], true);
+                    if ( is_array($opts) && isset($opts['preheader']) ) {
+                        $prefill['preheader'] = (string)$opts['preheader'];
+                    }
+                }
             }
         }
 
@@ -96,6 +108,12 @@ public function add_send_screen() {
 
         echo '<p><label><strong>'.esc_html__('Subject','wp-email-campaigns').'</strong><br>';
         echo '<input type="text" id="wpec-subject" class="regular-text" style="width:100%" value="'.esc_attr($prefill['subject']).'"></label></p>';
+
+        // NEW: Preheader field
+        echo '<p><label><strong>'.esc_html__('Preheader (inbox preview)','wp-email-campaigns').'</strong><br>';
+        echo '<input type="text" id="wpec-preheader" class="regular-text" style="width:100%" maxlength="140" value="'.esc_attr($prefill['preheader']).'">';
+        echo '<span class="description">'.esc_html__('Shown next to the subject in the inbox. Hidden inside the email body.','wp-email-campaigns').'</span>';
+        echo '</label></p>';
 
         echo '<div style="display:flex;gap:12px">';
         echo '  <p style="flex:1"><label><strong>'.esc_html__('From name','wp-email-campaigns').'</strong><br>';
@@ -194,10 +212,25 @@ public function add_send_screen() {
         $body_html  = wp_kses_post($_POST['body'] ?? '');
         $from_name  = sanitize_text_field($_POST['from_name'] ?? '');
         $from_email = sanitize_email($_POST['from_email'] ?? '');
+        $preheader  = sanitize_text_field($_POST['preheader'] ?? '');
 
         if ( ! $to || ! $subject || ! $body_html ) {
             wp_send_json_error(['message'=>'Missing test fields']);
         }
+
+        // Inject hidden preheader
+        if ( $preheader !== '' ) {
+            $hidden = '<div style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">'
+                    . esc_html($preheader) . str_repeat('&#8203;', 12) . '</div>';
+            if ( stripos($body_html, '<body') !== false ) {
+                $body_html = preg_replace('/<body([^>]*)>/i', '<body$1>'.$hidden, $body_html, 1);
+            } else {
+                $body_html = $hidden . $body_html;
+            }
+        }
+
+        // Plain-text alternative (improves inbox preview behavior)
+        $alt = $preheader ? ($preheader . "\n\n" . wp_strip_all_tags($body_html)) : wp_strip_all_tags($body_html);
 
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         if ( $from_email ) {
@@ -206,9 +239,15 @@ public function add_send_screen() {
             $headers[] = 'Reply-To: ' . $from_email;
         }
 
-        $ok = wp_mail($to, $subject, $body_html, $headers);
-        if ( ! $ok ) wp_send_json_error(['message'=>'wp_mail failed']);
+        // Set AltBody just for this send
+        $cb = function($phpmailer) use ($alt) { $phpmailer->AltBody = $alt; };
+        add_action('phpmailer_init', $cb, 10, 1);
 
+        $ok = wp_mail($to, $subject, $body_html, $headers);
+
+        remove_action('phpmailer_init', $cb, 10);
+
+        if ( ! $ok ) wp_send_json_error(['message'=>'wp_mail failed']);
         wp_send_json_success(['sent'=>true]);
     }
 
@@ -225,6 +264,7 @@ public function add_send_screen() {
         $from_name   = sanitize_text_field($_POST['from_name'] ?? '');
         $from_email  = sanitize_email($_POST['from_email'] ?? '');
         $body_html   = wp_kses_post($_POST['body'] ?? '');
+        $preheader   = sanitize_text_field($_POST['preheader'] ?? '');
         $list_ids    = isset($_POST['list_ids']) ? array_filter(array_map('absint', (array)$_POST['list_ids'])) : [];
         $campaign_id = absint($_POST['campaign_id'] ?? 0);
         $as_draft    = ! empty($_POST['save_only']) && $_POST['save_only'] == '1';
@@ -240,6 +280,16 @@ public function add_send_screen() {
         $map = $wpdb->prefix.'wpec_campaign_lists';
         $now = current_time('mysql');
 
+        // Merge preheader into options_json (preserve any other options)
+        $opts = [];
+        if ( $campaign_id ) {
+            $existing = $wpdb->get_var( $wpdb->prepare("SELECT options_json FROM $cam WHERE id=%d", $campaign_id) );
+            $decoded  = json_decode((string)$existing, true);
+            if ( is_array($decoded) ) $opts = $decoded;
+        }
+        $opts['preheader'] = $preheader;
+        $opts_json = wp_json_encode($opts, JSON_UNESCAPED_UNICODE);
+
         // Upsert campaign
         $data = [
             'name'        => $name,
@@ -247,6 +297,7 @@ public function add_send_screen() {
             'from_name'   => $from_name,
             'from_email'  => $from_email,
             'body_html'   => $body_html,
+            'options_json'=> $opts_json,
             'updated_at'  => $now,
         ];
 
@@ -259,7 +310,7 @@ public function add_send_screen() {
                 'sent_count'   => 0,
                 'failed_count' => 0,
             ];
-            $wpdb->insert($cam, $data, ['%s','%s','%s','%s','%s','%s','%s','%s','%d','%d','%d']);
+            $wpdb->insert($cam, $data); // formats omitted on purpose for simplicity/safety
             $campaign_id = (int) $wpdb->insert_id;
         } else {
             if ( $as_draft ) {
@@ -304,7 +355,8 @@ public function add_send_screen() {
         $q = $wpdb->prefix.'wpec_send_queue';
         $values = [];
         foreach ( $recips as $r ) {
-            $values[] = $wpdb->prepare("(%d,%d,%s,%s,%s,%s)",
+            $values[] = $wpdb->prepare(
+                "(%d,%d,%s,%s,%s,%s)",
                 $campaign_id, (int)$r['contact_id'], (string)$r['email'],
                 'queued', $now, $now
             );
@@ -495,7 +547,7 @@ public function add_send_screen() {
         $cam = $wpdb->prefix.'wpec_campaigns';
 
         $c = $wpdb->get_row(
-            $wpdb->prepare("SELECT subject, body_html, from_name, from_email FROM $cam WHERE id=%d", (int)$row['campaign_id']),
+            $wpdb->prepare("SELECT subject, body_html, from_name, from_email, options_json FROM $cam WHERE id=%d", (int)$row['campaign_id']),
             ARRAY_A
         );
         if ( ! $c ) return false;
@@ -508,12 +560,41 @@ public function add_send_screen() {
 
         if ( ! $to || ! $subject || ! $body_html ) return false;
 
+        // Extract preheader
+        $preheader = '';
+        if ( ! empty($c['options_json']) ) {
+            $opts = json_decode((string)$c['options_json'], true);
+            if ( is_array($opts) && ! empty($opts['preheader']) ) {
+                $preheader = (string)$opts['preheader'];
+            }
+        }
+
+        // Inject hidden preheader
+        if ( $preheader !== '' ) {
+            $hidden = '<div style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">'
+                    . esc_html($preheader) . str_repeat('&#8203;', 12) . '</div>';
+            if ( stripos($body_html, '<body') !== false ) {
+                $body_html = preg_replace('/<body([^>]*)>/i', '<body$1>'.$hidden, $body_html, 1);
+            } else {
+                $body_html = $hidden . $body_html;
+            }
+        }
+
+        // AltBody for inbox preview
+        $alt = $preheader ? ($preheader . "\n\n" . wp_strip_all_tags($body_html)) : wp_strip_all_tags($body_html);
+        $cb = function($phpmailer) use ($alt) { $phpmailer->AltBody = $alt; };
+        add_action('phpmailer_init', $cb, 10, 1);
+
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         if ( $from_email ) {
             $from = $from_name ? sprintf('%s <%s>', $from_name, $from_email) : $from_email;
             $headers[] = 'From: ' . $from;
             $headers[] = 'Reply-To: ' . $from_email;
         }
-        return (bool) wp_mail($to, $subject, $body_html, $headers);
+
+        $ok = (bool) wp_mail($to, $subject, $body_html, $headers);
+
+        remove_action('phpmailer_init', $cb, 10);
+        return $ok;
     }
 }
