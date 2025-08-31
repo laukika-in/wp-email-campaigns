@@ -1605,25 +1605,49 @@ public function route_contacts() {
         wp_send_json_success([ 'contact_id'=>$contact_id, 'mapped'=>$mapped?1:0, 'list_id'=>$list_id ]);
     }
 
-    public function ajax_list_create() {
-        check_ajax_referer( 'wpec_admin', 'nonce' );
-        if ( ! Helpers::user_can_manage() ) wp_send_json_error(['message'=>'Denied']);
-
-        $name = sanitize_text_field($_POST['list_name'] ?? '');
-        if ( ! $name ) wp_send_json_error(['message'=>'List name required']);
-
-        $db = Helpers::db(); $lists = Helpers::table('lists');
-        $db->insert( $lists, [
-            'name'=>$name, 'status'=>'ready', 'created_at'=>Helpers::now(), 'updated_at'=>null,
-            'source_filename'=>null,'file_path'=>null,'file_pointer'=>null,'header_map'=>null,
-            'total'=>0,'imported'=>0,'invalid'=>0,'duplicates'=>0,'deleted'=>0,'manual_added'=>0,'last_invalid'=>0
-        ] );
-        $id = (int)$db->insert_id;
-        wp_send_json_error([
-        'message' => 'Empty lists are not allowed.'
-        ]);
-        wp_send_json_success([ 'list_id'=>$id, 'name'=>$name ]);
+public function ajax_list_create() {
+    check_ajax_referer( 'wpec_admin', 'nonce' );
+    if ( ! Helpers::user_can_manage() ) {
+        wp_send_json_error( [ 'message' => __( 'Denied', 'wp-email-campaigns' ) ] );
     }
+
+    $name = trim( (string) ( $_POST['list_name'] ?? '' ) );
+    if ( $name === '' ) {
+        wp_send_json_error( [ 'message' => __( 'List name required', 'wp-email-campaigns' ) ] );
+    }
+
+    $db    = Helpers::db();
+    $lists = Helpers::table( 'lists' );
+
+//Optional: prevent duplicate names
+     if ( (int) $db->get_var( $db->prepare( "SELECT COUNT(1) FROM $lists WHERE name=%s", $name ) ) ) {
+         wp_send_json_error( [ 'message' => __( 'A list with this name already exists.', 'wp-email-campaigns' ) ] );
+     }
+
+    $ok = $db->insert( $lists, [
+        'name'            => $name,
+        'status'          => 'ready',
+        'created_at'      => Helpers::now(),
+        'updated_at'      => null,
+        'source_filename' => null,
+        'file_path'       => null,
+        'file_pointer'    => null,
+        'header_map'      => null,
+        'total'           => 0,
+        'imported'        => 0,
+        'invalid'         => 0,
+        'duplicates'      => 0,
+        'deleted'         => 0,
+        'manual_added'    => 0,
+        'last_invalid'    => 0,
+    ] );
+
+    if ( false === $ok ) {
+        wp_send_json_error( [ 'message' => __( 'Could not create the list.', 'wp-email-campaigns' ) ] );
+    }
+
+    wp_send_json_success( [ 'list_id' => (int) $db->insert_id, 'name' => $name ] );
+}
 
    private function handle_upload_to_csv_path( $list_name, $file_arr, $existing_list_id = 0 ) {
     $tmp_name = $file_arr['tmp_name'];
