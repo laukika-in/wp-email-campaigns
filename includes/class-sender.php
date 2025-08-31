@@ -220,17 +220,20 @@ class Sender {
 
         // Inject hidden preheader
         if ( $preheader !== '' ) {
+            $pad    = str_repeat('&zwnj;&nbsp;', 60); // 60–100 is typical
             $hidden = '<div style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">'
-                    . esc_html($preheader) . str_repeat('&#8203;', 12) . '</div>';
+                    . esc_html($preheader) . $pad . '</div>';
+
             if ( stripos($body_html, '<body') !== false ) {
                 $body_html = preg_replace('/<body([^>]*)>/i', '<body$1>'.$hidden, $body_html, 1);
             } else {
                 $body_html = $hidden . $body_html;
             }
         }
-
-        // Plain-text alternative (improves inbox preview behavior)
-        $alt = $preheader ? ($preheader . "\n\n" . wp_strip_all_tags($body_html)) : wp_strip_all_tags($body_html);
+ 
+       // NEW: preview ends after preheader
+        $alt = $preheader !== '' ? ($preheader . str_repeat("\xE2\x80\x8C", 200)) : '';
+        $cb  = function($phpmailer) use ($alt) { $phpmailer->AltBody = $alt; };
 
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         if ( $from_email ) {
@@ -571,8 +574,10 @@ class Sender {
 
         // Inject hidden preheader
         if ( $preheader !== '' ) {
+            $pad    = str_repeat('&zwnj;&nbsp;', 60); // 60–100 is typical
             $hidden = '<div style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;max-height:0;max-width:0;overflow:hidden;mso-hide:all;">'
-                    . esc_html($preheader) . str_repeat('&#8203;', 12) . '</div>';
+                    . esc_html($preheader) . $pad . '</div>';
+
             if ( stripos($body_html, '<body') !== false ) {
                 $body_html = preg_replace('/<body([^>]*)>/i', '<body$1>'.$hidden, $body_html, 1);
             } else {
@@ -580,9 +585,10 @@ class Sender {
             }
         }
 
-        // AltBody for inbox preview
-        $alt = $preheader ? ($preheader . "\n\n" . wp_strip_all_tags($body_html)) : wp_strip_all_tags($body_html);
-        $cb = function($phpmailer) use ($alt) { $phpmailer->AltBody = $alt; };
+        // AltBody for inbox preview 
+        $alt = $preheader !== '' ? ($preheader . str_repeat("\xE2\x80\x8C", 200)) : '';
+        $cb  = function($phpmailer) use ($alt) { $phpmailer->AltBody = $alt; };
+
         add_action('phpmailer_init', $cb, 10, 1);
 
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
