@@ -7,13 +7,13 @@
   }
 
   function adminEditUrl(params) {
-    // Build  
+    // Build
     var base =
       (window.WPECCAMPAIGN && WPECCAMPAIGN.adminBase) ||
       (window.ajaxurl
         ? window.ajaxurl.replace("admin-ajax.php", "admin.php")
         : "/wp-admin/admin.php");
-    const usp = new URLSearchParams({...params });
+    const usp = new URLSearchParams({ ...params });
     return base + "?" + usp.toString();
   }
 
@@ -100,6 +100,8 @@
       var subject = ($("#wpec-subject").val() || "").trim();
       var fromName = ($("#wpec-from-name").val() || "").trim();
       var fromEmail = ($("#wpec-from-email").val() || "").trim();
+      var preheader = ($("#wpec-preheader").val() || "").trim();
+
       var body = getEditorHtml();
 
       if (!to || !subject || !body) {
@@ -120,6 +122,7 @@
           subject: subject,
           from_name: fromName,
           from_email: fromEmail,
+          preheader: preheader,
           body: body, // key must be "body"
         },
         function (res) {
@@ -145,6 +148,7 @@
       var subject = ($("#wpec-subject").val() || "").trim();
       var fromName = ($("#wpec-from-name").val() || "").trim();
       var fromEmail = ($("#wpec-from-email").val() || "").trim();
+      var preheader = ($("#wpec-preheader").val() || "").trim();
       var body = getEditorHtml();
 
       if (!subject || !body) {
@@ -164,6 +168,7 @@
           subject: subject,
           from_name: fromName,
           from_email: fromEmail,
+          preheader: preheader,
           body: body,
           save_only: "1", // mark as draft
         },
@@ -314,11 +319,7 @@
   }
   function onCampaignDetailPage() {
     const sp = new URLSearchParams(location.search);
-    return (
-     
-      sp.get("page") === "wpec-campaigns" &&
-      sp.get("view") === "detail"
-    );
+    return sp.get("page") === "wpec-campaigns" && sp.get("view") === "detail";
   }
 
   function updateActions(state, queued) {
