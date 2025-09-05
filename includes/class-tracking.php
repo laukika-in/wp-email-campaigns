@@ -178,8 +178,8 @@ public static function rest_click(\WP_REST_Request $req) {
         }
 
         // 1) Append-only event row (store contact in subscriber_id for now)
-        if ($logs) {
-            $wpdb->insert($logs, [
+        if ($subs) {
+            $wpdb->insert($subs, [
                 'campaign_id'         => $campaign_id,
                 'subscriber_id'       => $contact_id, // using as contact id
                 'event'               => $event,      // 'opened' | 'clicked'
