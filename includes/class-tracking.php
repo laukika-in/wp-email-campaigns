@@ -1,0 +1,180 @@
+<?php
+namespace WPEC;
+if ( ! defined('ABSPATH') ) exit;
+
+class Tracking {
+
+    public static function init() {
+        // Ensure required columns exist (safe, idempotent)
+        add_action('admin_init', [__CLASS__, 'maybe_add_columns']);
+
+        // REST endpoints
+        add_action('rest_api_init', [__CLASS__, 'register_routes']);
+    }
+
+    /* --------------------------
+     * Minimal lazy migration
+     * ------------------------*/
+    public static function maybe_add_columns() {
+        global $wpdb;
+        $logs = Helpers::table('logs');
+
+        // Get current columns
+        $cols = $wpdb->get_col( "SHOW COLUMNS FROM `$logs`", 0 );
+        $has = function($name) use ($cols) { return in_array($name, $cols, true); };
+
+        // Add columns if missing (safe to run multiple times)
+        if (! $has('queue_id'))   $wpdb->query("ALTER TABLE `$logs` ADD `queue_id` BIGINT UNSIGNED NULL");
+        if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
+        if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
+        if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
+
+        // Ensure ENUM includes 'clicked'
+        $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
+        if ($row && isset($row->Type) && strpos($row->Type, 'ENUM(') === 0 && strpos($row->Type, "'clicked'") === false) {
+            $wpdb->query("
+                ALTER TABLE `$logs`
+                MODIFY COLUMN `event`
+                ENUM('queued','sent','delivered','opened','bounced','failed','clicked') NOT NULL
+            ");
+        }
+    }
+
+    /* --------------------------
+     * Secret + token helpers
+     * ------------------------*/
+    protected static function secret() {
+        $s = get_option('wpec_secret');
+        if (!$s) { $s = wp_generate_password(64, true, true); update_option('wpec_secret', $s); }
+        return $s;
+    }
+    protected static function b64u($s){ return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); }
+    protected static function ub64($s){ return base64_decode(strtr($s, '-_', '+/')); }
+
+    protected static function sign(array $payload): string {
+        $body = self::b64u(json_encode($payload, JSON_UNESCAPED_SLASHES));
+        $h   = hash_hmac('sha256', $body, self::secret(), true);
+        return $body.'.'.self::b64u($h);
+    }
+    protected static function verify(string $token): ?array {
+        $parts = explode('.', $token, 2);
+        if (count($parts) !== 2) return null;
+        [$body, $sig] = $parts;
+        $calc = self::b64u(hash_hmac('sha256', $body, self::secret(), true));
+        if (!hash_equals($calc, $sig)) return null;
+        $json = self::ub64($body);
+        $data = json_decode($json, true);
+        return is_array($data) ? $data : null;
+    }
+
+    /* --------------------------
+     * HTML instrumentation
+     * ------------------------*/
+    public static function instrument_html(int $queue_id, int $campaign_id, ?int $contact_id, string $html): string {
+        $rest = rest_url('email-campaigns/v1');
+
+        // 1) Rewrite <a href="..."> links to tracking redirect
+        $html = preg_replace_callback(
+            '#<a\b([^>]*?)\bhref=("|\')(.*?)\2([^>]*)>#si',
+            function($m) use ($queue_id,$campaign_id,$rest){
+                $pre  = $m[1]; $q = $m[2]; $href = trim(html_entity_decode($m[3], ENT_QUOTES)); $post = $m[4];
+
+                if ($href === '' ||
+                    str_starts_with($href, 'mailto:') ||
+                    str_starts_with($href, 'tel:') ||
+                    str_starts_with($href, 'javascript:') ||
+                    $href[0] === '#' ||
+                    str_contains($href, '/email-campaigns/v1/')
+                ) {
+                    return "<a{$pre}href={$q}".esc_attr($href)."{$q}{$post}>";
+                }
+
+                $tok   = self::sign(['t'=>'c','q'=>$queue_id,'c'=>$campaign_id,'u'=>$href]);
+                $track = trailingslashit($rest).'c/'.$tok;
+                return "<a{$pre}href={$q}".esc_attr($track)."{$q}{$post}>";
+            },
+            $html
+        );
+
+        // 2) Tracking pixel
+        $tok   = self::sign(['t'=>'o','q'=>$queue_id,'c'=>$campaign_id,'r'=>wp_rand()]);
+        $pixel = sprintf(
+            '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
+            esc_url(trailingslashit($rest).'o/'.$tok.'.gif')
+        );
+
+        if (stripos($html, '</body>') !== false) {
+            return preg_replace('/<\/body>/i', $pixel.'</body>', $html, 1);
+        }
+        return $html.$pixel;
+    }
+
+    /* --------------------------
+     * REST routes
+     * ------------------------*/
+    public static function register_routes() {
+        register_rest_route('email-campaigns/v1', '/o/(?P<token>[^\.]+)\.gif', [
+            'methods' => 'GET',
+            'permission_callback' => '__return_true',
+            'callback' => [__CLASS__, 'rest_open'],
+        ]);
+        register_rest_route('email-campaigns/v1', '/c/(?P<token>[^/]+)', [
+            'methods' => 'GET',
+            'permission_callback' => '__return_true',
+            'callback' => [__CLASS__, 'rest_click'],
+        ]);
+    }
+
+    public static function rest_open(\WP_REST_Request $req) {
+        $data = self::verify((string)$req['token']);
+        if (!$data || ($data['t']??'') !== 'o') return self::gif_1x1();
+
+        self::log_event( (int)$data['q'], (int)$data['c'], 'opened', null );
+        return self::gif_1x1();
+    }
+
+    public static function rest_click(\WP_REST_Request $req) {
+        $data = self::verify((string)$req['token']);
+        $dest = home_url('/');
+        if ($data && ($data['t']??'') === 'c' && !empty($data['u'])) {
+            $dest = (string)$data['u'];
+            self::log_event( (int)$data['q'], (int)$data['c'], 'clicked', $dest );
+        }
+        return new \WP_REST_Response(null, 302, ['Location' => $dest]);
+    }
+
+    protected static function log_event(int $queue_id, int $campaign_id, string $event, ?string $link_url) {
+        global $wpdb;
+        $logs = Helpers::table('logs');
+
+        $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(wp_unslash($_SERVER['HTTP_USER_AGENT']), 0, 1000) : null;
+        $ip = null;
+        if ( ! empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP) ) {
+            $ip = inet_pton($_SERVER['REMOTE_ADDR']);
+        }
+
+        $wpdb->insert($logs, [
+            'campaign_id'       => $campaign_id,
+            'subscriber_id'     => null,     // not used here
+            'event'             => $event,   // 'opened' | 'clicked'
+            'provider_message_id'=> null,
+            'info'              => null,
+            'event_time'        => Helpers::now(),
+            'created_at'        => Helpers::now(),
+            'queue_id'          => $queue_id,
+            'link_url'          => $link_url,
+            'user_agent'        => $ua,
+            'ip'                => $ip,
+        ]);
+    }
+
+    protected static function gif_1x1() {
+        $gif = base64_decode('R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==');
+        return new \WP_REST_Response($gif, 200, [
+            'Content-Type'  => 'image/gif',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma'        => 'no-cache',
+            'Expires'       => '0',
+        ]);
+    }
+}

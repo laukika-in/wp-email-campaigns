@@ -4,13 +4,14 @@ namespace WPEC;
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 require_once __DIR__ . '/class-cpt.php';
-require_once __DIR__ . '/class-uploader.php'; // still present; safe to keep
+require_once __DIR__ . '/class-uploader.php';  
 require_once __DIR__ . '/class-scheduler.php';
 require_once __DIR__ . '/class-sender.php';
 require_once __DIR__ . '/class-webhooks.php';
 require_once __DIR__ . '/class-contacts.php'; 
 require_once __DIR__ . '/class-campaigns.php';
 require_once __DIR__ . '/class-queue.php';
+require_once __DIR__ . '/class-tracking.php';  
 
 class Plugin {
     public function init() {
@@ -22,6 +23,8 @@ class Plugin {
         ( new Contacts )->init(); 
         (new Campaigns)->init();
         (new Queue)->init();
+        Tracking::init();
+
 
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
   
