@@ -515,8 +515,7 @@ public function add_send_screen() {
             $headers[] = 'Reply-To: ' . $from_email;
         }
  
-        $body_html = Tracking::instrument_html(
-            (int) $row['id'],          
+        $body_html = Tracking::instrument_html( 
             (int) $row['campaign_id'],
             (int) ($row['contact_id'] ?? 0),
             (string) $body_html
