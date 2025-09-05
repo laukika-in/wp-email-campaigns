@@ -158,38 +158,7 @@ class Activator {
         self::ensure_column( $contacts, 'city', "VARCHAR(191) NULL" );
         self::ensure_column( $contacts, 'postal_code', "VARCHAR(32) NULL" );
           self::maybe_create_campaign_tables();
-
-          // Secret handling
-if (defined('WPEC_SECRET') && WPEC_SECRET) {
-    // Mirror the constant in the DB for consistency (optional)
-    update_option('wpec_secret', WPEC_SECRET, false);
-} else {
-    $secret = get_option('wpec_secret');
-    if (!$secret) {
-        $secret = self::generate_secret();
-        add_option('wpec_secret', $secret, '', 'no');
     }
-    // OPTIONAL: try writing to wp-config.php (best-effort)
-    $wrote = self::maybe_write_wp_config_define($secret);
-    if (!$wrote) {
-        // show an admin notice once with copy/paste instruction
-        update_option('wpec_secret_write_needed', 1, false);
-    }
-}
-
-
-
-    }
-public static function maybe_admin_notice() {
-    if (!get_option('wpec_secret_write_needed')) return;
-    delete_option('wpec_secret_write_needed');
-    $secret = esc_html(get_option('wpec_secret'));
-    echo '<div class="notice notice-warning"><p>'
-       . 'WP Email Campaigns could not write <code>WPEC_SECRET</code> to <code>wp-config.php</code>. '
-       . 'Please add this line manually:<br>'
-       . '<code>define(\'WPEC_SECRET\', \'' . $secret . '\');</code>'
-       . '</p></div>';
-}
 
     private static function column_exists( $table, $column ) {
         global $wpdb;
@@ -242,41 +211,6 @@ public static function maybe_admin_notice() {
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
     dbDelta($sql1);
     dbDelta($sql2);
-}
-private static function locate_wp_config(): ?string {
-    if (file_exists(ABSPATH . 'wp-config.php')) return ABSPATH . 'wp-config.php';
-    $up = dirname(ABSPATH);
-    if (file_exists($up . '/wp-config.php')) return $up . '/wp-config.php';
-    return null;
-}
-
-public static function generate_secret(): string {
-    try {
-        $bytes = random_bytes(48);
-        $raw   = rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
-    } catch (\Throwable $e) {
-        $raw = wp_generate_password(64, true, true);
-    }
-    return $raw;
-}
-
-private static function maybe_write_wp_config_define(string $secret): bool {
-    $path = self::locate_wp_config();
-    if (!$path || !is_writable($path)) return false;
-
-    $cfg = @file_get_contents($path);
-    if ($cfg === false) return false;
-
-    if (strpos($cfg, "define('WPEC_SECRET'") !== false) return true; // already there
-
-    $line = "define('WPEC_SECRET', '" . addslashes($secret) . "');\n";
-    $needle = "/* That's all, stop editing! */";
-    if (strpos($cfg, $needle) !== false) {
-        $cfg = str_replace($needle, $line . $needle, $cfg);
-    } else {
-        $cfg .= "\n" . $line;
-    }
-    return (bool) @file_put_contents($path, $cfg);
 }
 
 }
