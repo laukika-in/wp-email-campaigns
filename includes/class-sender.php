@@ -318,6 +318,19 @@ if (is_string($body_html)) {
         foreach ( array_chunk($values, 500) as $chunk ) {
             $wpdb->query("INSERT INTO $q (campaign_id, contact_id, email, status, scheduled_at, created_at) VALUES ".implode(',', $chunk));
         }
+        // Seed per-recipient rows so tracking can increment counters
+        $subs = Helpers::table('subs');
+        if ( $subs ) {
+            $wpdb->query( $wpdb->prepare("
+                INSERT INTO $subs (campaign_id, contact_id, email, name, status, created_at)
+                SELECT q.campaign_id, q.contact_id, q.email, NULL, 'scheduled', %s
+                FROM $q q
+                LEFT JOIN $subs s
+                    ON s.campaign_id = q.campaign_id AND s.contact_id = q.contact_id
+                WHERE q.campaign_id = %d
+                AND s.contact_id IS NULL
+            ", $now, $campaign_id) );
+        }
 
         // Persist queued count now (sent/failed updated by cron/status)
         $wpdb->update($cam, ['queued_count'=>count($recips), 'status'=>'queued', 'published_at'=>$now], ['id'=>$campaign_id]);
@@ -442,6 +455,27 @@ if (is_string($body_html)) {
                 } else {
                     $wpdb->update($q, ['status'=>'failed','last_error'=>'wp_mail failed'], ['id'=>$r['id']], ['%s','%s'], ['%d']);
                 }
+                $subs = Helpers::table('subs');
+                if ($subs) {
+                    if ($ok) {
+                        $wpdb->query( $wpdb->prepare("
+                            UPDATE $subs
+                            SET status='sent',
+                                sent_at = COALESCE(sent_at, NOW()),
+                                updated_at = NOW()
+                            WHERE campaign_id = %d AND contact_id = %d
+                        ", (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
+                    } else {
+                        $wpdb->query( $wpdb->prepare("
+                            UPDATE $subs
+                            SET status='failed',
+                                last_error = %s,
+                                updated_at = NOW()
+                            WHERE campaign_id = %d AND contact_id = %d
+                        ", 'wp_mail failed', (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
+                    }
+}
+
             }
         }
 
