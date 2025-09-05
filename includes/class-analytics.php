@@ -135,6 +135,35 @@ class Analytics {
             }
             echo '</div>';
         }
+// Top links table
+$links = $db->get_results( $db->prepare("
+    SELECT link_url,
+           COUNT(*) AS total_clicks,
+           COUNT(DISTINCT subscriber_id) AS unique_clicks,
+           MAX(event_time) AS last_clicked
+      FROM " . Helpers::table('logs') . "
+     WHERE campaign_id = %d AND event = 'clicked' AND link_url IS NOT NULL
+  GROUP BY link_url
+  ORDER BY unique_clicks DESC, total_clicks DESC
+  LIMIT 200
+", $cid), ARRAY_A );
+
+echo '<div class="wpec-card"><h2>'.esc_html__('Links','wp-email-campaigns').'</h2>';
+if (empty($links)) {
+    echo '<p>'.esc_html__('No link clicks yet.','wp-email-campaigns').'</p>';
+} else {
+    echo '<div class="wpec-table-scroll"><table class="widefat striped"><thead><tr>';
+    echo '<th>URL</th><th>Unique</th><th>Total</th><th>Last click</th>';
+    echo '</tr></thead><tbody>';
+    foreach ($links as $L) {
+        echo '<tr><td>'.esc_html($L['link_url']).'</td>';
+        echo '<td>'.number_format_i18n((int)$L['unique_clicks']).'</td>';
+        echo '<td>'.number_format_i18n((int)$L['total_clicks']).'</td>';
+        echo '<td>'.($L['last_clicked'] ? esc_html(date_i18n(get_option('date_format').' '.get_option('time_format'), strtotime($L['last_clicked']))) : '—').'</td></tr>';
+    }
+    echo '</tbody></table></div>';
+}
+echo '</div>';
 
         echo '</div>'; // wrap
     }

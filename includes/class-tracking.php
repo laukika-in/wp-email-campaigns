@@ -31,6 +31,8 @@ class Tracking {
             if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
             if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
 // In logs table ensures (after $cols check)
+if (! $has('is_bot'))    $wpdb->query("ALTER TABLE `$logs` ADD `is_bot` TINYINT(1) NOT NULL DEFAULT 0 AFTER `event`");
+
 if (!in_array('email',     $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `email` VARCHAR(191) NULL");
 if (!in_array('status',    $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `status` VARCHAR(20) NULL");
 if (!in_array('sent_at',   $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `sent_at` DATETIME NULL");
@@ -187,29 +189,39 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
 }
 
 
-    public static function rest_open(\WP_REST_Request $req) {
-        error_log('[WPEC] OPEN hit token='.substr((string)$req['token'],0,24));
-        $d = self::verify((string)$req['token']);
-        if (!$d || ($d['t']??'')!=='o') return self::gif_1x1();
-        self::log_event((int)$d['c'], (int)$d['ct'], 'opened', null);
-        return self::gif_1x1();
+    protected static function is_bot_ua(?string $ua): bool {
+         if (!$ua) return false;
+    $ua = strtolower($ua);
+
+    // common image/link proxies & security scanners
+    $needles = [
+        'googleimageproxy',         // Gmail image proxy
+        'microsoft office',         // Outlook desktop HTTP stack
+        'outlook',                  // Outlook variants + Safe Links
+        'defender', 'safelinks',
+        'frontapp',                 // some shared inboxes proxy images
+        'twitterbot', 'facebookexternalhit', 'linkedinbot', // social fetchers
+        'skypeuripreview',
+        'curl/', 'wget/', 'python-requests', 'httpclient'
+    ];
+    foreach ($needles as $n) {
+        if (strpos($ua, $n) !== false) return true;
+    }
+    return false;
     }
 
-    protected static function is_link_scanner(?string $ua): bool {
-        if (!$ua) return false;
-        $ua = strtolower($ua);
-        return (
-            str_contains($ua, 'googleimageproxy') ||
-            str_contains($ua, 'facebookexternalhit') ||
-            str_contains($ua, 'linkedinbot') ||
-            str_contains($ua, 'skypeuripreview') ||
-            str_contains($ua, 'twitterbot') ||
-            str_contains($ua, 'microsoft office') ||    // Outlook desktop
-            str_contains($ua, 'outlook') ||              // Outlook/Microsoft safe links
-            str_contains($ua, 'curl/') ||
-            str_contains($ua, 'wget/')
-        );
-    }
+public static function rest_open(\WP_REST_Request $req) {
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $d  = self::verify((string)$req['token']);
+    if (!$d || ($d['t']??'')!=='o') return self::gif_1x1();
+
+    $campaign_id = (int)$d['c'];
+    $contact_id  = (int)$d['ct'];
+    $is_bot      = self::is_bot_ua($ua);
+
+    self::log_open_and_counters($campaign_id, $contact_id, $is_bot);
+    return self::gif_1x1();
+}
 
    public static function rest_click(\WP_REST_Request $req) {
     $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
@@ -217,7 +229,7 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
     $dest = home_url('/');
     if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
         $dest = (string)$d['u'];
-        if (!self::is_link_scanner($ua)) {
+        if (!self::is_bot_ua($ua)) {
             self::log_event((int)$d['c'], (int)$d['ct'], 'clicked', $dest);
         }
     }
@@ -251,19 +263,17 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
         // 1) Append detailed event row to LOGS
         if ($logs) {
             $row = [
-                'campaign_id'   => $campaign_id,
-                'subscriber_id' => $contact_id,
-                'email'         => $email,
-                'status'        => $event,           // convenience mirror
-                'event'         => $event,           // 'opened' | 'clicked'
-                'provider_message_id' => null,
-                'info'          => null,
-                'event_time'    => Helpers::now(),   // always set
-                'created_at'    => Helpers::now(),   // always set
-                'queue_id'      => null,
-                'link_url'      => $link_url,
-                'user_agent'    => $ua,
-                'ip'            => $ip,
+            'campaign_id'   => $campaign_id,
+            'subscriber_id' => $contact_id,
+            'email'         => $email,
+            'status'        => 'opened',
+            'event'         => 'opened',
+            'is_bot'        => $is_bot ? 1 : 0,
+            'opened_at'     => Helpers::now(),
+            'event_time'    => Helpers::now(),
+            'created_at'    => Helpers::now(),
+            'user_agent'    => $ua,
+            'ip'            => $ip,
             ];
             if ($event === 'opened') {
                 $row['opened_at'] = Helpers::now();
@@ -272,16 +282,18 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
         }
 
         // 2) Update per-recipient counters on SUBS
-        if ($subs && $campaign_id && $contact_id) {
+    if (!$is_bot && $subs && $campaign_id && $contact_id) {
             if ($event === 'opened') {
-                $wpdb->query($wpdb->prepare("
-                    UPDATE $subs
-                    SET opens_count      = COALESCE(opens_count,0) + 1,
-                        first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
-                        last_open_at     = NOW(),
-                        last_activity_at = NOW()
-                    WHERE campaign_id = %d AND contact_id = %d
-                ", $campaign_id, $contact_id));
+                $wpdb->query( $wpdb->prepare("
+            UPDATE $subs
+               SET opens_count      = COALESCE(opens_count,0) + 1,
+                   first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
+                   last_open_at     = NOW(),
+                   last_activity_at = NOW()
+             WHERE campaign_id = %d
+               AND contact_id  = %d
+               AND (last_open_at IS NULL OR TIMESTAMPDIFF(SECOND, last_open_at, NOW()) >= 60)
+        ", $campaign_id, $contact_id) );
             } elseif ($event === 'clicked') {
                 $wpdb->query($wpdb->prepare("
                     UPDATE $subs
