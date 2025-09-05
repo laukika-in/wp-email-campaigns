@@ -515,14 +515,14 @@ public function add_send_screen() {
             $headers[] = 'Reply-To: ' . $from_email;
         }
  
-        $body_html = Tracking::instrument_html(
+        $message  = Tracking::instrument_html(
             (int) $row['id'],          
             (int) $row['campaign_id'],
             (int) ($row['contact_id'] ?? 0),
-            (string) $body_html
+            (string) $message 
         );
 
-        return (bool) wp_mail($to, $subject, $body_html, $headers);
+        return (bool) wp_mail($to, $subject, $message, $headers);
 
     }
 }
