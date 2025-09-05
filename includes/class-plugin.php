@@ -24,8 +24,8 @@ class Plugin {
         ( new Contacts )->init(); 
         (new Campaigns)->init();
         (new Queue)->init();
-        (new \WPEC\Analytics)->init();
-        \WPEC\Tracking::init();
+        (new Analytics)->init();
+        Tracking::init();
 
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
   
