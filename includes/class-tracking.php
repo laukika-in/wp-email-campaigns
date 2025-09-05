@@ -89,27 +89,43 @@ class Tracking {
      * HTML instrumentation
      * ------------------------*/
     public static function instrument_html(int $campaign_id, int $contact_id, string $html): string {
-    // 1) If it's not HTML, don't touch it
-    if ($html === '' || stripos($html, '<') === false) {
-        return $html;
+        $rest = rest_url('email-campaigns/v1');
+
+        // 1) Rewrite links (skip mailto, tel, js, anchors, and our own endpoints)
+        $html = preg_replace_callback(
+            '#<a\b([^>]*?)\bhref=("|\')(.*?)\2([^>]*)>#si',
+            function($m) use ($campaign_id,$contact_id,$rest){
+                $pre  = $m[1]; $q = $m[2]; $href = trim(html_entity_decode($m[3], ENT_QUOTES)); $post = $m[4];
+
+                if ($href === '' ||
+                    str_starts_with($href, 'mailto:') ||
+                    str_starts_with($href, 'tel:') ||
+                    str_starts_with($href, 'javascript:') ||
+                    $href[0] === '#' ||
+                    str_contains($href, '/email-campaigns/v1/')
+                ) {
+                    return "<a{$pre}href={$q}".esc_attr($href)."{$q}{$post}>";
+                }
+
+                $tok   = self::sign(['t'=>'c','c'=>$campaign_id,'ct'=>$contact_id,'u'=>$href]);
+                $track = trailingslashit($rest).'c/'.$tok;
+                return "<a{$pre}href={$q}".esc_attr($track)."{$q}{$post}>";
+            },
+            $html
+        );
+
+        // 2) Tracking pixel
+        $tok   = self::sign(['t'=>'o','c'=>$campaign_id,'ct'=>$contact_id,'r'=>wp_rand()]);
+        $pixel = sprintf(
+            '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
+            esc_url(trailingslashit($rest).'o/'.$tok.'.gif')
+        );
+
+        if (stripos($html, '</body>') !== false) {
+            return preg_replace('/<\/body>/i', $pixel.'</body>', $html, 1);
+        }
+        return $html.$pixel;
     }
-
-    // 2) Build pixel URL
-    $rest  = rest_url('email-campaigns/v1');
-    $token = self::sign(['t'=>'o','c'=>$campaign_id,'ct'=>$contact_id,'r'=>wp_rand()]);
-    $pixel = sprintf(
-        '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
-        esc_url(trailingslashit($rest).'o/'.$token.'.gif')
-    );
-
-    // 3) Try to insert before </body>, otherwise append
-    if (stripos($html, '</body>') !== false) {
-        // safe: 4th arg is LIMIT only, no 5th arg =&$count
-        return preg_replace('/<\/body>/i', $pixel.'</body>', $html, 1);
-    }
-    return $html . $pixel;
-}
-
 
     /* --------------------------
      * REST routes
