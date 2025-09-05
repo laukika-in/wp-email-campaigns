@@ -205,6 +205,7 @@ public function add_send_screen() {
             $headers[] = 'From: ' . $from;
             $headers[] = 'Reply-To: ' . $from_email;
         }
+error_log('[WPEC] pre-send typeof='.gettype($body_html).' len='.strlen((string)$body_html).' head='.substr((string)$body_html,0,80));
 
         $ok = wp_mail($to, $subject, $body_html, $headers);
         if ( ! $ok ) wp_send_json_error(['message'=>'wp_mail failed']);
