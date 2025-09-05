@@ -138,40 +138,57 @@ class Tracking {
      * REST routes
      * ------------------------*/
  
-        public static function register_routes() {
-            // Open pixel: allow dots in the signed token (payload.signature)
-            register_rest_route('email-campaigns/v1', '/o/(?P<token>[^/]+)\.gif', [
-                'methods'             => 'GET',
-                'permission_callback' => '__return_true',
-                'callback'            => [__CLASS__, 'rest_open'],
-            ]);
-
-            // Click redirect
-            register_rest_route('email-campaigns/v1', '/c/(?P<token>[^/]+)', [
-                'methods'             => 'GET',
-                'permission_callback' => '__return_true',
-                'callback'            => [__CLASS__, 'rest_click'],
-            ]);
-        }
-
-public static function rest_open(\WP_REST_Request $req) {
-    error_log('[WPEC] OPEN hit token='.substr((string)$req['token'],0,24));
-    $d = self::verify((string)$req['token']);
-    if (!$d || ($d['t']??'')!=='o') return self::gif_1x1();
-    self::log_event( (int)$d['c'], (int)$d['ct'], 'opened', null );
-    return self::gif_1x1();
-}
-
-public static function rest_click(\WP_REST_Request $req) {
-    error_log('[WPEC] CLICK hit token='.substr((string)$req['token'],0,24));
-    $d = self::verify((string)$req['token']);
-    $dest = home_url('/');
-    if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
-        $dest = (string)$d['u'];
-        self::log_event( (int)$d['c'], (int)$d['ct'], 'clicked', $dest );
+    public static function register_routes() {
+        register_rest_route('email-campaigns/v1', '/o/(?P<token>[^/]+)\.gif', [
+            'methods'             => 'GET',
+            'permission_callback' => '__return_true',
+            'callback'            => [__CLASS__, 'rest_open'],
+        ]);
+        register_rest_route('email-campaigns/v1', '/c/(?P<token>[^/]+)', [
+            'methods'             => 'GET',
+            'permission_callback' => '__return_true',
+            'callback'            => [__CLASS__, 'rest_click'],
+        ]);
     }
-    return new \WP_REST_Response(null, 302, ['Location' => $dest]);
-}
+
+
+    public static function rest_open(\WP_REST_Request $req) {
+        error_log('[WPEC] OPEN hit token='.substr((string)$req['token'],0,24));
+        $d = self::verify((string)$req['token']);
+        if (!$d || ($d['t']??'')!=='o') return self::gif_1x1();
+        self::log_event((int)$d['c'], (int)$d['ct'], 'opened', null);
+        return self::gif_1x1();
+    }
+
+    protected static function is_link_scanner(?string $ua): bool {
+        if (!$ua) return false;
+        $ua = strtolower($ua);
+        return (
+            str_contains($ua, 'googleimageproxy') ||
+            str_contains($ua, 'facebookexternalhit') ||
+            str_contains($ua, 'linkedinbot') ||
+            str_contains($ua, 'skypeuripreview') ||
+            str_contains($ua, 'twitterbot') ||
+            str_contains($ua, 'microsoft office') ||    // Outlook desktop
+            str_contains($ua, 'outlook') ||              // Outlook/Microsoft safe links
+            str_contains($ua, 'curl/') ||
+            str_contains($ua, 'wget/')
+        );
+    }
+
+    public static function rest_click(\WP_REST_Request $req) {
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $d  = self::verify((string)$req['token']);
+        $dest = home_url('/');
+        if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
+            $dest = (string)$d['u'];
+            if (!self::is_link_scanner($ua)) {
+                self::log_event((int)$d['c'], (int)$d['ct'], 'clicked', $dest);
+            }
+        }
+        return new \WP_REST_Response(null, 302, ['Location' => $dest]);
+    }
+
 
     /* --------------------------
      * Log + update per-recipient counters (on `subs`)
@@ -180,60 +197,74 @@ public static function rest_click(\WP_REST_Request $req) {
         global $wpdb;
         $logs = Helpers::table('logs');
         $subs = Helpers::table('subs');
+        $ct   = Helpers::table('contacts');
 
-        // Capture UA/IP lightly
+        // UA/IP
         $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(wp_unslash($_SERVER['HTTP_USER_AGENT']), 0, 1000) : null;
         $ip = null;
-        if ( ! empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP) ) {
+        if (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)) {
             $ip = inet_pton($_SERVER['REMOTE_ADDR']);
         }
- 
-        // 1) Append-only event row (store contact in subscriber_id for now) -> LOGS table
-        if ($logs) {
-            $wpdb->insert($logs, [
-                'campaign_id'         => $campaign_id,
-                'subscriber_id'       => $contact_id,   // using as contact id
-                'event'               => $event,        // 'opened' | 'clicked'
-                'provider_message_id' => null,
-                'info'                => null,
-                'event_time'          => Helpers::now(),
-                'created_at'          => Helpers::now(),
-                'queue_id'            => null,          // no queue table linkage yet
-                'link_url'            => $link_url,
-                'user_agent'          => $ua,
-                'ip'                  => $ip,
-            ]);
+
+        // Resolve email (for logs.email)
+        $email = null;
+        if ($ct && $contact_id) {
+        $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
         }
 
- 
-        // 2) Per-recipient counters on subscribers table
-            if ($subs && $campaign_id && $contact_id) {
-                if ($event === 'opened') {
-                    $wpdb->query( $wpdb->prepare("
-                        UPDATE $subs
-                        SET opens_count      = COALESCE(opens_count,0) + 1,
-                            first_open_at    = IF(first_open_at IS NULL, %s, first_open_at),
-                            last_open_at     = %s,
-                            last_activity_at = %s
-                        WHERE campaign_id = %d AND contact_id = %d
-                    ", Helpers::now(), Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
-                } elseif ($event === 'clicked') {
-                    $wpdb->query( $wpdb->prepare("
-                        UPDATE $subs
-                        SET clicks_count     = COALESCE(clicks_count,0) + 1,
-                            last_click_at    = %s,
-                            last_activity_at = %s
-                        WHERE campaign_id = %d AND contact_id = %d
-                    ", Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
-                }
+        // 1) Append event row into logs
+        if ($logs) {
+            $row = [
+                'campaign_id'   => $campaign_id,
+                'subscriber_id' => $contact_id,
+                'email'         => $email,
+                'status'        => $event,   // convenience mirror
+                'event'         => $event,
+                'provider_message_id' => null,
+                'info'          => null,
+                'event_time'    => Helpers::now(),
+                'created_at'    => Helpers::now(),
+                'queue_id'      => null,
+                'link_url'      => $link_url,
+                'user_agent'    => $ua,
+                'ip'            => $ip,
+            ];
+            if ($event === 'opened') {
+                $row['opened_at'] = Helpers::now();
+            } elseif ($event === 'clicked') {
+                // keep opened_at null
             }
+            $wpdb->insert($logs, $row);
+        }
 
-
+        // 2) Update per-recipient counters
+        if ($subs && $campaign_id && $contact_id) {
+            if ($event === 'opened') {
+                $wpdb->query($wpdb->prepare("
+                    UPDATE $subs
+                    SET opens_count      = COALESCE(opens_count,0) + 1,
+                        first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
+                        last_open_at     = NOW(),
+                        last_activity_at = NOW()
+                    WHERE campaign_id = %d AND contact_id = %d
+                ", $campaign_id, $contact_id));
+            } elseif ($event === 'clicked') {
+                $wpdb->query($wpdb->prepare("
+                    UPDATE $subs
+                    SET clicks_count     = COALESCE(clicks_count,0) + 1,
+                        last_click_at    = NOW(),
+                        last_activity_at = NOW()
+                    WHERE campaign_id = %d AND contact_id = %d
+                ", $campaign_id, $contact_id));
+            }
+        }
     }
+
     // Back-compat alias so REST calls work
     protected static function log_event(int $campaign_id, int $contact_id, string $event, ?string $link_url) {
         return self::log_event_and_counters($campaign_id, $contact_id, $event, $link_url);
     }
+
 
     protected static function gif_1x1() {
         $gif = base64_decode('R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==');

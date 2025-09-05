@@ -167,6 +167,12 @@ public function add_send_screen() {
         ) $charset;";
         require_once ABSPATH.'wp-admin/includes/upgrade.php';
         dbDelta($sql);
+        // In Sender::maybe_create_queue_table() right after dbDelta($sql);
+        $exists = $wpdb->get_var("SHOW INDEX FROM {$wpdb->prefix}wpec_send_queue WHERE Key_name='uq_campaign_email'");
+        if (!$exists) {
+            $wpdb->query("ALTER TABLE {$wpdb->prefix}wpec_send_queue ADD UNIQUE KEY uq_campaign_email (campaign_id,email)");
+        }
+
     }
 
     private function maybe_schedule_cron() {
@@ -290,17 +296,20 @@ if (is_string($body_html)) {
         // Build recipients (unique emails among active contacts)
         $place = implode(',', array_fill(0, count($list_ids), '%d'));
         $recips = $wpdb->get_results(
-            $wpdb->prepare("
-                SELECT MIN(c.id) AS contact_id, c.email
-                FROM $ct c
-                INNER JOIN $li li ON li.contact_id = c.id
-                WHERE li.list_id IN ($place)
-                  AND c.status = 'active'
-                  AND c.email <> ''
-                GROUP BY c.email
-            ", $list_ids),
-            ARRAY_A
-        );
+        $wpdb->prepare("
+            SELECT MIN(c.id) AS contact_id,
+                c.email,
+                CONCAT_WS(' ', c.first_name, c.last_name) AS full_name
+            FROM $ct c
+            INNER JOIN $li li ON li.contact_id = c.id
+            WHERE li.list_id IN ($place)
+            AND c.status = 'active'
+            AND c.email <> ''
+            GROUP BY c.email
+        ", $list_ids),
+        ARRAY_A
+    );
+
 
         if ( empty($recips) ) {
             wp_send_json_error(['message'=>'No eligible recipients (active) found in the selected list(s).']);
@@ -321,15 +330,21 @@ if (is_string($body_html)) {
         // Seed per-recipient rows so tracking can increment counters
         $subs = Helpers::table('subs');
         if ( $subs ) {
-            $wpdb->query( $wpdb->prepare("
-                INSERT INTO $subs (campaign_id, contact_id, email, name, status, created_at)
-                SELECT q.campaign_id, q.contact_id, q.email, NULL, 'scheduled', %s
-                FROM $q q
-                LEFT JOIN $subs s
-                    ON s.campaign_id = q.campaign_id AND s.contact_id = q.contact_id
-                WHERE q.campaign_id = %d
-                AND s.contact_id IS NULL
-            ", $now, $campaign_id) );
+            // Replace previous seed INSERT with a join to contacts for name
+        $wpdb->query( $wpdb->prepare("
+            INSERT INTO $subs (campaign_id, contact_id, email, name, status, created_at)
+            SELECT q.campaign_id, q.contact_id, q.email,
+                CONCAT_WS(' ', c.first_name, c.last_name) AS name,
+                'scheduled', %s
+            FROM $q q
+            LEFT JOIN $subs s
+            ON s.campaign_id = q.campaign_id AND s.contact_id = q.contact_id
+            LEFT JOIN $ct c
+            ON c.id = q.contact_id
+            WHERE q.campaign_id = %d
+            AND s.contact_id IS NULL
+        ", $now, $campaign_id) );
+
         }
 
         // Persist queued count now (sent/failed updated by cron/status)
@@ -489,6 +504,32 @@ if (is_string($body_html)) {
                         ", 'wp_mail failed', (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
                     }
                 }
+                if ($ok) {
+                    // insert a 'sent' event into logs with email + sent_at
+                    $logs = Helpers::table('logs');
+                    if ($logs) {
+                        // fetch email/name once (we have $r['email'])
+                        $wpdb->insert($logs, [
+                            'campaign_id'         => (int)$r['campaign_id'],
+                            'subscriber_id'       => (int)($r['contact_id'] ?? 0),
+                            'email'               => (string)$r['email'],
+                            'status'              => 'sent',
+                            'event'               => 'sent',
+                            'provider_message_id' => null,
+                            'info'                => null,
+                            'sent_at'             => Helpers::now(),
+                            'event_time'          => Helpers::now(),
+                            'created_at'          => Helpers::now(),
+                            'queue_id'            => (int)$r['id'],
+                            'link_url'            => null,
+                            'user_agent'          => null,
+                            'ip'                  => null,
+                        ], [
+                            '%d','%d','%s','%s','%s','%s','%s','%s','%s','%d','%s','%s','%s'
+                        ]);
+                    }
+                }
+
             }
         }
 
