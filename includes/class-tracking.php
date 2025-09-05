@@ -138,18 +138,38 @@ class Tracking {
      * REST routes
      * ------------------------*/
  
-    public static function register_routes() {
-        register_rest_route('email-campaigns/v1', '/o/(?P<token>[^/]+)\.gif', [
-            'methods'             => 'GET',
-            'permission_callback' => '__return_true',
-            'callback'            => [__CLASS__, 'rest_open'],
-        ]);
-        register_rest_route('email-campaigns/v1', '/c/(?P<token>[^/]+)', [
-            'methods'             => 'GET',
-            'permission_callback' => '__return_true',
-            'callback'            => [__CLASS__, 'rest_click'],
-        ]);
-    }
+   public static function register_routes() {
+    // OPEN (pixel) — allow dots in token and the .gif suffix
+    register_rest_route('email-campaigns/v1', '/o/(?P<token>.+)\.gif', [
+        'methods'             => 'GET',
+        'permission_callback' => '__return_true',
+        'callback'            => [__CLASS__, 'rest_open'],
+    ]);
+
+    // OPEN (fallback, no .gif) — some servers mis-handle .gif under /wp-json
+    register_rest_route('email-campaigns/v1', '/o/(?P<token>.+)', [
+        'methods'             => 'GET',
+        'permission_callback' => '__return_true',
+        'callback'            => [__CLASS__, 'rest_open'],
+    ]);
+
+    // OPEN (query fallback) — /wp-json/email-campaigns/v1/open?token=...
+    register_rest_route('email-campaigns/v1', '/open', [
+        'methods'             => 'GET',
+        'permission_callback' => '__return_true',
+        'callback'            => function( \WP_REST_Request $req ) {
+            $req['token'] = (string) $req->get_param('token');
+            return call_user_func([__CLASS__, 'rest_open'], $req);
+        },
+    ]);
+
+    // CLICK — allow dots just in case
+    register_rest_route('email-campaigns/v1', '/c/(?P<token>.+)', [
+        'methods'             => 'GET',
+        'permission_callback' => '__return_true',
+        'callback'            => [__CLASS__, 'rest_click'],
+    ]);
+}
 
 
     public static function rest_open(\WP_REST_Request $req) {
@@ -176,18 +196,19 @@ class Tracking {
         );
     }
 
-    public static function rest_click(\WP_REST_Request $req) {
-        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        $d  = self::verify((string)$req['token']);
-        $dest = home_url('/');
-        if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
-            $dest = (string)$d['u'];
-            if (!self::is_link_scanner($ua)) {
-                self::log_event((int)$d['c'], (int)$d['ct'], 'clicked', $dest);
-            }
+   public static function rest_click(\WP_REST_Request $req) {
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $d  = self::verify((string)$req['token']);
+    $dest = home_url('/');
+    if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
+        $dest = (string)$d['u'];
+        if (!self::is_link_scanner($ua)) {
+            self::log_event((int)$d['c'], (int)$d['ct'], 'clicked', $dest);
         }
-        return new \WP_REST_Response(null, 302, ['Location' => $dest]);
     }
+    return new \WP_REST_Response(null, 302, ['Location' => $dest]);
+}
+
 
 
     /* --------------------------
@@ -199,31 +220,31 @@ class Tracking {
         $subs = Helpers::table('subs');
         $ct   = Helpers::table('contacts');
 
-        // UA/IP
+        // UA + IP
         $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(wp_unslash($_SERVER['HTTP_USER_AGENT']), 0, 1000) : null;
         $ip = null;
         if (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)) {
-            $ip = inet_pton($_SERVER['REMOTE_ADDR']);
+            $ip = @inet_pton($_SERVER['REMOTE_ADDR']);
         }
 
-        // Resolve email (for logs.email)
+        // Resolve email for logs.email (optional)
         $email = null;
         if ($ct && $contact_id) {
-        $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
+            $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
         }
 
-        // 1) Append event row into logs
+        // 1) Append detailed event row to LOGS
         if ($logs) {
             $row = [
                 'campaign_id'   => $campaign_id,
                 'subscriber_id' => $contact_id,
                 'email'         => $email,
-                'status'        => $event,   // convenience mirror
-                'event'         => $event,
+                'status'        => $event,           // convenience mirror
+                'event'         => $event,           // 'opened' | 'clicked'
                 'provider_message_id' => null,
                 'info'          => null,
-                'event_time'    => Helpers::now(),
-                'created_at'    => Helpers::now(),
+                'event_time'    => Helpers::now(),   // always set
+                'created_at'    => Helpers::now(),   // always set
                 'queue_id'      => null,
                 'link_url'      => $link_url,
                 'user_agent'    => $ua,
@@ -231,13 +252,11 @@ class Tracking {
             ];
             if ($event === 'opened') {
                 $row['opened_at'] = Helpers::now();
-            } elseif ($event === 'clicked') {
-                // keep opened_at null
             }
             $wpdb->insert($logs, $row);
         }
 
-        // 2) Update per-recipient counters
+        // 2) Update per-recipient counters on SUBS
         if ($subs && $campaign_id && $contact_id) {
             if ($event === 'opened') {
                 $wpdb->query($wpdb->prepare("
@@ -259,6 +278,7 @@ class Tracking {
             }
         }
     }
+
 
     // Back-compat alias so REST calls work
     protected static function log_event(int $campaign_id, int $contact_id, string $event, ?string $link_url) {

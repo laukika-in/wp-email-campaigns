@@ -168,10 +168,31 @@ public function add_send_screen() {
         require_once ABSPATH.'wp-admin/includes/upgrade.php';
         dbDelta($sql);
         // In Sender::maybe_create_queue_table() right after dbDelta($sql);
+        // After: dbDelta($sql);
+
+        // Ensure 'processing_token' and 'processing_at' exist (idempotent)
+        $cols = $wpdb->get_col( "SHOW COLUMNS FROM {$wpdb->prefix}wpec_send_queue", 0 );
+        if ($cols) {
+            if ( ! in_array('processing_token', $cols, true) ) {
+                $wpdb->query("ALTER TABLE {$wpdb->prefix}wpec_send_queue ADD COLUMN processing_token VARCHAR(64) NULL");
+            }
+            if ( ! in_array('processing_at', $cols, true) ) {
+                $wpdb->query("ALTER TABLE {$wpdb->prefix}wpec_send_queue ADD COLUMN processing_at DATETIME NULL");
+            }
+        }
+
+        // Index for quick fetch of the claimed batch
+        $idx = $wpdb->get_var("SHOW INDEX FROM {$wpdb->prefix}wpec_send_queue WHERE Key_name='processing_token'");
+        if ( ! $idx ) {
+            $wpdb->query("ALTER TABLE {$wpdb->prefix}wpec_send_queue ADD KEY processing_token (processing_token)");
+        }
+
+        // You already added a uniqueness guard; keep it:
         $exists = $wpdb->get_var("SHOW INDEX FROM {$wpdb->prefix}wpec_send_queue WHERE Key_name='uq_campaign_email'");
         if (!$exists) {
             $wpdb->query("ALTER TABLE {$wpdb->prefix}wpec_send_queue ADD UNIQUE KEY uq_campaign_email (campaign_id,email)");
         }
+
 
     }
 
@@ -325,26 +346,22 @@ if (is_string($body_html)) {
             );
         }
         foreach ( array_chunk($values, 500) as $chunk ) {
-            $wpdb->query("INSERT INTO $q (campaign_id, contact_id, email, status, scheduled_at, created_at) VALUES ".implode(',', $chunk));
+           $wpdb->query("INSERT IGNORE INTO $q (campaign_id, contact_id, email, status, scheduled_at, created_at) VALUES ".implode(',', $chunk));
         }
         // Seed per-recipient rows so tracking can increment counters
         $subs = Helpers::table('subs');
         if ( $subs ) {
-            // Replace previous seed INSERT with a join to contacts for name
         $wpdb->query( $wpdb->prepare("
             INSERT INTO $subs (campaign_id, contact_id, email, name, status, created_at)
             SELECT q.campaign_id, q.contact_id, q.email,
                 CONCAT_WS(' ', c.first_name, c.last_name) AS name,
                 'scheduled', %s
             FROM $q q
-            LEFT JOIN $subs s
-            ON s.campaign_id = q.campaign_id AND s.contact_id = q.contact_id
-            LEFT JOIN $ct c
-            ON c.id = q.contact_id
+        LEFT JOIN $subs s ON s.campaign_id = q.campaign_id AND s.contact_id = q.contact_id
+        LEFT JOIN $ct c   ON c.id = q.contact_id
             WHERE q.campaign_id = %d
             AND s.contact_id IS NULL
         ", $now, $campaign_id) );
-
         }
 
         // Persist queued count now (sent/failed updated by cron/status)
@@ -438,151 +455,215 @@ if (is_string($body_html)) {
      *  CRON worker
      * ---------------------*/
 
-    public function cron_process_queue() {
-        // Prevent overlap
-        if ( get_transient('wpec_send_lock') ) return;
-        set_transient('wpec_send_lock', 1, 55);
+  public function cron_process_queue() {
+    global $wpdb;
 
-        global $wpdb;
-        $q   = $wpdb->prefix.'wpec_send_queue';
-        $cam = $wpdb->prefix.'wpec_campaigns';
+    $q    = $wpdb->prefix . 'wpec_send_queue';
+    $cam  = $wpdb->prefix . 'wpec_campaigns';
+    $subs = \WPEC\Helpers::table('subs');
+    $logs = \WPEC\Helpers::table('logs');
 
-        // ~30/minute ≈ 1 email / 2s
-        $batch = (int) apply_filters('wpec_send_batch_per_minute', 30);
+    // How many per minute (can be overridden)
+    $batch = (int) apply_filters('wpec_send_batch_per_minute', 30);
+    if ($batch < 1) { $batch = 1; }
 
-        // Pull next batch (only for active campaigns)
-        $rows = $wpdb->get_results("
-            SELECT q.*
-            FROM $q q
-            INNER JOIN $cam c ON c.id = q.campaign_id
-            WHERE q.status='queued'
-              AND c.status IN ('queued','sending')
-              AND q.scheduled_at <= NOW()
-            ORDER BY q.id ASC
-            LIMIT {$batch}
-        ", ARRAY_A);
+    // Unique token to mark rows this worker owns
+    $token = wp_generate_uuid4();
 
-        if ( ! empty($rows) ) {
-            foreach ($rows as $r) {
-                $subs = Helpers::table('subs');
+    // (Optional) short advisory lock while claiming; safe to keep even if GET_LOCK is disabled
+    $wpdb->query( $wpdb->prepare("SELECT GET_LOCK(%s, 2)", 'wpec_claim_lock') );
 
-                $ok = $this->deliver_row($r);
-                if ($subs) {
+    // 1) ATOMIC CLAIM of the next N queued rows belonging to active campaigns
+    // NOTE: MySQL supports ORDER BY + LIMIT in UPDATE.
+    $wpdb->query( $wpdb->prepare("
+        UPDATE $q q
+        INNER JOIN $cam c ON c.id = q.campaign_id
+        SET q.status = 'sending',
+            q.processing_token = %s,
+            q.processing_at = NOW()
+        WHERE q.status = 'queued'
+          AND c.status IN ('queued','sending')
+          AND q.scheduled_at <= NOW()
+        ORDER BY q.id ASC
+        LIMIT %d
+    ", $token, $batch) );
+
+    // Release advisory lock quickly
+    $wpdb->query( $wpdb->prepare("SELECT RELEASE_LOCK(%s)", 'wpec_claim_lock') );
+
+    // 2) Fetch ONLY the rows we claimed
+    $rows = $wpdb->get_results(
+        $wpdb->prepare("SELECT * FROM $q WHERE processing_token = %s ORDER BY id ASC", $token),
+        ARRAY_A
+    );
+
+    if (empty($rows)) {
+        // Optionally reconcile campaign statuses even if we sent nothing
+        // (kept below)
+    } else {
+        // Mark any 'queued' campaigns in this batch as 'sending' for UI
+        $campaignIds = array_unique(array_map(static fn($r) => (int)$r['campaign_id'], $rows));
+        foreach ($campaignIds as $cid) {
+            $wpdb->query( $wpdb->prepare("UPDATE $cam SET status='sending' WHERE id=%d AND status='queued'", $cid) );
+        }
+
+        foreach ($rows as $r) {
+            $queueId   = (int) $r['id'];
+            $cid       = (int) $r['campaign_id'];
+            $contactId = (int) ($r['contact_id'] ?? 0);
+            $email     = (string) $r['email'];
+
+            // Bump attempts on per-recipient row (if seeded)
+            if ($subs && $cid && $contactId) {
+                $wpdb->query( $wpdb->prepare("
+                    UPDATE $subs
+                       SET attempts   = COALESCE(attempts,0) + 1,
+                           updated_at = NOW()
+                     WHERE campaign_id = %d AND contact_id = %d
+                ", $cid, $contactId) );
+            }
+
+            // Deliver
+            $ok = false; $lastErr = null;
+            try {
+                $ok = $this->deliver_row($r); // this already instruments HTML
+            } catch (\Throwable $e) {
+                $ok = false;
+                $lastErr = $e->getMessage();
+            }
+
+            if ($ok) {
+                // Queue row -> sent (+ clear processing token)
+                $wpdb->update(
+                    $q,
+                    ['status'=>'sent','last_error'=>null,'processing_token'=>null,'processing_at'=>null],
+                    ['id'=>$queueId],
+                    ['%s','%s','%s','%s'],
+                    ['%d']
+                );
+
+                // Subs row -> sent
+                if ($subs && $cid && $contactId) {
                     $wpdb->query( $wpdb->prepare("
                         UPDATE $subs
-                        SET attempts = COALESCE(attempts,0) + 1,
-                            updated_at = NOW()
-                        WHERE campaign_id = %d AND contact_id = %d
-                    ", (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
+                           SET status   = 'sent',
+                               sent_at  = COALESCE(sent_at, NOW()),
+                               updated_at = NOW()
+                         WHERE campaign_id = %d AND contact_id = %d
+                    ", $cid, $contactId) );
                 }
 
-                $ok = $this->deliver_row($r);
+                // Logs row -> sent (append)
+                if ($logs) {
+                    $wpdb->insert($logs, [
+                        'campaign_id'         => $cid,
+                        'subscriber_id'       => $contactId,
+                        'email'               => $email,
+                        'status'              => 'sent',
+                        'event'               => 'sent',
+                        'provider_message_id' => null,
+                        'info'                => null,
+                        'sent_at'             => \WPEC\Helpers::now(),
+                        'event_time'          => \WPEC\Helpers::now(),
+                        'created_at'          => \WPEC\Helpers::now(),
+                        'queue_id'            => $queueId,
+                        'link_url'            => null,
+                        'user_agent'          => null,
+                        'ip'                  => null,
+                    ]);
+                }
+            } else {
+                // Queue row -> failed
+                $err = $lastErr ?: 'wp_mail failed';
+                $wpdb->update(
+                    $q,
+                    ['status'=>'failed','last_error'=>$err,'processing_token'=>null,'processing_at'=>null],
+                    ['id'=>$queueId],
+                    ['%s','%s','%s','%s'],
+                    ['%d']
+                );
 
-                if ( $ok ) {
-                    $wpdb->update($q, ['status'=>'sent','last_error'=>null], ['id'=>$r['id']], ['%s','%s'], ['%d']);
-                } else {
-                    $wpdb->update($q, ['status'=>'failed','last_error'=>'wp_mail failed'], ['id'=>$r['id']], ['%s','%s'], ['%d']);
+                // Subs row -> failed
+                if ($subs && $cid && $contactId) {
+                    $wpdb->query( $wpdb->prepare("
+                        UPDATE $subs
+                           SET status     = 'failed',
+                               last_error = %s,
+                               updated_at = NOW()
+                         WHERE campaign_id = %d AND contact_id = %d
+                    ", $err, $cid, $contactId) );
                 }
 
-                if ($subs) {
-                    if ($ok) {
-                        $wpdb->query( $wpdb->prepare("
-                            UPDATE $subs
-                            SET status='sent',
-                                sent_at = COALESCE(sent_at, NOW()),
-                                last_error = NULL,
-                                updated_at = NOW()
-                            WHERE campaign_id = %d AND contact_id = %d
-                        ", (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
-                    } else {
-                        $wpdb->query( $wpdb->prepare("
-                            UPDATE $subs
-                            SET status='failed',
-                                last_error = %s,
-                                updated_at = NOW()
-                            WHERE campaign_id = %d AND contact_id = %d
-                        ", 'wp_mail failed', (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
-                    }
-                }
-                if ($ok) {
-                    // insert a 'sent' event into logs with email + sent_at
-                    $logs = Helpers::table('logs');
-                    if ($logs) {
-                        // fetch email/name once (we have $r['email'])
-                        $wpdb->insert($logs, [
-                            'campaign_id'         => (int)$r['campaign_id'],
-                            'subscriber_id'       => (int)($r['contact_id'] ?? 0),
-                            'email'               => (string)$r['email'],
-                            'status'              => 'sent',
-                            'event'               => 'sent',
-                            'provider_message_id' => null,
-                            'info'                => null,
-                            'sent_at'             => Helpers::now(),
-                            'event_time'          => Helpers::now(),
-                            'created_at'          => Helpers::now(),
-                            'queue_id'            => (int)$r['id'],
-                            'link_url'            => null,
-                            'user_agent'          => null,
-                            'ip'                  => null,
-                        ], [
-                            '%d','%d','%s','%s','%s','%s','%s','%s','%s','%d','%s','%s','%s'
-                        ]);
-                    }
-                }
-
-            }
-        }
-
-        /* Reconcile: roll-up counts & set campaign statuses, even if this tick sent 0 rows */
-        $active_ids = $wpdb->get_col("SELECT id FROM $cam WHERE status IN ('queued','sending','paused')");
-        if ( $active_ids ) {
-            $place = implode(',', array_fill(0, count($active_ids), '%d'));
-
-            // Live counts
-            $stats = $wpdb->get_results(
-                $wpdb->prepare("
-                    SELECT campaign_id,
-                           SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
-                           SUM(CASE WHEN status='sent'   THEN 1 ELSE 0 END) AS sent,
-                           SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
-                    FROM $q
-                    WHERE campaign_id IN ($place)
-                    GROUP BY campaign_id
-                ", $active_ids),
-                ARRAY_A
-            );
-
-            $by = [];
-            foreach ($stats as $s) { $by[(int)$s['campaign_id']] = $s; }
-
-            foreach ($active_ids as $cid) {
-                $queued = (int)($by[$cid]['queued'] ?? 0);
-                $sent   = (int)($by[$cid]['sent']   ?? 0);
-                $failed = (int)($by[$cid]['failed'] ?? 0);
-
-                // Persist rollups for UI
-                $wpdb->update($cam, [
-                    'queued_count' => $queued,
-                    'sent_count'   => $sent,
-                    'failed_count' => $failed,
-                ], ['id'=>$cid], ['%d','%d','%d'], ['%d']);
-
-                // Status transitions (paused stays as-is)
-                $cur = (string) $wpdb->get_var( $wpdb->prepare("SELECT status FROM $cam WHERE id=%d", $cid) );
-
-                if ( $cur !== 'paused' ) {
-                    if ( $queued > 0 && $cur !== 'sending' ) {
-                        $wpdb->update($cam, ['status'=>'sending'], ['id'=>$cid], ['%s'], ['%d']);
-                    } elseif ( $queued === 0 ) {
-                        // Finished: mark "sent" even if some failed (counts show failures)
-                        $wpdb->update($cam, ['status'=>'sent'], ['id'=>$cid], ['%s'], ['%d']);
-                    }
+                // Logs row -> failed (append)
+                if ($logs) {
+                    $wpdb->insert($logs, [
+                        'campaign_id'         => $cid,
+                        'subscriber_id'       => $contactId,
+                        'email'               => $email,
+                        'status'              => 'failed',
+                        'event'               => 'failed',
+                        'provider_message_id' => null,
+                        'info'                => $err,
+                        'event_time'          => \WPEC\Helpers::now(),
+                        'created_at'          => \WPEC\Helpers::now(),
+                        'queue_id'            => $queueId,
+                        'link_url'            => null,
+                        'user_agent'          => null,
+                        'ip'                  => null,
+                    ]);
                 }
             }
         }
-
-        delete_transient('wpec_send_lock');
     }
+
+    // 3) Roll-up counts and reconcile campaign statuses
+    $active_ids = $wpdb->get_col("SELECT id FROM $cam WHERE status IN ('queued','sending','paused')");
+    if ($active_ids) {
+        $place = implode(',', array_fill(0, count($active_ids), '%d'));
+        $stats = $wpdb->get_results(
+            $wpdb->prepare("
+                SELECT campaign_id,
+                       SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
+                       SUM(CASE WHEN status='sent'   THEN 1 ELSE 0 END) AS sent,
+                       SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+                  FROM $q
+                 WHERE campaign_id IN ($place)
+              GROUP BY campaign_id
+            ", $active_ids),
+            ARRAY_A
+        );
+
+        $by = [];
+        foreach ($stats as $s) { $by[(int)$s['campaign_id']] = $s; }
+
+        foreach ($active_ids as $cid) {
+            $queued = (int)($by[$cid]['queued'] ?? 0);
+            $sent   = (int)($by[$cid]['sent']   ?? 0);
+            $failed = (int)($by[$cid]['failed'] ?? 0);
+
+            // Persist rollups for UI
+            $wpdb->update($cam, [
+                'queued_count' => $queued,
+                'sent_count'   => $sent,
+                'failed_count' => $failed,
+            ], ['id'=>$cid], ['%d','%d','%d'], ['%d']);
+
+            // Status transitions (paused stays as-is)
+            $cur = (string) $wpdb->get_var( $wpdb->prepare("SELECT status FROM $cam WHERE id=%d", $cid) );
+            if ($cur !== 'paused') {
+                if ($queued > 0) {
+                    if ($cur !== 'sending') {
+                        $wpdb->update($cam, ['status'=>'sending'], ['id'=>$cid], ['%s'], ['%d']);
+                    }
+                } else {
+                    // Finished: mark "sent" even if some failed (counts show failures)
+                    $wpdb->update($cam, ['status'=>'sent'], ['id'=>$cid], ['%s'], ['%d']);
+                }
+            }
+        }
+    }
+}
+
 
     private function deliver_row(array $row): bool {
         global $wpdb;
