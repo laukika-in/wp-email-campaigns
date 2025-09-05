@@ -5,9 +5,9 @@ if ( ! defined('ABSPATH') ) exit;
 class Tracking {
 
     public static function init() {
-        // Run column checks on both init (front) and admin_init (back) so REST hits never fail.
-        add_action('init',        [__CLASS__, 'maybe_add_columns']);
-        add_action('admin_init',  [__CLASS__, 'maybe_add_columns']);
+        // Ensure columns exist both front and admin so REST hits never fail.
+        add_action('init',       [__CLASS__, 'maybe_add_columns']);
+        add_action('admin_init', [__CLASS__, 'maybe_add_columns']);
 
         add_action('rest_api_init', [__CLASS__, 'register_routes']);
     }
@@ -20,38 +20,41 @@ class Tracking {
 
         // Logs table
         $logs = Helpers::table('logs');
-        $cols = $wpdb->get_col( "SHOW COLUMNS FROM `$logs`", 0 );
-        if ($cols) {
-            $has = function($n) use($cols){ return in_array($n, $cols, true); };
-            if (! $has('queue_id'))   $wpdb->query("ALTER TABLE `$logs` ADD `queue_id` BIGINT UNSIGNED NULL");
-            if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
-            if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
-            if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
-
-            $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
-            if ($row && isset($row->Type) && strpos($row->Type, 'ENUM(') === 0 && strpos($row->Type, "'clicked'") === false) {
-                $wpdb->query("
-                    ALTER TABLE `$logs`
-                    MODIFY COLUMN `event`
-                    ENUM('queued','sent','delivered','opened','bounced','failed','clicked') NOT NULL
-                ");
+        if ($logs) {
+            $cols = $wpdb->get_col( "SHOW COLUMNS FROM `$logs`", 0 );
+            if ($cols) {
+                $has = fn($n) => in_array($n, $cols, true);
+                if (! $has('queue_id'))   $wpdb->query("ALTER TABLE `$logs` ADD `queue_id` BIGINT UNSIGNED NULL");
+                if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
+                if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
+                if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
+                // Add 'clicked' to ENUM if missing
+                $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
+                if ($row && isset($row->Type) && strpos($row->Type, 'ENUM(') === 0 && strpos($row->Type, "'clicked'") === false) {
+                    $wpdb->query("
+                        ALTER TABLE `$logs`
+                        MODIFY COLUMN `event`
+                        ENUM('queued','sent','delivered','opened','bounced','failed','clicked') NOT NULL
+                    ");
+                }
             }
         }
 
-        // Queue table (per-recipient counters)
-        // NOTE: if your alias is different, change 'send_queue' to your correct key in Helpers::table().
-        $queue = Helpers::table('send_queue');
-        $qcols = $wpdb->get_col( "SHOW COLUMNS FROM `$queue`", 0 );
-        if ($qcols) {
-            $hasQ = function($n) use($qcols){ return in_array($n, $qcols, true); };
-            if (! $hasQ('opens_count'))      $wpdb->query("ALTER TABLE `$queue` ADD `opens_count` INT UNSIGNED NOT NULL DEFAULT 0");
-            if (! $hasQ('first_open_at'))    $wpdb->query("ALTER TABLE `$queue` ADD `first_open_at` DATETIME NULL");
-            if (! $hasQ('last_open_at'))     $wpdb->query("ALTER TABLE `$queue` ADD `last_open_at` DATETIME NULL");
-            if (! $hasQ('clicks_count'))     $wpdb->query("ALTER TABLE `$queue` ADD `clicks_count` INT UNSIGNED NOT NULL DEFAULT 0");
-            if (! $hasQ('last_click_at'))    $wpdb->query("ALTER TABLE `$queue` ADD `last_click_at` DATETIME NULL");
-            if (! $hasQ('last_activity_at')) $wpdb->query("ALTER TABLE `$queue` ADD `last_activity_at` DATETIME NULL");
-            // Optional: status (active/unsub/bounced) if you want to reflect later provider events.
-            if (! $hasQ('status'))           $wpdb->query("ALTER TABLE `$queue` ADD `status` VARCHAR(20) NOT NULL DEFAULT 'sent'");
+        // Per-recipient counters live on the subscribers table
+        $subs = Helpers::table('subs');
+        if ($subs) {
+            $scols = $wpdb->get_col( "SHOW COLUMNS FROM `$subs`", 0 );
+            if ($scols) {
+                $hasS = fn($n) => in_array($n, $scols, true);
+                if (! $hasS('opens_count'))      $wpdb->query("ALTER TABLE `$subs` ADD `opens_count` INT UNSIGNED NOT NULL DEFAULT 0");
+                if (! $hasS('first_open_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `first_open_at` DATETIME NULL");
+                if (! $hasS('last_open_at'))     $wpdb->query("ALTER TABLE `$subs` ADD `last_open_at` DATETIME NULL");
+                if (! $hasS('clicks_count'))     $wpdb->query("ALTER TABLE `$subs` ADD `clicks_count` INT UNSIGNED NOT NULL DEFAULT 0");
+                if (! $hasS('last_click_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `last_click_at` DATETIME NULL");
+                if (! $hasS('last_activity_at')) $wpdb->query("ALTER TABLE `$subs` ADD `last_activity_at` DATETIME NULL");
+                // Optional: delivery status for later (bounced/complaint/unsub)
+                if (! $hasS('delivery_status'))  $wpdb->query("ALTER TABLE `$subs` ADD `delivery_status` VARCHAR(20) NOT NULL DEFAULT 'sent'");
+            }
         }
     }
 
@@ -85,13 +88,13 @@ class Tracking {
     /* --------------------------
      * HTML instrumentation
      * ------------------------*/
-    public static function instrument_html(int $queue_id, int $campaign_id, ?int $contact_id, string $html): string {
+    public static function instrument_html(int $campaign_id, int $contact_id, string $html): string {
         $rest = rest_url('email-campaigns/v1');
 
-        // 1) Rewrite links
+        // 1) Rewrite links (skip mailto, tel, js, anchors, and our own endpoints)
         $html = preg_replace_callback(
             '#<a\b([^>]*?)\bhref=("|\')(.*?)\2([^>]*)>#si',
-            function($m) use ($queue_id,$campaign_id,$rest){
+            function($m) use ($campaign_id,$contact_id,$rest){
                 $pre  = $m[1]; $q = $m[2]; $href = trim(html_entity_decode($m[3], ENT_QUOTES)); $post = $m[4];
 
                 if ($href === '' ||
@@ -104,15 +107,15 @@ class Tracking {
                     return "<a{$pre}href={$q}".esc_attr($href)."{$q}{$post}>";
                 }
 
-                $tok   = self::sign(['t'=>'c','q'=>$queue_id,'c'=>$campaign_id,'u'=>$href]);
+                $tok   = self::sign(['t'=>'c','c'=>$campaign_id,'ct'=>$contact_id,'u'=>$href]);
                 $track = trailingslashit($rest).'c/'.$tok;
                 return "<a{$pre}href={$q}".esc_attr($track)."{$q}{$post}>";
             },
             $html
         );
 
-        // 2) Tracking pixel (append before </body> if possible)
-        $tok   = self::sign(['t'=>'o','q'=>$queue_id,'c'=>$campaign_id,'r'=>wp_rand()]);
+        // 2) Tracking pixel
+        $tok   = self::sign(['t'=>'o','c'=>$campaign_id,'ct'=>$contact_id,'r'=>wp_rand()]);
         $pixel = sprintf(
             '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
             esc_url(trailingslashit($rest).'o/'.$tok.'.gif')
@@ -143,30 +146,28 @@ class Tracking {
     public static function rest_open(\WP_REST_Request $req) {
         $data = self::verify((string)$req['token']);
         if (!$data || ($data['t']??'') !== 'o') return self::gif_1x1();
-  error_log('[WPEC] open hit: '.substr((string)$req['token'],0,16));
 
-        self::log_event_and_counters( (int)$data['q'], (int)$data['c'], 'opened', null );
+        self::log_event_and_counters( (int)$data['c'], (int)$data['ct'], 'opened', null );
         return self::gif_1x1();
     }
 
     public static function rest_click(\WP_REST_Request $req) {
         $data = self::verify((string)$req['token']);
         $dest = home_url('/');
-         error_log('[WPEC] click hit: '.substr((string)$req['token'],0,16));
         if ($data && ($data['t']??'') === 'c' && !empty($data['u'])) {
             $dest = (string)$data['u'];
-            self::log_event_and_counters( (int)$data['q'], (int)$data['c'], 'clicked', $dest );
+            self::log_event_and_counters( (int)$data['c'], (int)$data['ct'], 'clicked', $dest );
         }
         return new \WP_REST_Response(null, 302, ['Location' => $dest]);
     }
 
     /* --------------------------
-     * Log + update per-recipient counters
+     * Log + update per-recipient counters (on `subs`)
      * ------------------------*/
-    protected static function log_event_and_counters(int $queue_id, int $campaign_id, string $event, ?string $link_url) {
+    protected static function log_event_and_counters(int $campaign_id, int $contact_id, string $event, ?string $link_url) {
         global $wpdb;
-        $logs  = Helpers::table('logs');
-        $queue = Helpers::table('send_queue');
+        $logs = Helpers::table('logs');
+        $subs = Helpers::table('subs');
 
         // Capture UA/IP lightly
         $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(wp_unslash($_SERVER['HTTP_USER_AGENT']), 0, 1000) : null;
@@ -175,39 +176,43 @@ class Tracking {
             $ip = inet_pton($_SERVER['REMOTE_ADDR']);
         }
 
-        // 1) Append-only event row
-        $wpdb->insert($logs, [
-            'campaign_id'        => $campaign_id,
-            'subscriber_id'      => null,
-            'event'              => $event,          // 'opened' | 'clicked'
-            'provider_message_id'=> null,
-            'info'               => null,
-            'event_time'         => Helpers::now(),
-            'created_at'         => Helpers::now(),
-            'queue_id'           => $queue_id,
-            'link_url'           => $link_url,
-            'user_agent'         => $ua,
-            'ip'                 => $ip,
-        ]);
+        // 1) Append-only event row (store contact in subscriber_id for now)
+        if ($logs) {
+            $wpdb->insert($logs, [
+                'campaign_id'         => $campaign_id,
+                'subscriber_id'       => $contact_id, // using as contact id
+                'event'               => $event,      // 'opened' | 'clicked'
+                'provider_message_id' => null,
+                'info'                => null,
+                'event_time'          => Helpers::now(),
+                'created_at'          => Helpers::now(),
+                'queue_id'            => null,        // no queue table in this plugin
+                'link_url'            => $link_url,
+                'user_agent'          => $ua,
+                'ip'                  => $ip,
+            ]);
+        }
 
-        // 2) Per-recipient counters on queue row
-        if ($event === 'opened') {
-            $wpdb->query( $wpdb->prepare("
-                UPDATE $queue
-                SET opens_count      = COALESCE(opens_count,0) + 1,
-                    first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
-                    last_open_at     = NOW(),
-                    last_activity_at = NOW()
-                WHERE id = %d
-            ", $queue_id ) );
-        } elseif ($event === 'clicked') {
-            $wpdb->query( $wpdb->prepare("
-                UPDATE $queue
-                SET clicks_count     = COALESCE(clicks_count,0) + 1,
-                    last_click_at    = NOW(),
-                    last_activity_at = NOW()
-                WHERE id = %d
-            ", $queue_id ) );
+        // 2) Per-recipient counters on subscribers table (campaign_id + contact_id)
+        if ($subs && $campaign_id && $contact_id) {
+            if ($event === 'opened') {
+                $wpdb->query( $wpdb->prepare("
+                    UPDATE $subs
+                    SET opens_count      = COALESCE(opens_count,0) + 1,
+                        first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
+                        last_open_at     = NOW(),
+                        last_activity_at = NOW()
+                    WHERE campaign_id = %d AND contact_id = %d
+                ", $campaign_id, $contact_id ) );
+            } elseif ($event === 'clicked') {
+                $wpdb->query( $wpdb->prepare("
+                    UPDATE $subs
+                    SET clicks_count     = COALESCE(clicks_count,0) + 1,
+                        last_click_at    = NOW(),
+                        last_activity_at = NOW()
+                    WHERE campaign_id = %d AND contact_id = %d
+                ", $campaign_id, $contact_id ) );
+            }
         }
     }
 

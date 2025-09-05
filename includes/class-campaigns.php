@@ -35,9 +35,9 @@ public function add_metrics_metabox() {
 }
 
 public function render_metrics_metabox(\WP_Post $post) {
-    $db    = Helpers::db();
-    $queue = Helpers::table('send_queue');
-    $cid   = (int) $post->ID;
+    $db   = Helpers::db();
+    $subs = Helpers::table('subs');
+    $cid  = (int) $post->ID;
 
     $row = $db->get_row( $db->prepare("
         SELECT
@@ -50,7 +50,7 @@ public function render_metrics_metabox(\WP_Post $post) {
                 COALESCE(last_open_at,'0000-00-00 00:00:00'),
                 COALESCE(last_click_at,'0000-00-00 00:00:00')
             )) AS last_activity
-        FROM $queue
+        FROM $subs
         WHERE campaign_id = %d
     ", $cid ), ARRAY_A );
 
@@ -68,6 +68,7 @@ public function render_metrics_metabox(\WP_Post $post) {
     }
     echo '</div>';
 }
+
     /**
      * List page (also routes to detail view when ?view=detail&campaign_id=ID)
      */

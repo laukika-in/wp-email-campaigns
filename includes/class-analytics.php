@@ -24,14 +24,14 @@ class Analytics {
         if ( ! Helpers::user_can_manage() ) { wp_die('Denied'); }
 
         $db    = Helpers::db();
-        $queue = Helpers::table('send_queue');
+        $subs  = Helpers::table('subs');
         $ct    = Helpers::table('contacts');
 
         $cid = isset($_GET['cid']) ? absint($_GET['cid']) : 0;
 
         echo '<div class="wrap wpec-admin"><h1>'.esc_html__('Reports','wp-email-campaigns').'</h1>';
 
-        // ---- Summary by campaign (fast: from queue counters)
+        // Campaign summary from per-recipient counters
         $summary = $db->get_results("
             SELECT
                 campaign_id,
@@ -44,7 +44,7 @@ class Analytics {
                     COALESCE(last_open_at,'0000-00-00 00:00:00'),
                     COALESCE(last_click_at,'0000-00-00 00:00:00')
                 )) AS last_activity
-            FROM $queue
+            FROM $subs
             GROUP BY campaign_id
             ORDER BY last_activity DESC
             LIMIT 200
@@ -82,27 +82,26 @@ class Analytics {
         }
         echo '</div>';
 
-        // ---- Optional per-campaign recipients table when ?cid= is set
+        // Per-campaign recipients table when ?cid= is present
         if ($cid) {
             $recipients = $db->get_results( $db->prepare("
                 SELECT
-                    q.id AS queue_id,
-                    q.contact_id,
-                    COALESCE(q.opens_count,0)  AS opens,
-                    q.first_open_at,
-                    q.last_open_at,
-                    COALESCE(q.clicks_count,0) AS clicks,
-                    q.last_click_at,
-                    q.last_activity_at,
+                    s.contact_id,
+                    COALESCE(s.opens_count,0)  AS opens,
+                    s.first_open_at,
+                    s.last_open_at,
+                    COALESCE(s.clicks_count,0) AS clicks,
+                    s.last_click_at,
+                    s.last_activity_at,
                     c.email,
                     CONCAT_WS(' ', c.first_name, c.last_name) AS full_name,
                     c.status
-                FROM $queue q
-                LEFT JOIN $ct c ON c.id = q.contact_id
-                WHERE q.campaign_id = %d
+                FROM $subs s
+                LEFT JOIN $ct c ON c.id = s.contact_id
+                WHERE s.campaign_id = %d
                 ORDER BY
-                    COALESCE(q.last_activity_at, q.last_open_at, q.last_click_at, '0000-00-00 00:00:00') DESC,
-                    q.id DESC
+                    COALESCE(s.last_activity_at, s.last_open_at, s.last_click_at, '0000-00-00 00:00:00') DESC,
+                    s.contact_id DESC
                 LIMIT 1000
             ", $cid ), ARRAY_A );
 
