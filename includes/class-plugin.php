@@ -12,6 +12,7 @@ require_once __DIR__ . '/class-contacts.php';
 require_once __DIR__ . '/class-campaigns.php';
 require_once __DIR__ . '/class-queue.php';
 require_once __DIR__ . '/class-tracking.php';  
+require_once __DIR__ . '/class-analytics.php';
 
 class Plugin {
     public function init() {
@@ -24,6 +25,8 @@ class Plugin {
         (new Campaigns)->init();
         (new Queue)->init();
         Tracking::init();
+        (new Analytics)->init();
+
 
 
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
