@@ -143,6 +143,7 @@ class Tracking {
     public static function rest_open(\WP_REST_Request $req) {
         $data = self::verify((string)$req['token']);
         if (!$data || ($data['t']??'') !== 'o') return self::gif_1x1();
+  error_log('[WPEC] open hit: '.substr((string)$req['token'],0,16));
 
         self::log_event_and_counters( (int)$data['q'], (int)$data['c'], 'opened', null );
         return self::gif_1x1();
@@ -151,6 +152,7 @@ class Tracking {
     public static function rest_click(\WP_REST_Request $req) {
         $data = self::verify((string)$req['token']);
         $dest = home_url('/');
+         error_log('[WPEC] click hit: '.substr((string)$req['token'],0,16));
         if ($data && ($data['t']??'') === 'c' && !empty($data['u'])) {
             $dest = (string)$data['u'];
             self::log_event_and_counters( (int)$data['q'], (int)$data['c'], 'clicked', $dest );
