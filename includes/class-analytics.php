@@ -102,7 +102,6 @@ class Analytics {
                 GROUP BY l.subscriber_id, c.email, c.first_name, c.last_name, c.status
                 ORDER BY last_activity_at DESC
                 LIMIT 1000
-
             ", $cid ), ARRAY_A );
 
 
