@@ -28,10 +28,10 @@ class Tracking {
             if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
             if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
             if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
-            if (! $hasS('attempts'))   $wpdb->query("ALTER TABLE `$subs` ADD `attempts` INT UNSIGNED NOT NULL DEFAULT 0");
-            if (! $hasS('last_error')) $wpdb->query("ALTER TABLE `$subs` ADD `last_error` TEXT NULL");
-            if (! $hasS('sent_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `sent_at` DATETIME NULL");
-            if (! $hasS('updated_at')) $wpdb->query("ALTER TABLE `$subs` ADD `updated_at` DATETIME NULL");
+            if (! $has('attempts'))   $wpdb->query("ALTER TABLE `$subs` ADD `attempts` INT UNSIGNED NOT NULL DEFAULT 0");
+            if (! $has('last_error')) $wpdb->query("ALTER TABLE `$subs` ADD `last_error` TEXT NULL");
+            if (! $has('sent_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `sent_at` DATETIME NULL");
+            if (! $has('updated_at')) $wpdb->query("ALTER TABLE `$subs` ADD `updated_at` DATETIME NULL");
 
                 // Add 'clicked' to ENUM if missing
                 $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
@@ -50,15 +50,15 @@ class Tracking {
         if ($subs) {
             $scols = $wpdb->get_col( "SHOW COLUMNS FROM `$subs`", 0 );
             if ($scols) {
-                $hasS = fn($n) => in_array($n, $scols, true);
-                if (! $hasS('opens_count'))      $wpdb->query("ALTER TABLE `$subs` ADD `opens_count` INT UNSIGNED NOT NULL DEFAULT 0");
-                if (! $hasS('first_open_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `first_open_at` DATETIME NULL");
-                if (! $hasS('last_open_at'))     $wpdb->query("ALTER TABLE `$subs` ADD `last_open_at` DATETIME NULL");
-                if (! $hasS('clicks_count'))     $wpdb->query("ALTER TABLE `$subs` ADD `clicks_count` INT UNSIGNED NOT NULL DEFAULT 0");
-                if (! $hasS('last_click_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `last_click_at` DATETIME NULL");
-                if (! $hasS('last_activity_at')) $wpdb->query("ALTER TABLE `$subs` ADD `last_activity_at` DATETIME NULL");
+                $has = fn($n) => in_array($n, $scols, true);
+                if (! $has('opens_count'))      $wpdb->query("ALTER TABLE `$subs` ADD `opens_count` INT UNSIGNED NOT NULL DEFAULT 0");
+                if (! $has('first_open_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `first_open_at` DATETIME NULL");
+                if (! $has('last_open_at'))     $wpdb->query("ALTER TABLE `$subs` ADD `last_open_at` DATETIME NULL");
+                if (! $has('clicks_count'))     $wpdb->query("ALTER TABLE `$subs` ADD `clicks_count` INT UNSIGNED NOT NULL DEFAULT 0");
+                if (! $has('last_click_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `last_click_at` DATETIME NULL");
+                if (! $has('last_activity_at')) $wpdb->query("ALTER TABLE `$subs` ADD `last_activity_at` DATETIME NULL");
                 // Optional: delivery status for later (bounced/complaint/unsub)
-                if (! $hasS('delivery_status'))  $wpdb->query("ALTER TABLE `$subs` ADD `delivery_status` VARCHAR(20) NOT NULL DEFAULT 'sent'");
+                if (! $has('delivery_status'))  $wpdb->query("ALTER TABLE `$subs` ADD `delivery_status` VARCHAR(20) NOT NULL DEFAULT 'sent'");
             }
         }
     }
