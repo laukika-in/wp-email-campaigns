@@ -205,7 +205,12 @@ public function add_send_screen() {
             $headers[] = 'From: ' . $from;
             $headers[] = 'Reply-To: ' . $from_email;
         }
-error_log('[WPEC] pre-send typeof='.gettype($body_html).' len='.strlen((string)$body_html).' head='.substr((string)$body_html,0,80));
+        // TEMP DEBUG — remove after testing
+if (is_string($body_html)) {
+    $hasTracker = (strpos($body_html, '/email-campaigns/v1/') !== false) ? 'yes' : 'no';
+    error_log('[WPEC] body len='.strlen($body_html).' tracker='.$hasTracker.' sample='.substr($body_html, 0, 120));
+}
+
 
         $ok = wp_mail($to, $subject, $body_html, $headers);
         if ( ! $ok ) wp_send_json_error(['message'=>'wp_mail failed']);

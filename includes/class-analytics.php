@@ -26,6 +26,7 @@ class Analytics {
         $db    = Helpers::db();
         $subs  = Helpers::table('subs');
         $ct    = Helpers::table('contacts');
+        $logs = Helpers::table('logs');
 
         $cid = isset($_GET['cid']) ? absint($_GET['cid']) : 0;
 
@@ -34,18 +35,14 @@ class Analytics {
         // Campaign summary from per-recipient counters
         $summary = $db->get_results("
             SELECT
-                campaign_id,
-                SUM(COALESCE(opens_count,0))               AS total_opens,
-                SUM(COALESCE(clicks_count,0))              AS total_clicks,
-                SUM(CASE WHEN COALESCE(opens_count,0)>0  THEN 1 ELSE 0 END) AS unique_opens,
-                SUM(CASE WHEN COALESCE(clicks_count,0)>0 THEN 1 ELSE 0 END) AS unique_clicks,
-                MAX(GREATEST(
-                    COALESCE(last_activity_at,'0000-00-00 00:00:00'),
-                    COALESCE(last_open_at,'0000-00-00 00:00:00'),
-                    COALESCE(last_click_at,'0000-00-00 00:00:00')
-                )) AS last_activity
-            FROM $subs
-            GROUP BY campaign_id
+                l.campaign_id,
+                COUNT(DISTINCT CASE WHEN l.event='opened'  THEN l.subscriber_id END) AS unique_opens,
+                SUM(CASE WHEN l.event='opened'  THEN 1 ELSE 0 END)                  AS total_opens,
+                COUNT(DISTINCT CASE WHEN l.event='clicked' THEN l.subscriber_id END) AS unique_clicks,
+                SUM(CASE WHEN l.event='clicked' THEN 1 ELSE 0 END)                  AS total_clicks,
+                MAX(l.event_time) AS last_activity
+            FROM $logs l
+            GROUP BY l.campaign_id
             ORDER BY last_activity DESC
             LIMIT 200
         ", ARRAY_A);
@@ -84,26 +81,25 @@ class Analytics {
 
         // Per-campaign recipients table when ?cid= is present
         if ($cid) {
-            $recipients = $db->get_results( $db->prepare("
-                SELECT
-                    s.contact_id,
-                    COALESCE(s.opens_count,0)  AS opens,
-                    s.first_open_at,
-                    s.last_open_at,
-                    COALESCE(s.clicks_count,0) AS clicks,
-                    s.last_click_at,
-                    s.last_activity_at,
-                    c.email,
-                    CONCAT_WS(' ', c.first_name, c.last_name) AS full_name,
-                    c.status
-                FROM $subs s
-                LEFT JOIN $ct c ON c.id = s.contact_id
-                WHERE s.campaign_id = %d
-                ORDER BY
-                    COALESCE(s.last_activity_at, s.last_open_at, s.last_click_at, '0000-00-00 00:00:00') DESC,
-                    s.contact_id DESC
-                LIMIT 1000
-            ", $cid ), ARRAY_A );
+              $ct = Helpers::table('contacts');
+    $recipients = $db->get_results( $db->prepare("
+        SELECT
+            l.subscriber_id  AS contact_id,
+            c.email,
+            CONCAT_WS(' ', c.first_name, c.last_name) AS full_name,
+            c.status,
+            SUM(CASE WHEN l.event='opened'  THEN 1 ELSE 0 END) AS opens,
+            SUM(CASE WHEN l.event='clicked' THEN 1 ELSE 0 END) AS clicks,
+            MAX(CASE WHEN l.event='opened'  THEN l.event_time END) AS last_open_at,
+            MAX(CASE WHEN l.event='clicked' THEN l.event_time END) AS last_click_at,
+            MAX(l.event_time) AS last_activity_at
+        FROM $logs l
+        LEFT JOIN $ct c ON c.id = l.subscriber_id
+        WHERE l.campaign_id = %d
+        GROUP BY l.subscriber_id, c.email, c.first_name, c.last_name, c.status
+        ORDER BY last_activity_at DESC
+        LIMIT 1000
+    ", $cid ), ARRAY_A );
 
             echo '<div class="wpec-card"><h2>'.sprintf( esc_html__('Recipients — Campaign #%d','wp-email-campaigns'), $cid ).'</h2>';
             if (empty($recipients)) {

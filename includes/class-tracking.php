@@ -143,23 +143,24 @@ class Tracking {
         ]);
     }
 
-    public static function rest_open(\WP_REST_Request $req) {
-        $data = self::verify((string)$req['token']);
-        if (!$data || ($data['t']??'') !== 'o') return self::gif_1x1();
+public static function rest_open(\WP_REST_Request $req) {
+    error_log('[WPEC] OPEN hit token='.substr((string)$req['token'],0,24));
+    $d = self::verify((string)$req['token']);
+    if (!$d || ($d['t']??'')!=='o') return self::gif_1x1();
+    self::log_event( (int)$d['c'], (int)$d['ct'], 'opened', null );
+    return self::gif_1x1();
+}
 
-        self::log_event_and_counters( (int)$data['c'], (int)$data['ct'], 'opened', null );
-        return self::gif_1x1();
+public static function rest_click(\WP_REST_Request $req) {
+    error_log('[WPEC] CLICK hit token='.substr((string)$req['token'],0,24));
+    $d = self::verify((string)$req['token']);
+    $dest = home_url('/');
+    if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
+        $dest = (string)$d['u'];
+        self::log_event( (int)$d['c'], (int)$d['ct'], 'clicked', $dest );
     }
-
-    public static function rest_click(\WP_REST_Request $req) {
-        $data = self::verify((string)$req['token']);
-        $dest = home_url('/');
-        if ($data && ($data['t']??'') === 'c' && !empty($data['u'])) {
-            $dest = (string)$data['u'];
-            self::log_event_and_counters( (int)$data['c'], (int)$data['ct'], 'clicked', $dest );
-        }
-        return new \WP_REST_Response(null, 302, ['Location' => $dest]);
-    }
+    return new \WP_REST_Response(null, 302, ['Location' => $dest]);
+}
 
     /* --------------------------
      * Log + update per-recipient counters (on `subs`)
