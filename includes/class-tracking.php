@@ -20,6 +20,8 @@ class Tracking {
 
         // Logs table
         $logs = Helpers::table('logs');
+        $subs      = Helpers::table('subs');
+
         if ($logs) {
             $cols = $wpdb->get_col( "SHOW COLUMNS FROM `$logs`", 0 );
             if ($cols) {
@@ -28,10 +30,6 @@ class Tracking {
             if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
             if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
             if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
-            if (! $has('attempts'))   $wpdb->query("ALTER TABLE `$subs` ADD `attempts` INT UNSIGNED NOT NULL DEFAULT 0");
-            if (! $has('last_error')) $wpdb->query("ALTER TABLE `$subs` ADD `last_error` TEXT NULL");
-            if (! $has('sent_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `sent_at` DATETIME NULL");
-            if (! $has('updated_at')) $wpdb->query("ALTER TABLE `$subs` ADD `updated_at` DATETIME NULL");
 
                 // Add 'clicked' to ENUM if missing
                 $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
@@ -45,8 +43,7 @@ class Tracking {
             }
         }
 
-        // Per-recipient counters live on the subscribers table
-        $subs = Helpers::table('subs');
+        // Per-recipient counters live on the subscribers table 
         if ($subs) {
             $scols = $wpdb->get_col( "SHOW COLUMNS FROM `$subs`", 0 );
             if ($scols) {
@@ -59,6 +56,11 @@ class Tracking {
                 if (! $has('last_activity_at')) $wpdb->query("ALTER TABLE `$subs` ADD `last_activity_at` DATETIME NULL");
                 // Optional: delivery status for later (bounced/complaint/unsub)
                 if (! $has('delivery_status'))  $wpdb->query("ALTER TABLE `$subs` ADD `delivery_status` VARCHAR(20) NOT NULL DEFAULT 'sent'");
+                
+            if (! $has('attempts'))   $wpdb->query("ALTER TABLE `$subs` ADD `attempts` INT UNSIGNED NOT NULL DEFAULT 0");
+            if (! $has('last_error')) $wpdb->query("ALTER TABLE `$subs` ADD `last_error` TEXT NULL");
+            if (! $has('sent_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `sent_at` DATETIME NULL");
+            if (! $has('updated_at')) $wpdb->query("ALTER TABLE `$subs` ADD `updated_at` DATETIME NULL");
             }
         }
     }
@@ -135,18 +137,22 @@ class Tracking {
     /* --------------------------
      * REST routes
      * ------------------------*/
-    public static function register_routes() {
-        register_rest_route('email-campaigns/v1', '/o/(?P<token>[^\.]+)\.gif', [
-            'methods' => 'GET',
-            'permission_callback' => '__return_true',
-            'callback' => [__CLASS__, 'rest_open'],
-        ]);
-        register_rest_route('email-campaigns/v1', '/c/(?P<token>[^/]+)', [
-            'methods' => 'GET',
-            'permission_callback' => '__return_true',
-            'callback' => [__CLASS__, 'rest_click'],
-        ]);
-    }
+ 
+        public static function register_routes() {
+            // Open pixel: allow dots in the signed token (payload.signature)
+            register_rest_route('email-campaigns/v1', '/o/(?P<token>[^/]+)\.gif', [
+                'methods'             => 'GET',
+                'permission_callback' => '__return_true',
+                'callback'            => [__CLASS__, 'rest_open'],
+            ]);
+
+            // Click redirect
+            register_rest_route('email-campaigns/v1', '/c/(?P<token>[^/]+)', [
+                'methods'             => 'GET',
+                'permission_callback' => '__return_true',
+                'callback'            => [__CLASS__, 'rest_click'],
+            ]);
+        }
 
 public static function rest_open(\WP_REST_Request $req) {
     error_log('[WPEC] OPEN hit token='.substr((string)$req['token'],0,24));
