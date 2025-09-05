@@ -176,45 +176,47 @@ public static function rest_click(\WP_REST_Request $req) {
         if ( ! empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP) ) {
             $ip = inet_pton($_SERVER['REMOTE_ADDR']);
         }
-
-        // 1) Append-only event row (store contact in subscriber_id for now)
-        if ($subs) {
-            $wpdb->insert($subs, [
+ 
+        // 1) Append-only event row (store contact in subscriber_id for now) -> LOGS table
+        if ($logs) {
+            $wpdb->insert($logs, [
                 'campaign_id'         => $campaign_id,
-                'subscriber_id'       => $contact_id, // using as contact id
-                'event'               => $event,      // 'opened' | 'clicked'
+                'subscriber_id'       => $contact_id,   // using as contact id
+                'event'               => $event,        // 'opened' | 'clicked'
                 'provider_message_id' => null,
                 'info'                => null,
                 'event_time'          => Helpers::now(),
                 'created_at'          => Helpers::now(),
-                'queue_id'            => null,        // no queue table in this plugin
+                'queue_id'            => null,          // no queue table linkage yet
                 'link_url'            => $link_url,
                 'user_agent'          => $ua,
                 'ip'                  => $ip,
             ]);
         }
 
+
         // 2) Per-recipient counters on subscribers table (campaign_id + contact_id)
         if ($subs && $campaign_id && $contact_id) {
-            if ($event === 'opened') {
-                $wpdb->query( $wpdb->prepare("
-                    UPDATE $subs
-                    SET opens_count      = COALESCE(opens_count,0) + 1,
-                        first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
-                        last_open_at     = NOW(),
-                        last_activity_at = NOW()
-                    WHERE campaign_id = %d AND contact_id = %d
-                ", $campaign_id, $contact_id ) );
-            } elseif ($event === 'clicked') {
-                $wpdb->query( $wpdb->prepare("
-                    UPDATE $subs
-                    SET clicks_count     = COALESCE(clicks_count,0) + 1,
-                        last_click_at    = NOW(),
-                        last_activity_at = NOW()
-                    WHERE campaign_id = %d AND contact_id = %d
-                ", $campaign_id, $contact_id ) );
-            }
+        if ($event === 'opened') {
+            $wpdb->query( $wpdb->prepare("
+                UPDATE $subs
+                SET opens_count      = COALESCE(opens_count,0) + 1,
+                    first_open_at    = IF(first_open_at IS NULL, %s, first_open_at),
+                    last_open_at     = %s,
+                    last_activity_at = %s
+                WHERE campaign_id = %d AND contact_id = %d
+            ", Helpers::now(), Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
+        } elseif ($event === 'clicked') {
+            $wpdb->query( $wpdb->prepare("
+                UPDATE $subs
+                SET clicks_count     = COALESCE(clicks_count,0) + 1,
+                    last_click_at    = %s,
+                    last_activity_at = %s
+                WHERE campaign_id = %d AND contact_id = %d
+            ", Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
         }
+    }
+
     }
     // Back-compat alias so REST calls work
     protected static function log_event(int $campaign_id, int $contact_id, string $event, ?string $link_url) {

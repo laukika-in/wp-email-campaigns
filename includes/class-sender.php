@@ -548,18 +548,19 @@ if (is_string($body_html)) {
 
         if ( ! $to || ! $subject || ! $body_html ) return false;
  
-        $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
+$headers[] = 'Content-Type: text/html; charset=UTF-8';
         if ( $from_email ) {
             $from = $from_name ? sprintf('%s <%s>', $from_name, $from_email) : $from_email;
             $headers[] = 'From: ' . $from;
             $headers[] = 'Reply-To: ' . $from_email;
         }
  
-        $body_html = Tracking::instrument_html( 
-            (int) $row['campaign_id'],
-            (int) ($row['contact_id'] ?? 0),
-            (string) $body_html
-        );
+        $body_html = \WPEC\Tracking::instrument_html(
+    (int) $row['campaign_id'],          // campaign/post ID
+    (int) ($row['contact_id'] ?? 0),    // contact ID
+    (string) $body_html                  // the HTML you pass to wp_mail
+);
+
 
         return (bool) wp_mail($to, $subject, $body_html, $headers);
 

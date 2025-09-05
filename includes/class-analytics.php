@@ -82,24 +82,28 @@ class Analytics {
         // Per-campaign recipients table when ?cid= is present
         if ($cid) {
               $ct = Helpers::table('contacts');
-    $recipients = $db->get_results( $db->prepare("
-        SELECT
-            l.subscriber_id  AS contact_id,
-            c.email,
-            CONCAT_WS(' ', c.first_name, c.last_name) AS full_name,
-            c.status,
-            SUM(CASE WHEN l.event='opened'  THEN 1 ELSE 0 END) AS opens,
-            SUM(CASE WHEN l.event='clicked' THEN 1 ELSE 0 END) AS clicks,
-            MAX(CASE WHEN l.event='opened'  THEN l.event_time END) AS last_open_at,
-            MAX(CASE WHEN l.event='clicked' THEN l.event_time END) AS last_click_at,
-            MAX(l.event_time) AS last_activity_at
-        FROM $logs l
-        LEFT JOIN $ct c ON c.id = l.subscriber_id
-        WHERE l.campaign_id = %d
-        GROUP BY l.subscriber_id, c.email, c.first_name, c.last_name, c.status
-        ORDER BY last_activity_at DESC
-        LIMIT 1000
-    ", $cid ), ARRAY_A );
+            $recipients = $db->get_results( $db->prepare("
+                SELECT
+                    l.subscriber_id  AS contact_id,
+                    c.email,
+                    CONCAT_WS(' ', c.first_name, c.last_name) AS full_name,
+                    c.status,
+                    -- counts
+                    SUM(CASE WHEN l.event='opened'  THEN 1 ELSE 0 END) AS opens,
+                    SUM(CASE WHEN l.event='clicked' THEN 1 ELSE 0 END) AS clicks,
+                    -- timestamps
+                    MIN(CASE WHEN l.event='opened'  THEN l.event_time END) AS first_open_at,
+                    MAX(CASE WHEN l.event='opened'  THEN l.event_time END) AS last_open_at,
+                    MAX(CASE WHEN l.event='clicked' THEN l.event_time END) AS last_click_at,
+                    MAX(l.event_time) AS last_activity_at
+                FROM $logs l
+                LEFT JOIN $ct c ON c.id = l.subscriber_id
+                WHERE l.campaign_id = %d
+                GROUP BY l.subscriber_id, c.email, c.first_name, c.last_name, c.status
+                ORDER BY last_activity_at DESC
+                LIMIT 1000
+            ", $cid ), ARRAY_A );
+
 
             echo '<div class="wpec-card"><h2>'.sprintf( esc_html__('Recipients — Campaign #%d','wp-email-campaigns'), $cid ).'</h2>';
             if (empty($recipients)) {
