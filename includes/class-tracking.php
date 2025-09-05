@@ -77,13 +77,15 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
      * Secret + token helpers
      * ------------------------*/
     protected static function secret() {
-        if (defined('WPEC_SECRET') && WPEC_SECRET) {
-            return WPEC_SECRET;
+        // Prefer a constant you put in wp-config.php so it never rotates
+        if ( defined('WPEC_SECRET') && WPEC_SECRET ) {
+            return (string) WPEC_SECRET;
         }
+        // Fallback to a stored option (created once and reused)
         $s = get_option('wpec_secret');
-        if (!$s) {
-            $s = \WPEC\Activator::generate_secret();
-            update_option('wpec_secret', $s, false);
+        if ( ! $s ) { 
+            $s = wp_generate_password(64, true, true); 
+            update_option('wpec_secret', $s); 
         }
         return $s;
     }
@@ -128,9 +130,13 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
                 ) {
                     return "<a{$pre}href={$q}".esc_attr($href)."{$q}{$post}>";
                 }
-
-                $tok   = self::sign(['t'=>'c','c'=>$campaign_id,'ct'=>$contact_id,'u'=>$href]);
-                $track = trailingslashit($rest).'c/'.$tok;
+ 
+                $tok   = self::sign(['t'=>'o','c'=>$campaign_id,'ct'=>$contact_id,'r'=>wp_rand()]);
+                $pixel = sprintf(
+                    '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
+                    esc_url( add_query_arg('token', rawurlencode($tok), $rest.'open') )
+                );
+                    $track = trailingslashit($rest).'c/'.$tok;
                 return "<a{$pre}href={$q}".esc_attr($track)."{$q}{$post}>";
             },
             $html
@@ -190,36 +196,45 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
 
 
     protected static function is_bot_ua(?string $ua): bool {
-         if (!$ua) return false;
+          if (!$ua) return false;
     $ua = strtolower($ua);
-
-    // common image/link proxies & security scanners
-    $needles = [
-        'googleimageproxy',         // Gmail image proxy
-        'microsoft office',         // Outlook desktop HTTP stack
-        'outlook',                  // Outlook variants + Safe Links
-        'defender', 'safelinks',
-        'frontapp',                 // some shared inboxes proxy images
-        'twitterbot', 'facebookexternalhit', 'linkedinbot', // social fetchers
-        'skypeuripreview',
-        'curl/', 'wget/', 'python-requests', 'httpclient'
-    ];
-    foreach ($needles as $n) {
-        if (strpos($ua, $n) !== false) return true;
-    }
-    return false;
-    }
+    return (
+        str_contains($ua, 'googleimageproxy')     || // Gmail image proxy (legit open)
+        str_contains($ua, 'googlebot')            ||
+        str_contains($ua, 'facebookexternalhit')  ||
+        str_contains($ua, 'linkedinbot')          ||
+        str_contains($ua, 'skypeuripreview')      ||
+        str_contains($ua, 'twitterbot')           ||
+        str_contains($ua, 'microsoft office')     || // Outlook desktop prefetch
+        str_contains($ua, 'outlook')              || // Outlook/Microsoft link/scanner
+        str_contains($ua, 'curl/')                ||
+        str_contains($ua, 'wget/')
+    );
+}
 
 public static function rest_open(\WP_REST_Request $req) {
+    // Debug breadcrumbs — comment out if too chatty
     $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $d  = self::verify((string)$req['token']);
-    if (!$d || ($d['t']??'')!=='o') return self::gif_1x1();
+    $ip = $_SERVER['REMOTE_ADDR']     ?? '';
+    $tok = (string) $req['token'];
+    error_log('[WPEC] OPEN hit ua='.substr($ua,0,80).' ip='.$ip.' tok='.substr($tok,0,24));
 
-    $campaign_id = (int)$d['c'];
-    $contact_id  = (int)$d['ct'];
-    $is_bot      = self::is_bot_ua($ua);
+    $d = self::verify($tok);
+    if ( ! $d ) {
+        error_log('[WPEC] OPEN token verify FAILED');
+        return self::gif_1x1();
+    }
+    if ( ($d['t'] ?? '') !== 'o' ) {
+        error_log('[WPEC] OPEN wrong token type');
+        return self::gif_1x1();
+    }
+ 
+    if ( self::is_bot_ua($ua) ) {
+        error_log('[WPEC] OPEN ignored (scanner UA)');
+        return self::gif_1x1();
+    }
 
-    self::log_open_and_counters($campaign_id, $contact_id, $is_bot);
+    self::log_event( (int)$d['c'], (int)$d['ct'], 'opened', null );
     return self::gif_1x1();
 }
 
