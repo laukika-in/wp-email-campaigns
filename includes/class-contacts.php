@@ -2599,7 +2599,9 @@ class WPEC_Duplicates_Table extends \WP_List_Table {
         ]);
     }
 
-    public function column_default( $item, $col ) {            
+    public function column_default( $item, $col ) {  
+        
+            $meta = $item['lists_meta'] ?? '';          
         $pairs = explode('|', $meta);
         $links = [];
         foreach ($pairs as $pair) {
