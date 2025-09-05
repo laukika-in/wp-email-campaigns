@@ -24,10 +24,15 @@ class Tracking {
             $cols = $wpdb->get_col( "SHOW COLUMNS FROM `$logs`", 0 );
             if ($cols) {
                 $has = fn($n) => in_array($n, $cols, true);
-                if (! $has('queue_id'))   $wpdb->query("ALTER TABLE `$logs` ADD `queue_id` BIGINT UNSIGNED NULL");
-                if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
-                if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
-                if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
+            if (! $has('queue_id'))   $wpdb->query("ALTER TABLE `$logs` ADD `queue_id` BIGINT UNSIGNED NULL");
+            if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
+            if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
+            if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
+            if (! $hasS('attempts'))   $wpdb->query("ALTER TABLE `$subs` ADD `attempts` INT UNSIGNED NOT NULL DEFAULT 0");
+            if (! $hasS('last_error')) $wpdb->query("ALTER TABLE `$subs` ADD `last_error` TEXT NULL");
+            if (! $hasS('sent_at'))    $wpdb->query("ALTER TABLE `$subs` ADD `sent_at` DATETIME NULL");
+            if (! $hasS('updated_at')) $wpdb->query("ALTER TABLE `$subs` ADD `updated_at` DATETIME NULL");
+
                 // Add 'clicked' to ENUM if missing
                 $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
                 if ($row && isset($row->Type) && strpos($row->Type, 'ENUM(') === 0 && strpos($row->Type, "'clicked'") === false) {
@@ -194,28 +199,29 @@ public static function rest_click(\WP_REST_Request $req) {
             ]);
         }
 
+ 
+        // 2) Per-recipient counters on subscribers table
+            if ($subs && $campaign_id && $contact_id) {
+                if ($event === 'opened') {
+                    $wpdb->query( $wpdb->prepare("
+                        UPDATE $subs
+                        SET opens_count      = COALESCE(opens_count,0) + 1,
+                            first_open_at    = IF(first_open_at IS NULL, %s, first_open_at),
+                            last_open_at     = %s,
+                            last_activity_at = %s
+                        WHERE campaign_id = %d AND contact_id = %d
+                    ", Helpers::now(), Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
+                } elseif ($event === 'clicked') {
+                    $wpdb->query( $wpdb->prepare("
+                        UPDATE $subs
+                        SET clicks_count     = COALESCE(clicks_count,0) + 1,
+                            last_click_at    = %s,
+                            last_activity_at = %s
+                        WHERE campaign_id = %d AND contact_id = %d
+                    ", Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
+                }
+            }
 
-        // 2) Per-recipient counters on subscribers table (campaign_id + contact_id)
-        if ($subs && $campaign_id && $contact_id) {
-        if ($event === 'opened') {
-            $wpdb->query( $wpdb->prepare("
-                UPDATE $subs
-                SET opens_count      = COALESCE(opens_count,0) + 1,
-                    first_open_at    = IF(first_open_at IS NULL, %s, first_open_at),
-                    last_open_at     = %s,
-                    last_activity_at = %s
-                WHERE campaign_id = %d AND contact_id = %d
-            ", Helpers::now(), Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
-        } elseif ($event === 'clicked') {
-            $wpdb->query( $wpdb->prepare("
-                UPDATE $subs
-                SET clicks_count     = COALESCE(clicks_count,0) + 1,
-                    last_click_at    = %s,
-                    last_activity_at = %s
-                WHERE campaign_id = %d AND contact_id = %d
-            ", Helpers::now(), Helpers::now(), $campaign_id, $contact_id ) );
-        }
-    }
 
     }
     // Back-compat alias so REST calls work

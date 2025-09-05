@@ -449,19 +449,33 @@ if (is_string($body_html)) {
 
         if ( ! empty($rows) ) {
             foreach ($rows as $r) {
+                $subs = Helpers::table('subs');
+
                 $ok = $this->deliver_row($r);
+                if ($subs) {
+                    $wpdb->query( $wpdb->prepare("
+                        UPDATE $subs
+                        SET attempts = COALESCE(attempts,0) + 1,
+                            updated_at = NOW()
+                        WHERE campaign_id = %d AND contact_id = %d
+                    ", (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
+                }
+
+                $ok = $this->deliver_row($r);
+
                 if ( $ok ) {
                     $wpdb->update($q, ['status'=>'sent','last_error'=>null], ['id'=>$r['id']], ['%s','%s'], ['%d']);
                 } else {
                     $wpdb->update($q, ['status'=>'failed','last_error'=>'wp_mail failed'], ['id'=>$r['id']], ['%s','%s'], ['%d']);
                 }
-                $subs = Helpers::table('subs');
+
                 if ($subs) {
                     if ($ok) {
                         $wpdb->query( $wpdb->prepare("
                             UPDATE $subs
                             SET status='sent',
                                 sent_at = COALESCE(sent_at, NOW()),
+                                last_error = NULL,
                                 updated_at = NOW()
                             WHERE campaign_id = %d AND contact_id = %d
                         ", (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
@@ -474,8 +488,7 @@ if (is_string($body_html)) {
                             WHERE campaign_id = %d AND contact_id = %d
                         ", 'wp_mail failed', (int)$r['campaign_id'], (int)($r['contact_id'] ?? 0) ) );
                     }
-}
-
+                }
             }
         }
 
@@ -548,7 +561,7 @@ if (is_string($body_html)) {
 
         if ( ! $to || ! $subject || ! $body_html ) return false;
  
-$headers[] = 'Content-Type: text/html; charset=UTF-8';
+        $headers[] = 'Content-Type: text/html; charset=UTF-8';
         if ( $from_email ) {
             $from = $from_name ? sprintf('%s <%s>', $from_name, $from_email) : $from_email;
             $headers[] = 'From: ' . $from;
@@ -556,10 +569,10 @@ $headers[] = 'Content-Type: text/html; charset=UTF-8';
         }
  
         $body_html = \WPEC\Tracking::instrument_html(
-    (int) $row['campaign_id'],          // campaign/post ID
-    (int) ($row['contact_id'] ?? 0),    // contact ID
-    (string) $body_html                  // the HTML you pass to wp_mail
-);
+            (int) $row['campaign_id'],          // campaign/post ID
+            (int) ($row['contact_id'] ?? 0),    // contact ID
+            (string) $body_html                  // the HTML you pass to wp_mail
+        );
 
 
         return (bool) wp_mail($to, $subject, $body_html, $headers);
