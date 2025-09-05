@@ -30,6 +30,12 @@ class Tracking {
             if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
             if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
             if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
+// In logs table ensures (after $cols check)
+if (!in_array('email',     $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `email` VARCHAR(191) NULL");
+if (!in_array('status',    $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `status` VARCHAR(20) NULL");
+if (!in_array('sent_at',   $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `sent_at` DATETIME NULL");
+if (!in_array('opened_at', $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `opened_at` DATETIME NULL");
+if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `bounced_at` DATETIME NULL");
 
                 // Add 'clicked' to ENUM if missing
                 $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
@@ -69,10 +75,12 @@ class Tracking {
      * Secret + token helpers
      * ------------------------*/
     protected static function secret() {
+        if (defined('WPEC_SECRET') && WPEC_SECRET) return WPEC_SECRET;
         $s = get_option('wpec_secret');
         if (!$s) { $s = wp_generate_password(64, true, true); update_option('wpec_secret', $s); }
         return $s;
     }
+
     protected static function b64u($s){ return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); }
     protected static function ub64($s){ return base64_decode(strtr($s, '-_', '+/')); }
 
@@ -122,10 +130,12 @@ class Tracking {
         );
 
         // 2) Tracking pixel
+        // 2) Tracking pixel (use query param endpoint)
         $tok   = self::sign(['t'=>'o','c'=>$campaign_id,'ct'=>$contact_id,'r'=>wp_rand()]);
+        $pix   = add_query_arg('token', $tok, rest_url('email-campaigns/v1/open'));
         $pixel = sprintf(
-            '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
-            esc_url(trailingslashit($rest).'o/'.$tok.'.gif')
+        '<img src="%s" width="1" height="1" alt="" style="display:none!important;max-width:1px!important;max-height:1px!important;border:0;" />',
+        esc_url($pix)
         );
 
         if (stripos($html, '</body>') !== false) {
