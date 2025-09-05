@@ -188,10 +188,32 @@ public function add_send_screen() {
         }
 
         // You already added a uniqueness guard; keep it:
-        $exists = $wpdb->get_var("SHOW INDEX FROM {$wpdb->prefix}wpec_send_queue WHERE Key_name='uq_campaign_email'");
-        if (!$exists) {
-            $wpdb->query("ALTER TABLE {$wpdb->prefix}wpec_send_queue ADD UNIQUE KEY uq_campaign_email (campaign_id,email)");
-        }
+       // After dbDelta($sql);
+$index = $wpdb->get_var(
+    $wpdb->prepare(
+        "SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME   = %s
+           AND INDEX_NAME   = 'uq_campaign_email'",
+        $table
+    )
+);
+
+if ( ! $index ) {
+    // Dedupe first (keep lowest id for each (campaign_id,email))
+    $wpdb->query("
+        DELETE t1
+        FROM $table t1
+        JOIN $table t2
+          ON t1.campaign_id = t2.campaign_id
+         AND t1.email       = t2.email
+         AND t1.id          > t2.id
+    ");
+
+    // Now add the guard
+    $wpdb->query("ALTER TABLE $table ADD UNIQUE KEY uq_campaign_email (campaign_id,email)");
+}
+
 
 
     }
