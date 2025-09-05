@@ -75,9 +75,14 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
      * Secret + token helpers
      * ------------------------*/
     protected static function secret() {
-        if (defined('WPEC_SECRET') && WPEC_SECRET) return WPEC_SECRET;
+        if (defined('WPEC_SECRET') && WPEC_SECRET) {
+            return WPEC_SECRET;
+        }
         $s = get_option('wpec_secret');
-        if (!$s) { $s = wp_generate_password(64, true, true); update_option('wpec_secret', $s); }
+        if (!$s) {
+            $s = \WPEC\Activator::generate_secret();
+            update_option('wpec_secret', $s, false);
+        }
         return $s;
     }
 

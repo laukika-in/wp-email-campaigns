@@ -26,6 +26,7 @@ class Plugin {
         (new Queue)->init();
         (new Analytics)->init();
         Tracking::init();
+        add_action('admin_notices', ['\\WPEC\\Activator', 'maybe_admin_notice']);
 
         add_action( 'admin_enqueue_scripts', [ $this, 'admin_assets' ] );
   
