@@ -216,6 +216,10 @@ public static function rest_click(\WP_REST_Request $req) {
             }
         }
     }
+    // Back-compat alias so REST calls work
+    protected static function log_event(int $campaign_id, int $contact_id, string $event, ?string $link_url) {
+        return self::log_event_and_counters($campaign_id, $contact_id, $event, $link_url);
+    }
 
     protected static function gif_1x1() {
         $gif = base64_decode('R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==');
