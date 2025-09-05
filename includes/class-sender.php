@@ -508,7 +508,7 @@ public function add_send_screen() {
 
         if ( ! $to || ! $subject || ! $body_html ) return false;
  
-        $headers[] = 'Content-Type: text/html; charset=UTF-8';
+        $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         if ( $from_email ) {
             $from = $from_name ? sprintf('%s <%s>', $from_name, $from_email) : $from_email;
             $headers[] = 'From: ' . $from;
