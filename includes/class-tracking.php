@@ -39,6 +39,15 @@ class Tracking {
 if (!in_array('is_bot', $cols, true)) {
     $wpdb->query("ALTER TABLE `$logs` ADD `is_bot` TINYINT(1) NOT NULL DEFAULT 0");
 }
+$idx = $wpdb->get_var( "SHOW INDEX FROM `$logs` WHERE Key_name = 'wpec_click_dedupe'" );
+if ( ! $idx ) {
+    // link_url is TEXT, so index first 191 chars (utf8mb4-safe)
+    $wpdb->query("
+        ALTER TABLE `$logs`
+        ADD INDEX `wpec_click_dedupe`
+        (`campaign_id`, `subscriber_id`, `event`, `link_url`(191), `event_time`)
+    ");
+}
                 // Add 'clicked' to ENUM if missing
                 $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
                 if ($row && isset($row->Type) && strpos($row->Type, 'ENUM(') === 0 && strpos($row->Type, "'clicked'") === false) {
@@ -76,6 +85,14 @@ if (!in_array('is_bot', $cols, true)) {
     /* --------------------------
      * Secret + token helpers
      * ------------------------*/
+    /** Always use the site timezone (Settings → General) */
+protected static function now_mysql(): string {
+    return current_time('mysql');            // site tz
+}
+protected static function now_ts(): int {
+    return (int) current_time('timestamp');  // site tz
+}
+
     protected static function secret() {
         if (defined('WPEC_SECRET') && WPEC_SECRET) return WPEC_SECRET;
         $s = get_option('wpec_secret');
@@ -183,11 +200,10 @@ if (!in_array('is_bot', $cols, true)) {
     ]);
 }
 
-
 public static function rest_open(\WP_REST_Request $req) {
     global $wpdb;
 
-    // 1) Verify token and type
+    // 1) Verify token/type
     $token = (string) $req['token'];
     $d = self::verify($token);
     if (!$d || ($d['t'] ?? '') !== 'o') {
@@ -197,47 +213,51 @@ public static function rest_open(\WP_REST_Request $req) {
     $campaign_id = (int) $d['c'];
     $contact_id  = (int) $d['ct'];
 
-    // 2) Snapshot UA/IP
-    $ua = isset($_SERVER['HTTP_USER_AGENT']) ? strtolower((string) wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
-    $ip = (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP))
+    // 2) UA/IP snapshot
+    $ua_raw = isset($_SERVER['HTTP_USER_AGENT']) ? (string) wp_unslash($_SERVER['HTTP_USER_AGENT']) : '';
+    $ua     = strtolower($ua_raw);
+    $ip     = (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP))
         ? @inet_pton($_SERVER['REMOTE_ADDR']) : null;
 
-    // 3) Fetch sent_at to evaluate “too-early” opens
+    // 3) Load subs row for sent_at + delivery status
     $subs = Helpers::table('subs');
-    $sent_ts = 0;
-    $first_open_at = null;
+    $sent_ts = 0; $first_open_at = null; $delivery_status = null;
     if ($subs) {
         $row = $wpdb->get_row($wpdb->prepare("
-            SELECT sent_at, first_open_at
+            SELECT sent_at, first_open_at, delivery_status
               FROM $subs
              WHERE campaign_id=%d AND contact_id=%d
              LIMIT 1
         ", $campaign_id, $contact_id));
         if ($row) {
-            if (!empty($row->sent_at))       $sent_ts = strtotime($row->sent_at . ' UTC');
+            if (!empty($row->sent_at))       $sent_ts = strtotime((string) $row->sent_at); // already site tz
             if (!empty($row->first_open_at)) $first_open_at = $row->first_open_at;
+            $delivery_status = $row->delivery_status ?? null;
         }
     }
 
-    // 4) Heuristics
+    // 4) If bounced, log (is_bot=1) but do not increment counters
+    $is_bounced = is_string($delivery_status) && strtolower($delivery_status) === 'bounced';
+
+    // 5) Heuristics (site timezone)
     $is_scanner = self::is_bot_ua($ua);                       // Outlook/Safe Links etc.
     $is_gmail   = (strpos($ua, 'googleimageproxy') !== false); // Gmail image proxy counts as human
-    $now_ts     = time();
+    $now_ts     = self::now_ts();
+    $now        = self::now_mysql();
 
-    // Suppress scanners within 20s of sent, and also suppress generic “too early” opens (<12s) unless Gmail proxy
+    // Suppress scanners within 20s of sent, and generic “too early” opens (<12s) unless Gmail proxy
     $too_early_scanner = $is_scanner && $sent_ts && (($now_ts - $sent_ts) <= 20);
     $too_early_generic = !$is_gmail   && $sent_ts && (($now_ts - $sent_ts) < 12);
-    $suppress = $too_early_scanner || $too_early_generic;
+    $suppress = $too_early_scanner || $too_early_generic || $is_bounced;
 
-    // 5) Insert audit log row (always)
+    // 6) Log (audit) — mark is_bot if scanner/suppressed
     $logs = Helpers::table('logs');
-    $now  = Helpers::now();
     if ($logs) {
-        // Resolve email (optional, for nicer logs)
-        $ct = Helpers::table('contacts');
+        // optional email for nicer logs
+        $ct_tbl = Helpers::table('contacts');
         $email = null;
-        if ($ct && $contact_id) {
-            $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
+        if ($ct_tbl && $contact_id) {
+            $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct_tbl WHERE id=%d", $contact_id));
         }
 
         $wpdb->insert($logs, [
@@ -250,16 +270,16 @@ public static function rest_open(\WP_REST_Request $req) {
             'event_time'    => $now,
             'created_at'    => $now,
             'link_url'      => null,
-            'user_agent'    => $ua ? substr($ua, 0, 1000) : null,
+            'user_agent'    => $ua_raw ? substr($ua_raw, 0, 1000) : null,
             'ip'            => $ip,
             'is_bot'        => (int) ($is_scanner || $suppress),
         ]);
     }
 
-    // 6) Only bump counters for real opens (not suppressed)
+    // 7) Only bump counters for real opens (not suppressed)
     if ($subs && !$suppress) {
         $first = $first_open_at ?: $now;
-        // Also guard against rapid duplicates: only if last_open_at is NULL or ≥60s ago
+        // Also guard against rapid duplicates: last_open_at >= 60s
         $wpdb->query($wpdb->prepare("
             UPDATE $subs
                SET opens_count      = COALESCE(opens_count,0) + 1,
@@ -330,29 +350,62 @@ public static function rest_click(\WP_REST_Request $req) {
     $campaign_id = (int) $d['c'];
     $contact_id  = (int) $d['ct'];
     $dest        = (string) $d['u'];
-
-    // Allow only http/https
     if (!preg_match('#^https?://#i', $dest)) {
         return new \WP_REST_Response(null, 204);
     }
 
-    $ua     = isset($_SERVER['HTTP_USER_AGENT']) ? strtolower((string) wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
+    $method = strtoupper($req->get_method() ?? 'GET');
+    $ua_raw = isset($_SERVER['HTTP_USER_AGENT']) ? (string) wp_unslash($_SERVER['HTTP_USER_AGENT']) : '';
+    $ua     = strtolower($ua_raw);
     $ip     = (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP))
                 ? @inet_pton($_SERVER['REMOTE_ADDR']) : null;
-    $method = strtoupper($req->get_method() ?? 'GET');
+
+    // Skip noise: HEAD/OPTIONS and requests with empty UA (this caused your “duplicate no-UA” row)
+    if ($method !== 'GET' || $ua_raw === '') {
+        return new \WP_REST_Response(null, 204);
+    }
+
+    // Sub status (don’t count clicks on bounced)
+    $subs = Helpers::table('subs');
+    $is_bounced = false;
+    if ($subs) {
+        $delivery_status = $wpdb->get_var($wpdb->prepare("
+            SELECT delivery_status FROM $subs
+             WHERE campaign_id=%d AND contact_id=%d
+             LIMIT 1
+        ", $campaign_id, $contact_id));
+        $is_bounced = is_string($delivery_status) && strtolower($delivery_status) === 'bounced';
+    }
+
     $is_scanner = self::is_bot_ua($ua);
-    $now   = Helpers::now();
+    $now        = self::now_mysql();
+    $now_ts     = self::now_ts();
 
     $logs = Helpers::table('logs');
-    $subs = Helpers::table('subs');
 
-    // 1) Log every click (audit)
+    // 1) De-dupe window (site timezone)
+    $cutoff = date('Y-m-d H:i:s', $now_ts - 60);
+
+    // If a bot already pinged the same URL recently, we still want a single audit row for this GET.
+    $recent_exists = 0;
     if ($logs) {
-        // Resolve email (optional)
-        $ct = Helpers::table('contacts');
+        $recent_exists = (int) $wpdb->get_var($wpdb->prepare("
+            SELECT COUNT(*) FROM $logs
+             WHERE campaign_id=%d
+               AND subscriber_id=%d
+               AND event = 'clicked'
+               AND link_url = %s
+               AND event_time >= %s
+        ", $campaign_id, $contact_id, $dest, $cutoff));
+    }
+
+    // 2) Only insert one log row within the window
+    if ($logs && $recent_exists === 0) {
+        // optional email for nicer logs
+        $ct_tbl = Helpers::table('contacts');
         $email = null;
-        if ($ct && $contact_id) {
-            $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
+        if ($ct_tbl && $contact_id) {
+            $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct_tbl WHERE id=%d", $contact_id));
         }
 
         $wpdb->insert($logs, [
@@ -364,27 +417,15 @@ public static function rest_click(\WP_REST_Request $req) {
             'link_url'      => $dest,
             'event_time'    => $now,
             'created_at'    => $now,
-            'user_agent'    => $ua ? substr($ua, 0, 1000) : null,
+            'user_agent'    => substr($ua_raw, 0, 1000),
             'ip'            => $ip,
             'is_bot'        => (int) $is_scanner,
         ]);
     }
 
-    // 2) Only count real GETs from humans, with 60s de-dupe per URL
-    if ($subs && !$is_scanner && $method === 'GET') {
-        $recent = 0;
-        if ($logs) {
-            $recent = (int) $wpdb->get_var($wpdb->prepare("
-                SELECT COUNT(*) FROM $logs
-                 WHERE campaign_id = %d
-                   AND subscriber_id = %d
-                   AND event = 'clicked'
-                   AND link_url = %s
-                   AND event_time >= (NOW() - INTERVAL 60 SECOND)
-            ", $campaign_id, $contact_id, $dest));
-        }
-
-        if ($recent === 0) {
+    // 3) Increment counters only for human GETs and non-bounced, with same 60s de-dupe
+    if ($subs && !$is_scanner && !$is_bounced) {
+        if ($recent_exists === 0) {
             $wpdb->query($wpdb->prepare("
                 UPDATE $subs
                    SET clicks_count     = COALESCE(clicks_count,0) + 1,
@@ -395,13 +436,11 @@ public static function rest_click(\WP_REST_Request $req) {
         }
     }
 
-    // 3) Don’t follow redirects for scanners/HEAD/OPTIONS
-    if ($is_scanner || $method !== 'GET') {
+    // 4) For scanners we don’t redirect; for humans we do.
+    if ($is_scanner) {
         return new \WP_REST_Response(null, 204);
     }
-
-    // 4) Human redirect
-    return new \WP_REST_Response(null, 302, [
+    return new \WP_REST_RESPONSE(null, 302, [
         'Location'      => esc_url_raw($dest),
         'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         'Pragma'        => 'no-cache',
@@ -421,7 +460,7 @@ protected static function log_event_and_counters(
     int $contact_id,
     string $event,
     ?string $link_url
-) : void {
+    ) : void {
     global $wpdb;
 
     $event = strtolower($event);
