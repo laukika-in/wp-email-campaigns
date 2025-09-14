@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WP Email Campaigns
  * Description:       Transactional email campaigns via CPT with Excel/CSV import, Action Scheduler (1 email/3s), contacts, and reporting.
- * Version:           1.6.51
+ * Version:           1.6.52
  * Author:            Anirudh
  * Text Domain:       wp-email-campaigns
  */
