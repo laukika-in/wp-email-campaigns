@@ -221,20 +221,22 @@ protected static function is_bot_ua(?string $ua): bool {
 }
 
 public static function rest_click(\WP_REST_Request $req) {
-    $ua   = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $d    = self::verify((string)$req['token']);
-    $dest = home_url('/');
+    $method = strtoupper($req->get_method() ?? 'GET');      // <-- NEW
+    $ua     = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $d      = self::verify((string)$req['token']);
+    $dest   = home_url('/');
 
     if ($d && ($d['t'] ?? '') === 'c' && !empty($d['u'])) {
         $dest = (string)$d['u'];
 
-        // Ignore known scanners so they don't inflate click counts
-        if (! self::is_bot_ua($ua)) {
+        // Only count real navigations (GET) and not scanners/prefetchers
+        if ($method === 'GET' && ! self::is_link_scanner($ua)) {
             self::log_event((int)$d['c'], (int)$d['ct'], 'clicked', $dest);
         }
     }
     return new \WP_REST_Response(null, 302, ['Location' => $dest]);
 }
+
 
 
 
@@ -262,18 +264,20 @@ protected static function log_event_and_counters(int $campaign_id, int $contact_
     }
 
     // ---------- De-dupe/throttle ----------
-    if ($event === 'clicked' && $logs) {
-        // Same campaign/contact/link within last 60s? Skip as duplicate.
+   if ($event === 'clicked' && $logs) {
         $recent = $wpdb->get_var($wpdb->prepare("
             SELECT id FROM $logs
-             WHERE campaign_id = %d
-               AND subscriber_id = %d
-               AND event = 'clicked'
-               AND link_url = %s
-               AND event_time > (NOW() - INTERVAL 60 SECOND)
-             LIMIT 1
+            WHERE campaign_id = %d
+            AND subscriber_id = %d
+            AND event = 'clicked'
+            AND link_url = %s
+            AND event_time > (NOW() - INTERVAL 60 SECOND)
+            LIMIT 1
         ", $campaign_id, $contact_id, (string)$link_url));
-        if ($recent) return;
+        if ($recent) {
+            // already counted a click for this target very recently; skip
+            return;
+        }
     }
 
     if ($event === 'opened' && $subs) {
