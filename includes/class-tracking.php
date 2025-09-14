@@ -99,9 +99,10 @@ protected static function now_mysql(): string { return current_time('mysql'); }
 protected static function now_ts(): int { return (int) current_time('timestamp'); }
 
 /** Heuristic windows (seconds) */
-protected const MS_OPEN_SUPPRESS_WINDOW = 5;   // suppress Outlook/Safe Links opens if <= 5s from sent_at
-protected const CLICK_SUPPRESS_WINDOW   = 20;  // suppress clicks (likely scanners) if <= 20s from sent_at
-protected const CLICK_DEDUPE_WINDOW     = 60;  // collapse duplicate clicks per URL within 60s
+protected const OPEN_SUPPRESS_ANY_EARLY   = 3;  // unconditional (any UA) early-open ignore
+protected const OPEN_SUPPRESS_MS_WINDOW   = 8;  // extra early-open ignore for Outlook/SafeLinks UAs
+protected const CLICK_SUPPRESS_WINDOW     = 20; // early click ignore (prefetch/scan)
+protected const CLICK_DEDUPE_WINDOW       = 60; // collapse duplicate clicks per URL
 
     protected static function b64u($s){ return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); }
     protected static function ub64($s){ return base64_decode(strtr($s, '-_', '+/')); }
@@ -121,7 +122,39 @@ protected const CLICK_DEDUPE_WINDOW     = 60;  // collapse duplicate clicks per 
         $data = json_decode($json, true);
         return is_array($data) ? $data : null;
     }
+/** Get best 'sent' timestamp (site tz): use subs.sent_at, else last 'sent' log. */
+protected static function best_sent_ts(int $campaign_id, int $contact_id): int {
+    global $wpdb;
+    $subs = Helpers::table('subs');
+    if ($subs) {
+        $sent = $wpdb->get_var($wpdb->prepare(
+            "SELECT sent_at FROM $subs WHERE campaign_id=%d AND contact_id=%d LIMIT 1",
+            $campaign_id, $contact_id
+        ));
+        if ($sent) { return strtotime((string)$sent); } // site tz already
+    }
+    $logs = Helpers::table('logs');
+    if ($logs) {
+        $last_sent = $wpdb->get_var($wpdb->prepare(
+            "SELECT event_time FROM $logs
+             WHERE campaign_id=%d AND subscriber_id=%d AND event='sent'
+             ORDER BY event_time DESC LIMIT 1",
+            $campaign_id, $contact_id
+        ));
+        if ($last_sent) { return strtotime((string)$last_sent); }
+    }
+    return 0;
+}
 
+/** Heuristic: widen MS coverage a bit */
+protected static function looks_ms(string $ua_lc): bool {
+    return (strpos($ua_lc,'microsoft')!==false) ||
+           (strpos($ua_lc,'outlook')!==false)   ||
+           (strpos($ua_lc,'safelinks')!==false) ||
+           (strpos($ua_lc,'exchange')!==false)  ||
+           (strpos($ua_lc,'windows mail')!==false) ||
+           (strpos($ua_lc,'msoffice')!==false);
+}
     /* --------------------------
      * HTML instrumentation
      * ------------------------*/
@@ -205,66 +238,49 @@ protected const CLICK_DEDUPE_WINDOW     = 60;  // collapse duplicate clicks per 
 public static function rest_open(\WP_REST_Request $req) {
     global $wpdb;
 
-    // 1) Verify token/type
     $token = (string) $req['token'];
     $d = self::verify($token);
-    if (!$d || ($d['t'] ?? '') !== 'o') {
-        return self::gif_1x1();
-    }
+    if (!$d || ($d['t'] ?? '') !== 'o') return self::gif_1x1();
 
     $campaign_id = (int) $d['c'];
     $contact_id  = (int) $d['ct'];
 
-    // 2) UA/IP snapshot (keep raw UA for logs)
     $ua_raw = isset($_SERVER['HTTP_USER_AGENT']) ? (string) wp_unslash($_SERVER['HTTP_USER_AGENT']) : '';
     $ua_lc  = strtolower($ua_raw);
     $ip     = (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP))
-        ? @inet_pton($_SERVER['REMOTE_ADDR']) : null;
+                ? @inet_pton($_SERVER['REMOTE_ADDR']) : null;
 
-    // 3) Pull sent_at + delivery_status (site TZ)
+    // best-effort sent_at (handles race: subs.sent_at may not be set yet)
+    $sent_ts = self::best_sent_ts($campaign_id, $contact_id);
+    $now_ts  = self::now_ts();
+    $now     = self::now_mysql();
+
+    // if bounced, always suppress counting
     $subs_tbl = Helpers::table('subs');
-    $sent_ts = 0; $first_open_at = null; $delivery_status = null;
+    $delivery_status = null;
     if ($subs_tbl) {
-        $row = $wpdb->get_row($wpdb->prepare("
-            SELECT sent_at, first_open_at, delivery_status
-              FROM $subs_tbl
-             WHERE campaign_id=%d AND contact_id=%d
-             LIMIT 1
-        ", $campaign_id, $contact_id));
-        if ($row) {
-            if (!empty($row->sent_at))       $sent_ts = strtotime((string) $row->sent_at); // already site tz
-            if (!empty($row->first_open_at)) $first_open_at = $row->first_open_at;
-            $delivery_status = $row->delivery_status ?? null;
-        }
+        $delivery_status = $wpdb->get_var($wpdb->prepare(
+            "SELECT delivery_status FROM $subs_tbl WHERE campaign_id=%d AND contact_id=%d LIMIT 1",
+            $campaign_id, $contact_id
+        ));
     }
+    $is_bounced = is_string($delivery_status) && strtolower($delivery_status)==='bounced';
 
-    // 4) Heuristics
-    $is_gmail_proxy = (strpos($ua_lc, 'googleimageproxy') !== false);
-    $is_ms_ua       = (strpos($ua_lc, 'microsoft office') !== false)
-                   || (strpos($ua_lc, 'outlook') !== false)
-                   || (strpos($ua_lc, 'safelinks') !== false)
-                   || (strpos($ua_lc, 'exchange') !== false);
+    // Early suppression:
+    //  - unconditional: any-UA opens within 3s of 'sent' → ignore (covers UA we don't recognize)
+    //  - extra for Microsoft: MS UA within 8s → ignore
+    $any_early = $sent_ts && (($now_ts - $sent_ts) <= self::OPEN_SUPPRESS_ANY_EARLY);
+    $ms_early  = $sent_ts && self::looks_ms($ua_lc) && (($now_ts - $sent_ts) <= self::OPEN_SUPPRESS_MS_WINDOW);
+    $suppress  = $is_bounced || $any_early || $ms_early;
 
-    $is_bounced     = is_string($delivery_status) && strtolower($delivery_status) === 'bounced';
-
-    $now_ts = self::now_ts();
-    $now    = self::now_mysql();
-
-    // Only suppress Outlook/Defender opens if they arrive *very* soon after sent_at.
-    $suppress_ms_early = $is_ms_ua && $sent_ts && (($now_ts - $sent_ts) <= self::MS_OPEN_SUPPRESS_WINDOW);
-
-    // Generic “too-early” suppression can block real user opens; disable it except for the MS early case.
-    $suppress = $suppress_ms_early || $is_bounced;
-
-    // 5) Log (audit) — is_bot marks what we suppressed, not all Outlook forever.
+    // Log (audit) – mark is_bot only if suppressed
     $logs_tbl = Helpers::table('logs');
     if ($logs_tbl) {
         $ct_tbl = Helpers::table('contacts');
         $email = null;
-        if ($ct_tbl && $contact_id) {
+        if ($ct_tbl) {
             $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct_tbl WHERE id=%d", $contact_id));
         }
-
         $wpdb->insert($logs_tbl, [
             'campaign_id'   => $campaign_id,
             'subscriber_id' => $contact_id,
@@ -281,20 +297,17 @@ public static function rest_open(\WP_REST_Request $req) {
         ]);
     }
 
-    // 6) Bump counters only if not suppressed
+    // Count only if not suppressed; de-dupe 60s
     if ($subs_tbl && ! $suppress) {
-        $first = $first_open_at ?: $now;
-        // Guard against rapid duplicates: last_open_at >= 60s
-        $wpdb->query($wpdb->prepare("
+        $updated = $wpdb->query($wpdb->prepare("
             UPDATE $subs_tbl
                SET opens_count      = COALESCE(opens_count,0) + 1,
                    first_open_at    = IF(first_open_at IS NULL, %s, first_open_at),
                    last_open_at     = %s,
                    last_activity_at = %s
-             WHERE campaign_id = %d
-               AND contact_id  = %d
+             WHERE campaign_id = %d AND contact_id = %d
                AND (last_open_at IS NULL OR TIMESTAMPDIFF(SECOND, last_open_at, %s) >= 60)
-        ", $first, $now, $now, $campaign_id, $contact_id, $now));
+        ", $now, $now, $now, $campaign_id, $contact_id, $now));
     }
 
     return self::gif_1x1();
@@ -348,16 +361,12 @@ public static function rest_click(\WP_REST_Request $req) {
 
     $token = (string) $req['token'];
     $d = self::verify($token);
-    if (!$d || ($d['t'] ?? '') !== 'c' || empty($d['u'])) {
-        return new \WP_REST_Response(null, 204);
-    }
+    if (!$d || ($d['t'] ?? '') !== 'c' || empty($d['u'])) return new \WP_REST_Response(null, 204);
 
     $campaign_id = (int) $d['c'];
     $contact_id  = (int) $d['ct'];
     $dest        = (string) $d['u'];
-    if (!preg_match('#^https?://#i', $dest)) {
-        return new \WP_REST_Response(null, 204);
-    }
+    if (!preg_match('#^https?://#i', $dest)) return new \WP_REST_Response(null, 204);
 
     $method = strtoupper($req->get_method() ?? 'GET');
     $ua_raw = isset($_SERVER['HTTP_USER_AGENT']) ? (string) wp_unslash($_SERVER['HTTP_USER_AGENT']) : '';
@@ -365,70 +374,65 @@ public static function rest_click(\WP_REST_Request $req) {
     $ip     = (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP))
                 ? @inet_pton($_SERVER['REMOTE_ADDR']) : null;
 
-    // Skip HEAD/OPTIONS and blank UA noise entirely (this caused your duplicate “no UA” row).
-    if ($method !== 'GET' || $ua_raw === '') {
-        return new \WP_REST_Response(null, 204);
-    }
+    // Hard drop noise that produced your “blank UA” rows and HEAD scans
+    if ($method !== 'GET' || $ua_raw === '') return new \WP_REST_Response(null, 204);
 
-    // Sub status + sent_at for heuristics (site TZ)
     $subs_tbl = Helpers::table('subs');
-    $sent_ts = 0; $delivery_status = null;
+    $logs_tbl = Helpers::table('logs');
+
+    // status/sent/open signals
+    $sent_ts = self::best_sent_ts($campaign_id, $contact_id);
+    $now_ts  = self::now_ts();
+    $now     = self::now_mysql();
+
+    $delivery_status = null;
+    $last_open_at = null;
     if ($subs_tbl) {
-        $row = $wpdb->get_row($wpdb->prepare("
-            SELECT sent_at, delivery_status
-              FROM $subs_tbl
-             WHERE campaign_id=%d AND contact_id=%d
-             LIMIT 1
-        ", $campaign_id, $contact_id));
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT delivery_status, last_open_at FROM $subs_tbl WHERE campaign_id=%d AND contact_id=%d LIMIT 1",
+            $campaign_id, $contact_id
+        ));
         if ($row) {
-            if (!empty($row->sent_at)) $sent_ts = strtotime((string) $row->sent_at);
             $delivery_status = $row->delivery_status ?? null;
+            $last_open_at = $row->last_open_at ? strtotime((string)$row->last_open_at) : null;
         }
     }
-    $is_bounced = is_string($delivery_status) && strtolower($delivery_status) === 'bounced';
+    $is_bounced = is_string($delivery_status) && strtolower($delivery_status)==='bounced';
 
-    // Identify scanners broadly (UA), but also suppress any click that is *too early* after sent.
-    $looks_ms = (strpos($ua_lc,'microsoft')!==false) || (strpos($ua_lc,'outlook')!==false) || (strpos($ua_lc,'safelinks')!==false);
-    $looks_scanner = $looks_ms
+    // Scanner detection + early click suppress
+    $looks_scanner = self::looks_ms($ua_lc)
         || strpos($ua_lc,'proofpoint')!==false
         || strpos($ua_lc,'mimecast')!==false
         || strpos($ua_lc,'barracuda')!==false
         || strpos($ua_lc,'trendmicro')!==false
         || strpos($ua_lc,'symantec')!==false;
 
-    $now_ts = self::now_ts();
-    $now    = self::now_mysql();
+    // Human “images blocked” case: allow clicks if either a human open has been seen,
+    // OR at least CLICK_SUPPRESS_WINDOW seconds have elapsed after send.
+    $has_human_open = is_int($last_open_at); // we only set last_open_at on non-suppressed opens
+    $too_early_click = $sent_ts && (($now_ts - $sent_ts) <= self::CLICK_SUPPRESS_WINDOW);
 
-    // Only suppress “too-early” clicks if it ALSO looks like a scanner (or UA is blank)
-    $ua_is_blank      = ($ua_raw === '');
-    $too_early_click  = ($looks_scanner || $ua_is_blank) && $sent_ts && (($now_ts - $sent_ts) <= self::CLICK_SUPPRESS_WINDOW);
-    $suppress         = $is_bounced || $too_early_click;
+    $suppress = $is_bounced || ($looks_scanner && $too_early_click) || (!$has_human_open && $too_early_click);
 
-
-    $logs_tbl = Helpers::table('logs');
-
-    // De-dupe window in site TZ
+    // De-dupe 60s (site tz)
     $cutoff = date('Y-m-d H:i:s', $now_ts - self::CLICK_DEDUPE_WINDOW);
     $recent_exists = 0;
     if ($logs_tbl) {
-        $recent_exists = (int) $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(*) FROM $logs_tbl
-             WHERE campaign_id=%d
-               AND subscriber_id=%d
-               AND event='clicked'
-               AND link_url=%s
-               AND event_time >= %s
-        ", $campaign_id, $contact_id, $dest, $cutoff));
+        $recent_exists = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $logs_tbl
+             WHERE campaign_id=%d AND subscriber_id=%d AND event='clicked'
+               AND link_url=%s AND event_time >= %s",
+            $campaign_id, $contact_id, $dest, $cutoff
+        ));
     }
 
-    // Log once (audit) with a proper event value
+    // Log once with proper event/status
     if ($logs_tbl && $recent_exists === 0) {
         $ct_tbl = Helpers::table('contacts');
         $email = null;
-        if ($ct_tbl && $contact_id) {
+        if ($ct_tbl) {
             $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct_tbl WHERE id=%d", $contact_id));
         }
-
         $wpdb->insert($logs_tbl, [
             'campaign_id'   => $campaign_id,
             'subscriber_id' => $contact_id,
@@ -444,21 +448,19 @@ public static function rest_click(\WP_REST_Request $req) {
         ]);
     }
 
-    // Increment counters only for human GETs that aren’t suppressed, with the same 60s de-dupe.
-    if ($subs_tbl && ! $suppress && $recent_exists === 0) {
-        $wpdb->query($wpdb->prepare("
-            UPDATE $subs_tbl
-               SET clicks_count     = COALESCE(clicks_count,0) + 1,
-                   last_click_at    = %s,
-                   last_activity_at = %s
-             WHERE campaign_id = %d AND contact_id = %d
-        ", $now, $now, $campaign_id, $contact_id));
+    // Count only if not suppressed and not duplicate
+    if ($subs_tbl && !$suppress && $recent_exists === 0) {
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $subs_tbl
+                SET clicks_count=COALESCE(clicks_count,0)+1,
+                    last_click_at=%s, last_activity_at=%s
+              WHERE campaign_id=%d AND contact_id=%d",
+            $now, $now, $campaign_id, $contact_id
+        ));
     }
 
-    // Don’t redirect scanners; humans get a 302.
-    if ($suppress) {
-        return new \WP_REST_Response(null, 204);
-    }
+    // No redirect for suppressed scans; humans get 302
+    if ($suppress) return new \WP_REST_Response(null, 204);
     return new \WP_REST_Response(null, 302, [
         'Location'      => esc_url_raw($dest),
         'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
