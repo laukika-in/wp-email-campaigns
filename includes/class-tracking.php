@@ -30,12 +30,12 @@ class Tracking {
             if (! $has('link_url'))   $wpdb->query("ALTER TABLE `$logs` ADD `link_url` TEXT NULL");
             if (! $has('user_agent')) $wpdb->query("ALTER TABLE `$logs` ADD `user_agent` TEXT NULL");
             if (! $has('ip'))         $wpdb->query("ALTER TABLE `$logs` ADD `ip` VARBINARY(16) NULL");
-// In logs table ensures (after $cols check)
-if (!in_array('email',     $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `email` VARCHAR(191) NULL");
-if (!in_array('status',    $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `status` VARCHAR(20) NULL");
-if (!in_array('sent_at',   $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `sent_at` DATETIME NULL");
-if (!in_array('opened_at', $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `opened_at` DATETIME NULL");
-if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `bounced_at` DATETIME NULL");
+            // In logs table ensures (after $cols check)
+            if (!in_array('email',     $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `email` VARCHAR(191) NULL");
+            if (!in_array('status',    $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `status` VARCHAR(20) NULL");
+            if (!in_array('sent_at',   $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `sent_at` DATETIME NULL");
+            if (!in_array('opened_at', $cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `opened_at` DATETIME NULL");
+            if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `bounced_at` DATETIME NULL");
 
                 // Add 'clicked' to ENUM if missing
                 $row = $wpdb->get_row( $wpdb->prepare("SHOW COLUMNS FROM `$logs` LIKE %s", 'event') );
@@ -189,30 +189,47 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
         self::log_event((int)$d['c'], (int)$d['ct'], 'opened', null);
         return self::gif_1x1();
     }
+ 
+protected static function is_bot_ua(?string $ua): bool {
+    if (!$ua) return false;
+    $ua = strtolower($ua);
 
-    protected static function is_link_scanner(?string $ua): bool {
-        if (!$ua) return false;
-        $ua = strtolower($ua);
-        return (
-            str_contains($ua, 'googleimageproxy') ||
-            str_contains($ua, 'facebookexternalhit') ||
-            str_contains($ua, 'linkedinbot') ||
-            str_contains($ua, 'skypeuripreview') ||
-            str_contains($ua, 'twitterbot') ||
-            str_contains($ua, 'microsoft office') ||    // Outlook desktop
-            str_contains($ua, 'outlook') ||              // Outlook/Microsoft safe links
-            str_contains($ua, 'curl/') ||
-            str_contains($ua, 'wget/')
-        );
+    // Email security gateways / link scanners / headless libs
+    $needles = [
+        'safelinks',               // Microsoft Safe Links
+        'microsoft office',        // Outlook desktop previewer
+        'outlook',                 // Outlook variants
+        'proofpoint',              // Proofpoint URL Defense
+        'mimecast',                // Mimecast
+        'barracuda',               // Barracuda
+        'symantec',                // Symantec.cloud
+        'trendmicro',              // Trend Micro
+        'urlscan',                 // urlscan.io
+        'facebookexternalhit',
+        'linkedinbot',
+        'skypeuripreview',
+        'twitterbot',
+        'curl/', 'wget/',          // CLI fetchers
+        'python-requests', 'java/', 'okhttp', 'go-http-client', 'aiohttp',
+        'libwww-perl', 'httpclient'
+    ];
+
+    foreach ($needles as $n) {
+        if (str_contains($ua, $n)) return true;
     }
+    return false;
+}
 
-   public static function rest_click(\WP_REST_Request $req) {
-    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $d  = self::verify((string)$req['token']);
+public static function rest_click(\WP_REST_Request $req) {
+    $ua   = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $d    = self::verify((string)$req['token']);
     $dest = home_url('/');
-    if ($d && ($d['t']??'')==='c' && !empty($d['u'])) {
+
+    if ($d && ($d['t'] ?? '') === 'c' && !empty($d['u'])) {
         $dest = (string)$d['u'];
-        if (!self::is_link_scanner($ua)) {
+
+        // Ignore known scanners so they don't inflate click counts
+        if (! self::is_bot_ua($ua)) {
             self::log_event((int)$d['c'], (int)$d['ct'], 'clicked', $dest);
         }
     }
@@ -221,73 +238,115 @@ if (!in_array('bounced_at',$cols, true)) $wpdb->query("ALTER TABLE `$logs` ADD `
 
 
 
+
     /* --------------------------
      * Log + update per-recipient counters (on `subs`)
      * ------------------------*/
-    protected static function log_event_and_counters(int $campaign_id, int $contact_id, string $event, ?string $link_url) {
-        global $wpdb;
-        $logs = Helpers::table('logs');
-        $subs = Helpers::table('subs');
-        $ct   = Helpers::table('contacts');
+protected static function log_event_and_counters(int $campaign_id, int $contact_id, string $event, ?string $link_url) {
+    global $wpdb;
+    $logs = Helpers::table('logs');
+    $subs = Helpers::table('subs');
+    $ct   = Helpers::table('contacts');
 
-        // UA + IP
-        $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(wp_unslash($_SERVER['HTTP_USER_AGENT']), 0, 1000) : null;
-        $ip = null;
-        if (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)) {
-            $ip = @inet_pton($_SERVER['REMOTE_ADDR']);
+    // UA + IP
+    $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(wp_unslash($_SERVER['HTTP_USER_AGENT']), 0, 1000) : null;
+    $ip = null;
+    if (!empty($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)) {
+        $ip = @inet_pton($_SERVER['REMOTE_ADDR']);
+    }
+
+    // Resolve email for logs.email (optional)
+    $email = null;
+    if ($ct && $contact_id) {
+        $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
+    }
+
+    // ---------- De-dupe/throttle ----------
+    if ($event === 'clicked' && $logs) {
+        // Same campaign/contact/link within last 60s? Skip as duplicate.
+        $recent = $wpdb->get_var($wpdb->prepare("
+            SELECT id FROM $logs
+             WHERE campaign_id = %d
+               AND subscriber_id = %d
+               AND event = 'clicked'
+               AND link_url = %s
+               AND event_time > (NOW() - INTERVAL 60 SECOND)
+             LIMIT 1
+        ", $campaign_id, $contact_id, (string)$link_url));
+        if ($recent) return;
+    }
+
+    if ($event === 'opened' && $subs) {
+        // Only increment if first time or at least 60s since last open.
+        $tooSoon = $wpdb->get_var($wpdb->prepare("
+            SELECT 1 FROM $subs
+             WHERE campaign_id = %d
+               AND contact_id  = %d
+               AND last_open_at IS NOT NULL
+               AND TIMESTAMPDIFF(SECOND, last_open_at, NOW()) < 60
+             LIMIT 1
+        ", $campaign_id, $contact_id));
+        // We'll still insert a log row below (for timeline), but skip counter if too soon.
+        $skipOpenCounter = (bool)$tooSoon;
+    } else {
+        $skipOpenCounter = false;
+    }
+    // -------------------------------------
+
+    // 1) Append detailed event row to LOGS
+    if ($logs) {
+        $row = [
+            'campaign_id'         => $campaign_id,
+            'subscriber_id'       => $contact_id,
+            'email'               => $email,
+            'status'              => $event,           // convenience mirror
+            'event'               => $event,           // 'opened' | 'clicked' | ...
+            'provider_message_id' => null,
+            'info'                => null,
+            'event_time'          => Helpers::now(),   // always set
+            'created_at'          => Helpers::now(),   // always set
+            'queue_id'            => null,
+            'link_url'            => $link_url,
+            'user_agent'          => $ua,
+            'ip'                  => $ip,
+        ];
+        if ($event === 'opened') {
+            $row['opened_at'] = Helpers::now();
         }
+        $wpdb->insert($logs, $row);
+    }
 
-        // Resolve email for logs.email (optional)
-        $email = null;
-        if ($ct && $contact_id) {
-            $email = $wpdb->get_var($wpdb->prepare("SELECT email FROM $ct WHERE id=%d", $contact_id));
-        }
-
-        // 1) Append detailed event row to LOGS
-        if ($logs) {
-            $row = [
-                'campaign_id'   => $campaign_id,
-                'subscriber_id' => $contact_id,
-                'email'         => $email,
-                'status'        => $event,           // convenience mirror
-                'event'         => $event,           // 'opened' | 'clicked'
-                'provider_message_id' => null,
-                'info'          => null,
-                'event_time'    => Helpers::now(),   // always set
-                'created_at'    => Helpers::now(),   // always set
-                'queue_id'      => null,
-                'link_url'      => $link_url,
-                'user_agent'    => $ua,
-                'ip'            => $ip,
-            ];
-            if ($event === 'opened') {
-                $row['opened_at'] = Helpers::now();
-            }
-            $wpdb->insert($logs, $row);
-        }
-
-        // 2) Update per-recipient counters on SUBS
-        if ($subs && $campaign_id && $contact_id) {
-            if ($event === 'opened') {
+    // 2) Update per-recipient counters on SUBS
+    if ($subs && $campaign_id && $contact_id) {
+        if ($event === 'opened') {
+            if (! $skipOpenCounter) {
                 $wpdb->query($wpdb->prepare("
                     UPDATE $subs
-                    SET opens_count      = COALESCE(opens_count,0) + 1,
-                        first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
-                        last_open_at     = NOW(),
-                        last_activity_at = NOW()
-                    WHERE campaign_id = %d AND contact_id = %d
+                       SET opens_count      = COALESCE(opens_count,0) + 1,
+                           first_open_at    = IF(first_open_at IS NULL, NOW(), first_open_at),
+                           last_open_at     = NOW(),
+                           last_activity_at = NOW()
+                     WHERE campaign_id = %d AND contact_id = %d
                 ", $campaign_id, $contact_id));
-            } elseif ($event === 'clicked') {
+            } else {
+                // Touch last_activity_at even if we throttled the counter
                 $wpdb->query($wpdb->prepare("
                     UPDATE $subs
-                    SET clicks_count     = COALESCE(clicks_count,0) + 1,
-                        last_click_at    = NOW(),
-                        last_activity_at = NOW()
-                    WHERE campaign_id = %d AND contact_id = %d
+                       SET last_activity_at = NOW()
+                     WHERE campaign_id = %d AND contact_id = %d
                 ", $campaign_id, $contact_id));
             }
+        } elseif ($event === 'clicked') {
+            $wpdb->query($wpdb->prepare("
+                UPDATE $subs
+                   SET clicks_count     = COALESCE(clicks_count,0) + 1,
+                       last_click_at    = NOW(),
+                       last_activity_at = NOW()
+                 WHERE campaign_id = %d AND contact_id = %d
+            ", $campaign_id, $contact_id));
         }
     }
+}
 
 
     // Back-compat alias so REST calls work
